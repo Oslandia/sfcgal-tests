@@ -38,28 +38,29 @@ int SFCGAL_type_to_lwgeom_type( SFCGAL::GeometryType type )
 	return MULTIPOLYGONTYPE;
     case SFCGAL::TYPE_GEOMETRYCOLLECTION:
 	return COLLECTIONTYPE;
-    case SFCGAL::TYPE_CIRCULARSTRING:
-	return CIRCSTRINGTYPE;
-    case SFCGAL::TYPE_COMPOUNDCURVE:
-	return COMPOUNDTYPE;
-    case SFCGAL::TYPE_CURVEPOLYGON:
-	return CURVEPOLYTYPE;
-    case SFCGAL::TYPE_MULTICURVE:
-	return MULTICURVETYPE;
-    case SFCGAL::TYPE_MULTISURFACE:
-	return MULTISURFACETYPE;
-    case SFCGAL::TYPE_CURVE:
+	//    case SFCGAL::TYPE_CIRCULARSTRING:
+	//	return CIRCSTRINGTYPE;
+	//    case SFCGAL::TYPE_COMPOUNDCURVE:
+	//	return COMPOUNDTYPE;
+	//    case SFCGAL::TYPE_CURVEPOLYGON:
+	//	return CURVEPOLYTYPE;
+	//    case SFCGAL::TYPE_MULTICURVE:
+	//	return MULTICURVETYPE;
+	//    case SFCGAL::TYPE_MULTISURFACE:
+	//	return MULTISURFACETYPE;
+	//    case SFCGAL::TYPE_CURVE:
 	// Unknown LWGEOM type
-	return 0;
-    case SFCGAL::TYPE_SURFACE:
+	//	return 0;
+	//    case SFCGAL::TYPE_SURFACE:
 	// Unknown LWGEOM type
-	return 0;
+	//	return 0;
     case SFCGAL::TYPE_POLYHEDRALSURFACE:
 	return POLYHEDRALSURFACETYPE;
     case SFCGAL::TYPE_TIN:
 	return TINTYPE;
+    case SFCGAL::TYPE_TRIANGLE:
+	return TRIANGLETYPE;
     };
-    // what about TRIANGLETYPE ?
     return 0;
 }
 
@@ -106,13 +107,13 @@ POINTARRAY* ptarray_from_SFCGAL( const SFCGAL::Geometry* geom )
     case SFCGAL::TYPE_MULTILINESTRING:
     case SFCGAL::TYPE_MULTIPOLYGON:
     case SFCGAL::TYPE_GEOMETRYCOLLECTION:
-    case SFCGAL::TYPE_CIRCULARSTRING:
-    case SFCGAL::TYPE_COMPOUNDCURVE:
-    case SFCGAL::TYPE_CURVEPOLYGON:
-    case SFCGAL::TYPE_MULTICURVE:
-    case SFCGAL::TYPE_MULTISURFACE:
-    case SFCGAL::TYPE_CURVE:
-    case SFCGAL::TYPE_SURFACE:
+	//    case SFCGAL::TYPE_CIRCULARSTRING:
+	//    case SFCGAL::TYPE_COMPOUNDCURVE:
+	//    case SFCGAL::TYPE_CURVEPOLYGON:
+	//    case SFCGAL::TYPE_MULTICURVE:
+	//    case SFCGAL::TYPE_MULTISURFACE:
+	//    case SFCGAL::TYPE_CURVE:
+	//    case SFCGAL::TYPE_SURFACE:
     case SFCGAL::TYPE_POLYHEDRALSURFACE:
     case SFCGAL::TYPE_TIN:
     default:
@@ -219,13 +220,13 @@ LWGEOM* SFCGAL2LWGEOM( const SFCGAL::Geometry* geom )
 						    n_geoms,
 						    geoms );
 	}
-    case SFCGAL::TYPE_CIRCULARSTRING:
-    case SFCGAL::TYPE_COMPOUNDCURVE:
-    case SFCGAL::TYPE_CURVEPOLYGON:
-    case SFCGAL::TYPE_MULTICURVE:
-    case SFCGAL::TYPE_MULTISURFACE:
-    case SFCGAL::TYPE_CURVE:
-    case SFCGAL::TYPE_SURFACE:
+	//    case SFCGAL::TYPE_CIRCULARSTRING:
+	//    case SFCGAL::TYPE_COMPOUNDCURVE:
+	//    case SFCGAL::TYPE_CURVEPOLYGON:
+	//    case SFCGAL::TYPE_MULTICURVE:
+	//    case SFCGAL::TYPE_MULTISURFACE:
+	//    case SFCGAL::TYPE_CURVE:
+	//    case SFCGAL::TYPE_SURFACE:
     case SFCGAL::TYPE_POLYHEDRALSURFACE:
     case SFCGAL::TYPE_TIN:
     default:
@@ -238,6 +239,7 @@ SFCGAL::Geometry* LWGEOM2SFCGAL( const LWGEOM* geom )
 {
     SFCGAL::Geometry* ret_geom = 0;
     POINT3DZ point;
+    std::cout << "geom type " << (int)geom->type << std::endl;
 
     switch ( geom->type )
     {
@@ -275,7 +277,7 @@ SFCGAL::Geometry* LWGEOM2SFCGAL( const LWGEOM* geom )
 	    for ( size_t i = 0; i < n_rings; i++ )
 	    {
 		SFCGAL::LineString* ring = static_cast<SFCGAL::LineString*>(ptarray_to_SFCGAL( poly->rings[ i + 1 ], LINETYPE ));
-		ret_poly->interiorRings().push_back( *ring );
+		ret_poly->rings().push_back( *ring );
 		delete ring;
 	    }
 	    return ret_poly;
