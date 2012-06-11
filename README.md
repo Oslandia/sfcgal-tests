@@ -1,4 +1,4 @@
-sfcgal
+postgis-sfcgal
 ======
 
-Simple Features API for CGAL
+PostGIS that uses SFCGAL
