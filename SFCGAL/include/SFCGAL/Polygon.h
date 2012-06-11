@@ -77,6 +77,8 @@ namespace SFCGAL {
 		inline LineString &          interiorRingN( const size_t & n ) { return _interiorRings[n]; }
 
 
+		std::vector< LineString >&       interiorRings() { return _interiorRings; }
+		const std::vector< LineString >& interiorRings() const { return _interiorRings; }
 	private:
 		/**
 		 * exterior ring of the polygon
