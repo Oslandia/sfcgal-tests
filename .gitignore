@@ -1,0 +1,7 @@
+.svn
+# Emacs
+*~
+# Eclipse
+.cproject
+.project
+.settings
