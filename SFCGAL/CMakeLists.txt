@@ -82,12 +82,17 @@ endif()
 file( GLOB_RECURSE SFCGAL_HEADERS include/*.h )
 file( GLOB_RECURSE SFCGAL_SOURCES src/*.cpp )
 
+if(CMAKE_COMPILER_IS_GNUCXX)
+  add_definitions( "-frounding-math" )
+endif(CMAKE_COMPILER_IS_GNUCXX)
+
 add_library(
-	SFCGAL
+	SFCGAL SHARED
 	${SFCGAL_HEADERS}
 	${SFCGAL_SOURCES}
 )
-
+install( TARGETS SFCGAL DESTINATION lib )
+INSTALL(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/include" DESTINATION .)
 
 #-- build test (todo only if boost use dyn link)
 
