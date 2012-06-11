@@ -320,5 +320,8 @@ LWGEOM* lwgeom_sfcgal_noop( const LWGEOM* geom_in )
 
     LWGEOM* geom_out = SFCGAL2LWGEOM( converted );
     delete converted;
+
+    // copy SRID (SFCGAL does not store the SRID)
+    geom_out->srid = geom_in->srid;
     return geom_out;
 }
