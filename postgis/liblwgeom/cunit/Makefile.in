@@ -12,7 +12,7 @@
 
 CC=@CC@
 CFLAGS=@CFLAGS@ @WARNFLAGS@ @GEOS_CPPFLAGS@ @PROJ_CPPFLAGS@ 
-LDFLAGS = @GEOS_LDFLAGS@ -lgeos_c
+LDFLAGS = @GEOS_LDFLAGS@ -lgeos_c -lSFCGAL
 top_builddir = @top_builddir@
 SHELL = @SHELL@
 LIBTOOL = @LIBTOOL@
@@ -30,6 +30,7 @@ OBJS=	\
 	cu_ptarray.o \
 	cu_geodetic.o \
 	cu_geos.o \
+	cu_sfcgal.o \
 	cu_measures.o \
 	cu_node.o \
 	cu_libgeom.o \
