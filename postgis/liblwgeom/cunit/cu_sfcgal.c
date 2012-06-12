@@ -17,9 +17,6 @@
 #include "lwgeom_sfcgal.h"
 #include "cu_tester.h"
 
-// TODO: add expected strings, since from_wkt(to_wkt(geom_as_wkt)) is not always == geom_as_wkt
-// (triangle and tin for instance)
-
 static void test_sfcgal_noop(void)
 {
 	int i;
@@ -44,6 +41,25 @@ static void test_sfcgal_noop(void)
 		"TIN(((0 0,0 -1,-1 1,0 0)),((0 0,1 0,0 -1,0 0)))",
 	};
 
+	char *expected_ewkt[] =
+	{
+		"POINT(0 0.2)",
+		"LINESTRING(-1 -1,-1 2.5,2 2,2 -1)",
+		"TRIANGLE((0 0,-1 1,0 -1))",
+		"MULTIPOINT(0.9 0.9,0.9 0.9,0.9 0.9,0.9 0.9,0.9 0.9,0.9 0.9)",
+		"SRID=1;MULTILINESTRING((-1 -1,-1 2.5,2 2,2 -1),(-1 -1,-1 2.5,2 2,2 -1),(-1 -1,-1 2.5,2 2,2 -1),(-1 -1,-1 2.5,2 2,2 -1))",
+		"SRID=1;MULTILINESTRING((-1 -1,-1 2.5,2 2,2 -1),(-1 -1,-1 2.5,2 2,2 -1),(-1 -1,-1 2.5,2 2,2 -1),(-1 -1,-1 2.5,2 2,2 -1))",
+		"POLYGON((-1 -1,-1 2.5,2 2,2 -1,-1 -1),(0 0,0 1,1 1,1 0,0 0))",
+		"SRID=4326;POLYGON((-1 -1,-1 2.5,2 2,2 -1,-1 -1),(0 0,0 1,1 1,1 0,0 0))",
+		"SRID=4326;POLYGON((-1 -1 1,-1 2.5 1,2 2 2,2 -1 2,-1 -1 2),(0 0 1,0 1 1,1 1 1,1 0 2,0 0 2))",
+		"SRID=4326;POLYGON((-1 -1,-1 2.5,2 2,2 -1,-1 -1),(0 0,0 1,1 1,1 0,0 0),(-0.5 -0.5,-0.5 -0.4,-0.4 -0.4,-0.4 -0.5,-0.5 -0.5))",
+		"SRID=100000;POLYGON((-1 -1 3,-1 2.5 3,2 2 3,2 -1 3,-1 -1 3),(0 0 3,0 1 3,1 1 3,1 0 3,0 0 3),(-0.5 -0.5 3,-0.5 -0.4 3,-0.4 -0.4 3,-0.4 -0.5 3,-0.5 -0.5 3))",
+		"SRID=4326;MULTIPOLYGON(((-1 -1,-1 2.5,2 2,2 -1,-1 -1),(0 0,0 1,1 1,1 0,0 0),(-0.5 -0.5,-0.5 -0.4,-0.4 -0.4,-0.4 -0.5,-0.5 -0.5)),((-1 -1,-1 2.5,2 2,2 -1,-1 -1),(0 0,0 1,1 1,1 0,0 0),(-0.5 -0.5,-0.5 -0.4,-0.4 -0.4,-0.4 -0.5,-0.5 -0.5)))",
+		"SRID=4326;GEOMETRYCOLLECTION(POINT(0 1),POLYGON((-1 -1,-1 2.5,2 2,2 -1,-1 -1),(0 0,0 1,1 1,1 0,0 0)),MULTIPOLYGON(((-1 -1,-1 2.5,2 2,2 -1,-1 -1),(0 0,0 1,1 1,1 0,0 0),(-0.5 -0.5,-0.5 -0.4,-0.4 -0.4,-0.4 -0.5,-0.5 -0.5))))",
+		"POLYHEDRALSURFACE(((-1 -1,-1 2.5,2 2,2 -1,-1 -1),(0 0,0 1,1 1,1 0,0 0),(-0.5 -0.5,-0.5 -0.4,-0.4 -0.4,-0.4 -0.5,-0.5 -0.5)),((-1 -1,-1 2.5,2 2,2 -1,-1 -1),(0 0,0 1,1 1,1 0,0 0),(-0.5 -0.5,-0.5 -0.4,-0.4 -0.4,-0.4 -0.5,-0.5 -0.5)))",
+		"POLYHEDRALSURFACE(((-1 -1 1,-1 2.5 1,2 2 1,2 -1 1,-1 -1 1),(0 0 1,0 1 1,1 1 1,1 0 1,0 0 1),(-0.5 -0.5 1,-0.5 -0.4 1,-0.4 -0.4 1,-0.4 -0.5 1,-0.5 -0.5 1)),((-1 -1 1,-1 2.5 1,2 2 1,2 -1 1,-1 -1 1),(0 0 1,0 1 1,1 1 1,1 0 1,0 0 1),(-0.5 -0.5 1,-0.5 -0.4 1,-0.4 -0.4 1,-0.4 -0.5 1,-0.5 -0.5 1)))",
+		"TIN(((0 0,0 -1,-1 1)),((0 0,1 0,0 -1)))",
+	};
 
 	for ( i = 0; i < (sizeof ewkt/sizeof(char *)); i++ )
 	{
@@ -60,9 +76,9 @@ static void test_sfcgal_noop(void)
 			continue;
 		}
 		out_ewkt = lwgeom_to_ewkt(geom_out);
-		if (strcmp(in_ewkt, out_ewkt))
-			fprintf(stderr, "\nExp:   %s\nObt:  %s\n", in_ewkt, out_ewkt);
-		CU_ASSERT_STRING_EQUAL(in_ewkt, out_ewkt);
+		if (strcmp(expected_ewkt[i], out_ewkt))
+			fprintf(stderr, "\nExp:   %s\nObt:  %s\n", expected_ewkt[i], out_ewkt);
+		CU_ASSERT_STRING_EQUAL(expected_ewkt[i], out_ewkt);
 		lwfree(out_ewkt);
 		lwgeom_free(geom_out);
 		lwgeom_free(geom_in);

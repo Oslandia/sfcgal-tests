@@ -329,7 +329,6 @@ SFCGAL::Geometry* LWGEOM2SFCGAL( const LWGEOM* geom )
 {
     SFCGAL::Geometry* ret_geom = 0;
     POINT3DZ point;
-    std::cout << "geom type " << (int)geom->type << std::endl;
 
     switch ( geom->type )
     {
