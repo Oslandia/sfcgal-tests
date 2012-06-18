@@ -24,6 +24,8 @@ SQLPP = @SQLPP@
 # SQL objects (files requiring pre-processing)
 SQL_OBJS=postgis.sql.in legacy.sql.in legacy_minimal.sql.in 
 
+GEOM_BACKEND_OBJ = lwgeom_geos.o @POSTGIS_SFCGAL_OBJS@
+
 # PostgreSQL objects
 PG_OBJS= \
 	postgis_module.o \
@@ -37,7 +39,7 @@ PG_OBJS= \
 	lwgeom_box.o \
 	lwgeom_box3d.o \
 	lwgeom_cache.o \
-	lwgeom_geos.o \
+	$(GEOM_BACKEND_OBJ) \
 	lwgeom_geos_prepared.o \
 	lwgeom_geos_clean.o \
 	lwgeom_geos_relatematch.o \
@@ -71,8 +73,8 @@ OBJS=$(PG_OBJS)
 # to an existing liblwgeom.so in the PostgreSQL $libdir supplied by an
 # older version of PostGIS, rather than with the static liblwgeom.a 
 # supplied with newer versions of PostGIS
-PG_CPPFLAGS += @CPPFLAGS@ -I../liblwgeom -I../libpgcommon
-SHLIB_LINK_F = ../liblwgeom/.libs/liblwgeom.a ../libpgcommon/libpgcommon.a @SHLIB_LINK@ 
+PG_CPPFLAGS += @CPPFLAGS@ -I../liblwgeom -I../libpgcommon -fPIC @EXTRA_FLAGS@
+SHLIB_LINK_F = -L../liblwgeom/.libs/ -llwgeom ../libpgcommon/libpgcommon.a @SHLIB_LINK@
 
 # Extra files to remove during 'make clean'
 EXTRA_CLEAN=$(SQL_OBJS) legacy_uninstall.sql
