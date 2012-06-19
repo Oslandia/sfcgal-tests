@@ -83,7 +83,14 @@ extern "C" Datum intersects(PG_FUNCTION_ARGS)
 		PG_RETURN_NULL();
 	}
 	
-	bool result = SFCGAL::algorithm::intersects( *g1, *g2 );
+	bool result = false;
+	try {
+	    result = SFCGAL::algorithm::intersects( *g1, *g2 );
+	}
+	catch ( std::exception& e ) {
+		lwerror("Error during execution of intersects() : %s", e.what());
+		PG_RETURN_NULL();
+	}
 
 	PG_FREE_IF_COPY(geom1, 0);
 	PG_FREE_IF_COPY(geom2, 1);
