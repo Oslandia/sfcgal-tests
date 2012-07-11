@@ -24,7 +24,7 @@ SQLPP = @SQLPP@
 # SQL objects (files requiring pre-processing)
 SQL_OBJS=postgis.sql.in legacy.sql.in legacy_minimal.sql.in 
 
-GEOM_BACKEND_OBJ = lwgeom_geos.o @POSTGIS_SFCGAL_OBJS@
+GEOM_BACKEND_OBJ = lwgeom_geos.o lwgeom_sfcgal.o
 
 # PostgreSQL objects
 PG_OBJS= \

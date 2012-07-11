@@ -1,7 +1,10 @@
 #include <stdexcept>
+#include <vector>
+#include <string>
 #include <iostream>
 
 #include <SFCGAL/Geometry.h>
+#include <SFCGAL/tools/Log.h>
 #include <SFCGAL/algorithm/intersects.h>
 
 /* TODO: we probaby don't need _all_ these pgsql headers */
@@ -53,12 +56,12 @@ GSERIALIZED* SFCGAL2POSTGIS(const SFCGAL::Geometry& geom)
 }
 
 extern "C" {
-PG_FUNCTION_INFO_V1(intersects);
+PG_FUNCTION_INFO_V1(sfcgal_intersects);
 }
 
-extern "C" Datum intersects(PG_FUNCTION_ARGS)
+extern "C" Datum sfcgal_intersects(PG_FUNCTION_ARGS)
 {
-    //	elog(NOTICE, "-- intersects with SFCGAL --");
+	//	elog(NOTICE, "-- intersects with SFCGAL --");
 
 	GSERIALIZED *geom1;
 	GSERIALIZED *geom2;
@@ -85,10 +88,23 @@ extern "C" Datum intersects(PG_FUNCTION_ARGS)
 	
 	bool result = false;
 	try {
-	    result = SFCGAL::algorithm::intersects( *g1, *g2 );
+		SFCGAL::Logger* log = SFCGAL::Logger::get();
+		log->disable_autoflush();
+		result = SFCGAL::algorithm::intersects( *g1, *g2 );
+		log->flush();
+		log->enable_autoflush();
 	}
 	catch ( std::exception& e ) {
-		lwerror("Error during execution of intersects() : %s", e.what());
+		SFCGAL::Logger* log = SFCGAL::Logger::get();
+		lwnotice("geom1: %s", g1->asText().c_str());
+		lwnotice("geom2: %s", g2->asText().c_str());
+		lwnotice("Log messages:");
+		std::vector<std::string> lines = log->saved_lines();
+		for ( size_t i = 0; i < lines.size(); ++i ) {
+			lwnotice( "%s", lines[i].c_str() );
+		}
+		lwnotice(e.what());
+		lwerror("Error during execution of intersects()");
 		PG_RETURN_NULL();
 	}
 

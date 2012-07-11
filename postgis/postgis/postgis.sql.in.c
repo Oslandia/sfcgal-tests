@@ -5007,4 +5007,16 @@ CREATE OR REPLACE FUNCTION ST_AsX3D(geom geometry, maxdecimaldigits integer DEFA
 	AS $$SELECT _ST_AsX3D(3,$1,$2,$3,'');$$
 	LANGUAGE 'sql' IMMUTABLE;
 
+-----------------------------------------------------------------------
+-- SFCGAL
+-----------------------------------------------------------------------
+DROP SCHEMA IF EXISTS sfcgal CASCADE;
+CREATE SCHEMA sfcgal;
+
+CREATE OR REPLACE FUNCTION sfcgal._ST_Intersects(geom1 geometry, geom2 geometry)
+	RETURNS boolean
+	AS 'MODULE_PATHNAME','sfcgal_intersects'
+	LANGUAGE 'c' IMMUTABLE STRICT
+	COST 100;
+
 COMMIT;

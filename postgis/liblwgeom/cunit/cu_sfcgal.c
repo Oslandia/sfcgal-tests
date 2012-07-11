@@ -14,8 +14,10 @@
 #include <string.h>
 #include "CUnit/Basic.h"
 
-#include "lwgeom_sfcgal.h"
 #include "cu_tester.h"
+#include "liblwgeom.h"
+
+extern LWGEOM* lwgeom_sfcgal_noop( const LWGEOM* geom_in );
 
 static void test_sfcgal_noop(void)
 {
