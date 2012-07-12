@@ -6,6 +6,7 @@
 #include <SFCGAL/Geometry.h>
 #include <SFCGAL/tools/Log.h>
 #include <SFCGAL/algorithm/intersects.h>
+#include <SFCGAL/algorithm/area.h>
 
 /* TODO: we probaby don't need _all_ these pgsql headers */
 extern "C" {
@@ -114,3 +115,47 @@ extern "C" Datum sfcgal_intersects(PG_FUNCTION_ARGS)
 	PG_RETURN_BOOL(result);
 }
 
+extern "C" {
+PG_FUNCTION_INFO_V1(sfcgal_area);
+}
+
+extern "C" Datum sfcgal_area(PG_FUNCTION_ARGS)
+{
+	GSERIALIZED *geom1;
+
+	geom1 = (GSERIALIZED *)PG_DETOAST_DATUM(PG_GETARG_DATUM(0));
+
+	std::auto_ptr<SFCGAL::Geometry> g1;
+	try {
+		g1 = POSTGIS2SFCGAL( geom1 );
+	}
+	catch ( std::exception& e ) {
+		lwerror("First argument geometry could not be converted to SFCGAL: %s", e.what() );
+		PG_RETURN_NULL();
+	}
+	
+	double area = 0.0;
+	try {
+		SFCGAL::Logger* log = SFCGAL::Logger::get();
+		log->disable_autoflush();
+		area = SFCGAL::algorithm::area2D( *g1 );
+		log->flush();
+		log->enable_autoflush();
+	}
+	catch ( std::exception& e ) {
+		SFCGAL::Logger* log = SFCGAL::Logger::get();
+		lwnotice("geom1: %s", g1->asText().c_str());
+		lwnotice("Log messages:");
+		std::vector<std::string> lines = log->saved_lines();
+		for ( size_t i = 0; i < lines.size(); ++i ) {
+			lwnotice( "%s", lines[i].c_str() );
+		}
+		lwnotice(e.what());
+		lwerror("Error during execution of area()");
+		PG_RETURN_NULL();
+	}
+
+	PG_FREE_IF_COPY(geom1, 0);
+
+	PG_RETURN_FLOAT8(area);
+}

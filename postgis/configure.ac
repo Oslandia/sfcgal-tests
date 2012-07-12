@@ -613,20 +613,20 @@ dnl Geos is still needed for now.
 dnl
 dnl ===========================================================================
 
-dnl AC_ARG_WITH(
-dnl	[sfcgal],
-dnl 	AC_HELP_STRING([--with-sfcgal], [Use SFCGAL instead of Geos when possible]),
-dnl 	[], [])
+AC_ARG_WITH(
+	[sfcgald],
+ 	AC_HELP_STRING([--with-sfcgald], [Use SFCGAL in debug mode]),
+ 	[], [])
 
-dnl if test "x$with_sfcgal" != "xno"; then
+if test "x$with_sfcgald" != "xno"; then
+   EXTRA_FLAGS="-DPOSTGIS_WITH_SFCGAL -frounding-math"
+   POSTGIS_SFCGAL_OBJS="lwgeom_sfcgal.o"
+   SFCGAL_LDFLAGS="-lCGAL -lSFCGALd -lmpfr"
+else
    EXTRA_FLAGS="-DPOSTGIS_WITH_SFCGAL -frounding-math"
    POSTGIS_SFCGAL_OBJS="lwgeom_sfcgal.o"
    SFCGAL_LDFLAGS="-lCGAL -lSFCGAL -lmpfr"
-dnl else
-dnl    EXTRA_FLAGS=""
-dnl    POSTGIS_SFCGAL_OBJS=""
-dnl    SFCGAL_LDFLAGS=""
-dnl fi
+fi
 AC_SUBST(EXTRA_FLAGS, $EXTRA_FLAGS)
 AC_SUBST(POSTGIS_SFCGAL_OBJS, $POSTGIS_SFCGAL_OBJS)
 AC_SUBST(SFCGAL_LDFLAGS, $SFCGAL_LDFLAGS)
