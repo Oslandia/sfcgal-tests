@@ -1,0 +1,12 @@
+dbname:  eplu_test  n_objs:  5000  n_pts:  100
+Preparing ...
+==== intersects(point, polygon) ====
+GEOS:	0.140s result: 993.00
+SFCGAL:	0.146s result: 993.00
+==== area(polygon) ====
+GEOS:	0.127s result: 391471.98
+SFCGAL:	0.146s result: 391471.98
+==== intersects(polygon, polygon) ====
+GEOS:	2.066s result: 4868.00
+SFCGAL:	0.297s result: 4868.00
+Cleaning ...
