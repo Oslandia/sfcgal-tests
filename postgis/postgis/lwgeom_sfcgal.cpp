@@ -89,23 +89,21 @@ extern "C" Datum sfcgal_intersects(PG_FUNCTION_ARGS)
 	
 	bool result = false;
 	try {
-		SFCGAL::Logger* log = SFCGAL::Logger::get();
-		log->disable_autoflush();
+		SFCGAL::Log& log = SFCGAL::Logger::get();
+		log->autoflush( false);
 		result = SFCGAL::algorithm::intersects( *g1, *g2 );
-		log->flush();
-		log->enable_autoflush();
+		log->autoflush( true );
 	}
 	catch ( std::exception& e ) {
-		SFCGAL::Logger* log = SFCGAL::Logger::get();
 		lwnotice("geom1: %s", g1->asText().c_str());
 		lwnotice("geom2: %s", g2->asText().c_str());
 		lwnotice("Log messages:");
-		std::vector<std::string> lines = log->saved_lines();
-		for ( size_t i = 0; i < lines.size(); ++i ) {
-			lwnotice( "%s", lines[i].c_str() );
-		}
+		SFCGAL::Log& log = SFCGAL::Logger::get();
+		std::string lines = log->buffer();
+		lwnotice( "%s", lines.c_str() );
 		lwnotice(e.what());
 		lwerror("Error during execution of intersects()");
+		log->autoflush( true );
 		PG_RETURN_NULL();
 	}
 
@@ -136,22 +134,20 @@ extern "C" Datum sfcgal_area(PG_FUNCTION_ARGS)
 	
 	double area = 0.0;
 	try {
-		SFCGAL::Logger* log = SFCGAL::Logger::get();
-		log->disable_autoflush();
+		SFCGAL::Log& log = SFCGAL::Logger::get();
+		log->autoflush( false );
 		area = SFCGAL::algorithm::area2D( *g1 );
-		log->flush();
-		log->enable_autoflush();
+		log->autoflush( true );
 	}
 	catch ( std::exception& e ) {
-		SFCGAL::Logger* log = SFCGAL::Logger::get();
 		lwnotice("geom1: %s", g1->asText().c_str());
 		lwnotice("Log messages:");
-		std::vector<std::string> lines = log->saved_lines();
-		for ( size_t i = 0; i < lines.size(); ++i ) {
-			lwnotice( "%s", lines[i].c_str() );
-		}
+		SFCGAL::Log& log = SFCGAL::Logger::get();
+		std::string lines = log->buffer();
+		lwnotice( "%s", lines.c_str() );
 		lwnotice(e.what());
 		lwerror("Error during execution of area()");
+		log->autoflush( true );
 		PG_RETURN_NULL();
 	}
 
