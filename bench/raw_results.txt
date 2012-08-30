@@ -1,0 +1,66 @@
+N=[4,5,10,20,50,100,200]
+
+intersects(p, poly)
+GEOS:	0.099s result: 3126.00
+SFCGAL:	0.122s result: 3126.00
+GEOS:	0.108s result: 3424.00
+SFCGAL:	0.131s result: 3424.00
+GEOS:	0.111s result: 4095.00
+SFCGAL:	0.136s result: 4095.00
+GEOS:	0.115s result: 4256.00
+SFCGAL:	0.138s result: 4256.00
+GEOS:	0.158s result: 4240.00
+SFCGAL:	0.160s result: 4240.00
+GEOS:	0.196s result: 4373.00
+SFCGAL:	0.237s result: 4373.00
+GEOS:	0.303s result: 4308.00
+SFCGAL:	0.299s result: 4308.00
+
+area(polygon)
+GEOS:	0.108s result: 1126832.32
+SFCGAL:	0.122s result: 1126832.32
+GEOS:	0.095s result: 1337345.79
+SFCGAL:	0.119s result: 1337345.79
+GEOS:	0.103s result: 1649622.84
+SFCGAL:	0.109s result: 1649622.84
+GEOS:	0.102s result: 1737194.86
+SFCGAL:	0.138s result: 1737194.86
+GEOS:	0.118s result: 1763430.40
+SFCGAL:	0.160s result: 1763430.40
+GEOS:	0.133s result: 1764837.49
+SFCGAL:	0.201s result: 1764837.49
+GEOS:	0.169s result: 1767177.62
+SFCGAL:	0.281s result: 1767177.62
+
+intersection( poly, poly )
+GEOS:	1.140s result: 33587.00
+SFCGAL:	1.143s result: 33587.00
+GEOS:	1.294s result: 42377.00
+SFCGAL:	1.321s result: 42377.00
+GEOS:	2.082s result: 77359.00
+SFCGAL:	2.078s result: 77359.00
+GEOS:	3.754s result: 148000.00
+SFCGAL:	3.729s result: 148000.00
+GEOS:	9.681s result: 381166.00
+SFCGAL:	9.718s result: 381166.00
+GEOS:	20.698s result: 866228.00
+SFCGAL:	20.858s result: 866228.00
+GEOS:	48.182s result: 2157208.00
+SFCGAL:	48.138s result: 2157208.00
+
+intersects(poly, poly)
+GEOS:	0.366s result: 8074.00
+SFCGAL:	0.219s result: 8074.00
+GEOS:	0.461s result: 8745.00
+SFCGAL:	0.192s result: 8745.00
+GEOS:	0.415s result: 9377.00
+SFCGAL:	0.261s result: 9377.00
+GEOS:	0.595s result: 9682.00
+SFCGAL:	0.328s result: 9682.00
+GEOS:	1.222s result: 9850.00
+SFCGAL:	0.450s result: 9850.00
+GEOS:	2.494s result: 9933.00
+SFCGAL:	0.656s result: 9933.00
+GEOS:	6.000s result: 9956.00
+SFCGAL:	1.018s result: 9956.00
+

@@ -253,7 +253,7 @@ LWGEOM* SFCGAL2LWGEOM( const SFCGAL::Geometry* geom )
 	{
 	    const SFCGAL::GeometryCollection* collection = static_cast<const SFCGAL::GeometryCollection*>( geom );
 	    size_t n_geoms = collection->numGeometries();
-	    LWGEOM** geoms;
+	    LWGEOM** geoms = 0;
 	    if ( n_geoms )
 	    {
 		geoms = (LWGEOM**)lwalloc( sizeof(LWGEOM*) * n_geoms );
@@ -281,7 +281,7 @@ LWGEOM* SFCGAL2LWGEOM( const SFCGAL::Geometry* geom )
 	{
 	    const SFCGAL::PolyhedralSurface* collection = static_cast<const SFCGAL::PolyhedralSurface*>( geom );
 	    size_t n_geoms = collection->numPolygons();
-	    LWGEOM** geoms;
+	    LWGEOM** geoms = 0;
 	    if ( n_geoms )
 	    {
 		geoms = (LWGEOM**)lwalloc( sizeof(LWGEOM*) * n_geoms );
@@ -302,7 +302,7 @@ LWGEOM* SFCGAL2LWGEOM( const SFCGAL::Geometry* geom )
 	{
 	    const SFCGAL::TriangulatedSurface* collection = static_cast<const SFCGAL::TriangulatedSurface*>( geom );
 	    size_t n_geoms = collection->numTriangles();
-	    LWGEOM** geoms;
+	    LWGEOM** geoms = 0;
 	    if ( n_geoms )
 	    {
 		geoms = (LWGEOM**)lwalloc( sizeof(LWGEOM*) * n_geoms );
