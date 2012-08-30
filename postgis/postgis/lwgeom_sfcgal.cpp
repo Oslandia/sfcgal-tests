@@ -8,6 +8,7 @@
 #include <SFCGAL/tools/Log.h>
 #include <SFCGAL/algorithm/intersects.h>
 #include <SFCGAL/algorithm/intersection.h>
+#include <SFCGAL/algorithm/convexHull.h>
 #include <SFCGAL/algorithm/area.h>
 
 /* TODO: we probaby don't need _all_ these pgsql headers */
@@ -89,6 +90,10 @@ extern "C" Datum sfcgal_intersects(PG_FUNCTION_ARGS)
 		PG_RETURN_NULL();
 	}
 	
+	lwnotice( "intersects(g1, g2)");
+	lwnotice( "g1: %s", g1->asText().c_str() );
+	lwnotice( "g2: %s", g2->asText().c_str() );
+
 	bool result = false;
 	try {
 		result = SFCGAL::algorithm::intersects( *g1, *g2 );
@@ -100,6 +105,7 @@ extern "C" Datum sfcgal_intersects(PG_FUNCTION_ARGS)
 		lwerror("Error during execution of intersects()");
 		PG_RETURN_NULL();
 	}
+	lwnotice( "result: %d", result ? 1 : 0 );
 
 	PG_FREE_IF_COPY(geom1, 0);
 	PG_FREE_IF_COPY(geom2, 1);
@@ -160,6 +166,51 @@ extern "C" Datum sfcgal_intersection(PG_FUNCTION_ARGS)
 
 	PG_FREE_IF_COPY(geom1, 0);
 	PG_FREE_IF_COPY(geom2, 1);
+
+	PG_RETURN_POINTER(result);
+}
+
+extern "C" {
+PG_FUNCTION_INFO_V1(sfcgal_convexhull);
+}
+extern "C" Datum sfcgal_convexhull(PG_FUNCTION_ARGS)
+{
+	GSERIALIZED *geom1;
+	GSERIALIZED *result;
+
+	geom1 = (GSERIALIZED *)PG_DETOAST_DATUM(PG_GETARG_DATUM(0));
+
+	std::auto_ptr<SFCGAL::Geometry> g1;
+	try {
+		g1 = POSTGIS2SFCGAL( geom1 );
+	}
+	catch ( std::exception& e ) {
+		lwerror("First argument geometry could not be converted to SFCGAL: %s", e.what() );
+		PG_RETURN_NULL();
+	}
+	
+	std::auto_ptr<SFCGAL::Geometry> hull;
+	try {
+		hull = std::auto_ptr<SFCGAL::Geometry>(SFCGAL::algorithm::convexHull( *g1 ));
+	}
+	catch ( std::exception& e ) {
+		lwnotice("geom1: %s", g1->asText().c_str());
+		lwnotice(e.what());
+		lwerror("Error during execution of convexhull()");
+		PG_RETURN_NULL();
+	}
+
+	if ( hull.get() ) {
+	    try {
+		result = SFCGAL2POSTGIS( *hull );
+	    }
+	    catch ( std::exception& e ) {
+		lwerror("Result geometry could not be converted to lwgeom: %s", e.what() );
+		PG_RETURN_NULL();
+	    }
+	}
+
+	PG_FREE_IF_COPY(geom1, 0);
 
 	PG_RETURN_POINTER(result);
 }

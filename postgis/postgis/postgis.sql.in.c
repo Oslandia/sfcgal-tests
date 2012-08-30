@@ -5025,6 +5025,12 @@ CREATE OR REPLACE FUNCTION sfcgal.ST_Intersection(geom1 geometry, geom2 geometry
 	LANGUAGE 'c' IMMUTABLE STRICT
 	COST 100;
 
+CREATE OR REPLACE FUNCTION sfcgal.ST_ConvexHull(geometry)
+	RETURNS geometry
+	AS 'MODULE_PATHNAME','sfcgal_convexhull'
+	LANGUAGE 'c' IMMUTABLE STRICT
+	COST 100;
+
 CREATE OR REPLACE FUNCTION sfcgal.ST_Area(geometry)
 	RETURNS FLOAT8
 	AS 'MODULE_PATHNAME','sfcgal_area'
