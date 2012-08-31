@@ -7,6 +7,7 @@
 #include <SFCGAL/Geometry.h>
 #include <SFCGAL/tools/Log.h>
 #include <SFCGAL/algorithm/intersects.h>
+#include <SFCGAL/algorithm/covers.h>
 #include <SFCGAL/algorithm/intersection.h>
 #include <SFCGAL/algorithm/convexHull.h>
 #include <SFCGAL/algorithm/area.h>
@@ -59,11 +60,16 @@ GSERIALIZED* SFCGAL2POSTGIS(const SFCGAL::Geometry& geom)
 	return result;
 }
 
-extern "C" {
-PG_FUNCTION_INFO_V1(sfcgal_intersects);
+
+namespace SFCGAL {
+	typedef bool (*BinaryPredicate) ( const Geometry&, const Geometry& );
+	typedef std::auto_ptr<Geometry> (*UnaryConstruction) ( const Geometry& );
+	typedef std::auto_ptr<Geometry> (*BinaryConstruction) ( const Geometry&, const Geometry& );
 }
 
-extern "C" Datum sfcgal_intersects(PG_FUNCTION_ARGS)
+///
+/// Generic processing of a binary predicate
+Datum sfcgal_binary_predicate(PG_FUNCTION_ARGS, const char* name, SFCGAL::BinaryPredicate predicate_ptr )
 {
 	GSERIALIZED *geom1;
 	GSERIALIZED *geom2;
@@ -90,13 +96,13 @@ extern "C" Datum sfcgal_intersects(PG_FUNCTION_ARGS)
 	
 	bool result = false;
 	try {
-		result = SFCGAL::algorithm::intersects( *g1, *g2 );
+		result = (*predicate_ptr)( *g1, *g2 );
 	}
 	catch ( std::exception& e ) {
 		lwnotice("geom1: %s", g1->asText().c_str());
 		lwnotice("geom2: %s", g2->asText().c_str());
 		lwnotice(e.what());
-		lwerror("Error during execution of intersects()");
+		lwerror("Error during execution of %s()", name);
 		PG_RETURN_NULL();
 	}
 
@@ -106,10 +112,53 @@ extern "C" Datum sfcgal_intersects(PG_FUNCTION_ARGS)
 	PG_RETURN_BOOL(result);
 }
 
-extern "C" {
-PG_FUNCTION_INFO_V1(sfcgal_intersection);
+///
+/// Generic processing of a unary construction
+Datum sfcgal_unary_construction( PG_FUNCTION_ARGS, const char* name, SFCGAL::UnaryConstruction fun_ptr )
+{
+	GSERIALIZED *geom1;
+	GSERIALIZED *result;
+
+	geom1 = (GSERIALIZED *)PG_DETOAST_DATUM(PG_GETARG_DATUM(0));
+
+	std::auto_ptr<SFCGAL::Geometry> g1;
+	try {
+		g1 = POSTGIS2SFCGAL( geom1 );
+	}
+	catch ( std::exception& e ) {
+		lwerror("Argument geometry could not be converted to SFCGAL: %s", e.what() );
+		PG_RETURN_NULL();
+	}
+	
+	std::auto_ptr<SFCGAL::Geometry> inter;
+	try {
+		inter = ( *fun_ptr )( *g1 );
+	}
+	catch ( std::exception& e ) {
+		lwnotice("geom: %s", g1->asText().c_str());
+		lwnotice(e.what());
+		lwerror("Error during execution of %s()", name);
+		PG_RETURN_NULL();
+	}
+
+	if ( inter.get() ) {
+	    try {
+		result = SFCGAL2POSTGIS( *inter );
+	    }
+	    catch ( std::exception& e ) {
+		lwerror("Result geometry could not be converted to lwgeom: %s", e.what() );
+		PG_RETURN_NULL();
+	    }
+	}
+
+	PG_FREE_IF_COPY(geom1, 0);
+
+	PG_RETURN_POINTER(result);
 }
-extern "C" Datum sfcgal_intersection(PG_FUNCTION_ARGS)
+
+///
+/// Generic processing of a binary construction
+Datum sfcgal_binary_construction( PG_FUNCTION_ARGS, const char* name, SFCGAL::BinaryConstruction fun_ptr )
 {
 	GSERIALIZED *geom1;
 	GSERIALIZED *geom2;
@@ -137,13 +186,13 @@ extern "C" Datum sfcgal_intersection(PG_FUNCTION_ARGS)
 	
 	std::auto_ptr<SFCGAL::Geometry> inter;
 	try {
-		inter = SFCGAL::algorithm::intersection( *g1, *g2 );
+		inter = ( *fun_ptr )( *g1, *g2 );
 	}
 	catch ( std::exception& e ) {
 		lwnotice("geom1: %s", g1->asText().c_str());
 		lwnotice("geom2: %s", g2->asText().c_str());
 		lwnotice(e.what());
-		lwerror("Error during execution of intersection()");
+		lwerror("Error during execution of %s()", name);
 		PG_RETURN_NULL();
 	}
 
@@ -163,53 +212,66 @@ extern "C" Datum sfcgal_intersection(PG_FUNCTION_ARGS)
 	PG_RETURN_POINTER(result);
 }
 
+///
+/// Declaration of predicates
+///
 extern "C" {
-PG_FUNCTION_INFO_V1(sfcgal_convexhull);
+	PG_FUNCTION_INFO_V1(sfcgal_intersects);
+	PG_FUNCTION_INFO_V1(sfcgal_intersects3D);
+	PG_FUNCTION_INFO_V1(sfcgal_covers3D);
 }
+
+extern "C" Datum sfcgal_intersects(PG_FUNCTION_ARGS)
+{
+	return sfcgal_binary_predicate( fcinfo, "intersects", SFCGAL::algorithm::intersects );
+}
+
+extern "C" Datum sfcgal_intersects3D(PG_FUNCTION_ARGS)
+{
+	return sfcgal_binary_predicate( fcinfo, "intersects3D", SFCGAL::algorithm::intersects3D );
+}
+
+extern "C" Datum sfcgal_covers3D(PG_FUNCTION_ARGS)
+{
+	return sfcgal_binary_predicate( fcinfo, "covers3D", SFCGAL::algorithm::covers3D );
+}
+
+///
+/// Declaration of unary constructions
+extern "C" {
+	PG_FUNCTION_INFO_V1(sfcgal_convexhull);
+	PG_FUNCTION_INFO_V1(sfcgal_convexhull3D);
+}
+
 extern "C" Datum sfcgal_convexhull(PG_FUNCTION_ARGS)
 {
-	GSERIALIZED *geom1;
-	GSERIALIZED *result;
+	return sfcgal_unary_construction( fcinfo, "convexhull", SFCGAL::algorithm::convexHull );
+}
 
-	geom1 = (GSERIALIZED *)PG_DETOAST_DATUM(PG_GETARG_DATUM(0));
-
-	std::auto_ptr<SFCGAL::Geometry> g1;
-	try {
-		g1 = POSTGIS2SFCGAL( geom1 );
-	}
-	catch ( std::exception& e ) {
-		lwerror("First argument geometry could not be converted to SFCGAL: %s", e.what() );
-		PG_RETURN_NULL();
-	}
-	
-	std::auto_ptr<SFCGAL::Geometry> hull;
-	try {
-		hull = std::auto_ptr<SFCGAL::Geometry>(SFCGAL::algorithm::convexHull( *g1 ));
-	}
-	catch ( std::exception& e ) {
-		lwnotice("geom1: %s", g1->asText().c_str());
-		lwnotice(e.what());
-		lwerror("Error during execution of convexhull()");
-		PG_RETURN_NULL();
-	}
-
-	if ( hull.get() ) {
-	    try {
-		result = SFCGAL2POSTGIS( *hull );
-	    }
-	    catch ( std::exception& e ) {
-		lwerror("Result geometry could not be converted to lwgeom: %s", e.what() );
-		PG_RETURN_NULL();
-	    }
-	}
-
-	PG_FREE_IF_COPY(geom1, 0);
-
-	PG_RETURN_POINTER(result);
+extern "C" Datum sfcgal_convexhull3D(PG_FUNCTION_ARGS)
+{
+	return sfcgal_unary_construction( fcinfo, "convexhull3D", SFCGAL::algorithm::convexHull3D );
 }
 
 extern "C" {
 PG_FUNCTION_INFO_V1(sfcgal_area);
+}
+
+///
+/// Declaration of binary constructions
+extern "C" {
+	PG_FUNCTION_INFO_V1(sfcgal_intersection);
+	PG_FUNCTION_INFO_V1(sfcgal_intersection3D);
+}
+
+extern "C" Datum sfcgal_intersection(PG_FUNCTION_ARGS)
+{
+	return sfcgal_binary_construction( fcinfo, "intersection", SFCGAL::algorithm::intersection );
+}
+
+extern "C" Datum sfcgal_intersection3D(PG_FUNCTION_ARGS)
+{
+	return sfcgal_binary_construction( fcinfo, "intersection3D", SFCGAL::algorithm::intersection3D );
 }
 
 extern "C" Datum sfcgal_area(PG_FUNCTION_ARGS)
