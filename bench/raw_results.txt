@@ -64,3 +64,18 @@ SFCGAL:	0.656s result: 9933.00
 GEOS:	6.000s result: 9956.00
 SFCGAL:	1.018s result: 9956.00
 
+intersection(poly_with_hole, poly_with_hole)
+GEOS:	1.981s result: 73525.00
+SFCGAL:	1.985s result: 73525.00
+GEOS:	2.309s result: 92974.00
+SFCGAL:	2.304s result: 92974.00
+GEOS:	3.972s result: 153165.00
+SFCGAL:	3.956s result: 153165.00
+GEOS:	7.523s result: 280593.00
+SFCGAL:	7.501s result: 280593.00
+GEOS:	20.063s result: 730441.00
+SFCGAL:	19.729s result: 730441.00
+GEOS:	46.207s result: 1736090.00
+SFCGAL:	45.532s result: 1736090.00
+GEOS:	117.423s result: 4687813.00
+SFCGAL:	119.138s result: 4687813.00

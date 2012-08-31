@@ -65,8 +65,6 @@ PG_FUNCTION_INFO_V1(sfcgal_intersects);
 
 extern "C" Datum sfcgal_intersects(PG_FUNCTION_ARGS)
 {
-	//	elog(NOTICE, "-- intersects with SFCGAL --");
-
 	GSERIALIZED *geom1;
 	GSERIALIZED *geom2;
 
@@ -90,10 +88,6 @@ extern "C" Datum sfcgal_intersects(PG_FUNCTION_ARGS)
 		PG_RETURN_NULL();
 	}
 	
-	lwnotice( "intersects(g1, g2)");
-	lwnotice( "g1: %s", g1->asText().c_str() );
-	lwnotice( "g2: %s", g2->asText().c_str() );
-
 	bool result = false;
 	try {
 		result = SFCGAL::algorithm::intersects( *g1, *g2 );
@@ -105,7 +99,6 @@ extern "C" Datum sfcgal_intersects(PG_FUNCTION_ARGS)
 		lwerror("Error during execution of intersects()");
 		PG_RETURN_NULL();
 	}
-	lwnotice( "result: %d", result ? 1 : 0 );
 
 	PG_FREE_IF_COPY(geom1, 0);
 	PG_FREE_IF_COPY(geom2, 1);

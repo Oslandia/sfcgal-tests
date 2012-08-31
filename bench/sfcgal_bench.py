@@ -36,8 +36,8 @@ class PgBench(object):
 
 
 # generate a star-shaped polygon based on random points around a circle
-# (int, double) : (# of points, max radius)
 prepare_query="""
+-- generate a random polygon ($1: # of points, $2: max radius)
 drop function if exists sfcgal.gen_poly1(int, float);
 create or replace function sfcgal.gen_poly1( N int, maxr float) returns geometry as $$
 select st_makepolygon(st_addpoint(tline.line, st_startpoint(tline.line)))
@@ -45,6 +45,7 @@ from (
   select st_makeline(array(
     select st_makepoint(r*cos(alpha), r*sin(alpha))
     from (
+-- cut the circle into equal pieces and take a random point on each radius
       select (f-1)*(2*pi()/$1) as alpha, random()*($2/2) + $2/2 as r
       from generate_series(1,$1) as f
       order by alpha asc
@@ -53,6 +54,15 @@ from (
     )
   ) as line
 ) as tline
+$$
+language SQL;
+
+-- generate a random polygon with a hole ($1: # of points, $2: max radius)
+drop function if exists sfcgal.gen_poly_with_hole(int, float);
+create or replace function sfcgal.gen_poly_with_hole( N int, maxr float) returns geometry as $$
+with gen_poly as (select sfcgal.gen_poly1( $1, $2 - $2/2) as geom),
+gen_ls as (select st_exteriorring(geom) as geom from gen_poly)
+select st_makepolygon( st_scale(geom, 2, 2), array[geom] ) from gen_ls
 $$
 language SQL;
 
@@ -68,6 +78,13 @@ drop table if exists sfcgal.polys;
 create table sfcgal.polys as
 select id, st_translate(sfcgal.gen_poly1(%(n_pts)d, 10), random()*16-8, random()*16-8) as poly1,
   st_translate(sfcgal.gen_poly1(%(n_pts)d, 10), random()*16-8, random()*16-8) as poly2
+from generate_series(1, %(n_id)d) as id;
+
+-- create a table of poly_with_hole x poly_wiht_hole
+drop table if exists sfcgal.polys_h;
+create table sfcgal.polys_h as
+select id, st_translate(sfcgal.gen_poly_with_hole(%(n_pts)d, 10), random()*16-8, random()*16-8) as poly1,
+  st_translate(sfcgal.gen_poly_with_hole(%(n_pts)d, 10), random()*16-8, random()*16-8) as poly2
 from generate_series(1, %(n_id)d) as id;
 
 -- create a table of point x poly
@@ -99,6 +116,10 @@ intersection_poly_poly_query="""
 select sum(st_npoints(sfcgal.st_intersection( poly1, poly2 ))) from sfcgal.polys;
 """
 
+intersection_poly_poly_h_query="""
+select sum(st_npoints(sfcgal.st_intersection( poly1, poly2 ))) from sfcgal.polys_h;
+"""
+
 intersects_pt_poly_query="""
 select sum(case when
 _st_intersects(point, poly) then 1 else 0 end)
@@ -111,11 +132,11 @@ select sum(ST_area(poly1)) from sfcgal.polys;
 
 convexhull_query="""
 -- uncomment this if you want to store the result
-
 --drop table if exists sfcgal.%(out_name)s;
 --create table sfcgal.%(out_name)s as
 --select id, st_convexhull(geom) as geom from sfcgal.points;
 --select sum(st_npoints(geom)) from sfcgal.%(out_name)s;
+
 select sum(st_npoints(st_convexhull(geom))) from sfcgal.points;
 """
 
@@ -149,7 +170,8 @@ bench.call_sql( prepare_query )
 #            'intersection_polygon_polygon': intersection_poly_poly_query,
 #            'area_polygon' : area_poly_query }
 
-queries = { 'convexhull_multipoint': convexhull_query }
+#queries = { 'convexhull_multipoint': convexhull_query }
+queries = { 'intersection_poly_poly_h': intersection_poly_poly_h_query }
 
 # vary the number of points
 bench.bench_queries( queries )
