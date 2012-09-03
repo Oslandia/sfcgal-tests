@@ -5055,6 +5055,13 @@ CREATE OR REPLACE FUNCTION sfcgal.ST_ConvexHull3D(geometry)
 	LANGUAGE 'c' IMMUTABLE STRICT
 	COST 100;
 
+-- temporary function - will be replaced by ST_DelaunayTriangles()
+CREATE OR REPLACE FUNCTION sfcgal.ST_Triangulate(geometry)
+	RETURNS geometry
+	AS 'MODULE_PATHNAME','sfcgal_triangulate'
+	LANGUAGE 'c' IMMUTABLE STRICT
+	COST 100;
+
 CREATE OR REPLACE FUNCTION sfcgal.ST_Area(geometry)
 	RETURNS FLOAT8
 	AS 'MODULE_PATHNAME','sfcgal_area'

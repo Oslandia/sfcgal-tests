@@ -23,25 +23,28 @@ class PgBench(object):
     def bench_queries( self, queries ):
         for (name, query) in queries.items():
 
+            prepare_query = query[0]
+            request = query[1]
             print "==== %s ====" % name
 
+            self.call_sql( "drop table if exists sfcgal.geoms; create table sfcgal.geoms as " + prepare_query)
+
             # geos id = 0
-            geos = self.call_sql( 'set search_path=public;' + query, 'geos_' + name  )
+            geos = self.call_sql( 'set search_path=public;' + request, 'geos_' + name  )
+
             geos_result = float(geos[1][0][1:-2])
             print "GEOS:\t%.3fs result: %.2f" % (geos[0], geos_result)
             # use 'SET search_path' to override the default st_intersects
-            sfcgal = self.call_sql( 'set search_path=sfcgal,public;' + query, 'sfcgal_' + name )
+            sfcgal = self.call_sql( 'set search_path=sfcgal,public;' + request, 'sfcgal_' + name )
             sfcgal_result = float(sfcgal[1][0][1:-2])
             print "SFCGAL:\t%.3fs result: %.2f" % (sfcgal[0], sfcgal_result)
 
 
 # generate a star-shaped polygon based on random points around a circle
 prepare_query="""
--- generate a random polygon ($1: # of points, $2: max radius)
-drop function if exists sfcgal.gen_poly1(int, float);
-create or replace function sfcgal.gen_poly1( N int, maxr float) returns geometry as $$
-select st_makepolygon(st_addpoint(tline.line, st_startpoint(tline.line)))
-from (
+-- generate a random linestring ($1: # of points, $2: max radius)
+drop function if exists sfcgal.gen_linestring(int, float);
+create or replace function sfcgal.gen_linestring( N int, maxr float) returns geometry as $$
   select st_makeline(array(
     select st_makepoint(r*cos(alpha), r*sin(alpha))
     from (
@@ -53,6 +56,15 @@ from (
     as t
     )
   ) as line
+$$
+language SQL;
+
+-- generate a random polygon ($1: # of points, $2: max radius)
+drop function if exists sfcgal.gen_poly1(int, float);
+create or replace function sfcgal.gen_poly1( N int, maxr float) returns geometry as $$
+select st_makepolygon( st_addpoint(tline.line, st_startpoint(tline.line)))
+from (
+  select sfcgal.gen_linestring($1,$2) as line
 ) as tline
 $$
 language SQL;
@@ -73,61 +85,71 @@ select st_collect(array(select st_makepoint(random()*16-8, random()*16-8) from g
 $$
 language SQL;
 
--- create a table of poly x poly
-drop table if exists sfcgal.polys;
-create table sfcgal.polys as
-select id, st_translate(sfcgal.gen_poly1(%(n_pts)d, 10), random()*16-8, random()*16-8) as poly1,
-  st_translate(sfcgal.gen_poly1(%(n_pts)d, 10), random()*16-8, random()*16-8) as poly2
-from generate_series(1, %(n_id)d) as id;
+-- generate a random TIN ($1: # of triangles, $2: max radius)
+drop function if exists sfcgal.gen_tin(int, float);
+create or replace function sfcgal.gen_tin( N int, maxr float) returns geometry as $$
+-- generate a polygon with hole and triangulate it
+select sfcgal.st_triangulate( sfcgal.gen_poly_with_hole($1,$2) )
+$$
+language SQL;
+"""
 
--- create a table of poly_with_hole x poly_wiht_hole
-drop table if exists sfcgal.polys_h;
-create table sfcgal.polys_h as
-select id, st_translate(sfcgal.gen_poly_with_hole(%(n_pts)d, 10), random()*16-8, random()*16-8) as poly1,
-  st_translate(sfcgal.gen_poly_with_hole(%(n_pts)d, 10), random()*16-8, random()*16-8) as poly2
-from generate_series(1, %(n_id)d) as id;
-
--- create a table of point x poly
-drop table if exists sfcgal.point_polys;
-create table sfcgal.point_polys as
-select
-id,
-st_makepoint(random()*16-8, random()*16-8) as point,
-st_translate(sfcgal.gen_poly1(%(n_pts)d, 10), random()*16-8, random()*16-8) as poly
-from generate_series(1, %(n_id)d) as id;
-
--- create a table of multipoints
-drop table if exists sfcgal.points;
-create table sfcgal.points as
-select
-id,
-sfcgal.gen_mpoints(%(n_pts)d) as geom
+create_poly_poly = """
+select id, st_translate(sfcgal.gen_poly1(%(n_pts)d, 10), random()*16-8, random()*16-8) as geom1,
+  st_translate(sfcgal.gen_poly1(%(n_pts)d, 10), random()*16-8, random()*16-8) as geom2
 from generate_series(1, %(n_id)d) as id;
 """
 
-intersects_poly_poly_query="""
+create_ls_poly_h = """
+select
+  id,
+  st_translate(sfcgal.gen_linestring(%(n_pts)d, 10), random()*16-8, random()*16-8) as geom1,
+  st_translate(sfcgal.gen_poly_with_hole(%(n_pts)d, 10), random()*16-8, random()*16-8) as geom2
+from generate_series(1, %(n_id)d) as id;
+"""
+
+create_ls_tin = """
+select
+  id,
+  st_translate(sfcgal.gen_linestring(%(n_pts)d, 10), random()*16-8, random()*16-8) as geom1,
+  st_translate(sfcgal.gen_tin(%(n_pts)d, 10), random()*16-8, random()*16-8) as geom2
+from generate_series(1, %(n_id)d) as id;
+"""
+
+create_poly_h_poly_h = """
+select id, st_translate(sfcgal.gen_poly_with_hole(%(n_pts)d, 10), random()*16-8, random()*16-8) as geom1,
+  st_translate(sfcgal.gen_poly_with_hole(%(n_pts)d, 10), random()*16-8, random()*16-8) as geom2
+from generate_series(1, %(n_id)d) as id;
+"""
+
+create_point_poly = """
+select
+id,
+st_makepoint(random()*16-8, random()*16-8) as geom1,
+st_translate(sfcgal.gen_poly1(%(n_pts)d, 10), random()*16-8, random()*16-8) as geom2
+from generate_series(1, %(n_id)d) as id;
+"""
+
+create_multipoints = """
+select
+id,
+sfcgal.gen_mpoints(%(n_pts)d) as geom1
+from generate_series(1, %(n_id)d) as id;
+"""
+
+intersects_query="""
 select sum(case when
-_st_intersects( poly1, poly2 )
+_st_intersects( geom1, geom2 )
 then 1 else 0 end)
-from sfcgal.polys;
+from sfcgal.geoms;
 """
 
-intersection_poly_poly_query="""
-select sum(st_npoints(sfcgal.st_intersection( poly1, poly2 ))) from sfcgal.polys;
-"""
-
-intersection_poly_poly_h_query="""
-select sum(st_npoints(sfcgal.st_intersection( poly1, poly2 ))) from sfcgal.polys_h;
-"""
-
-intersects_pt_poly_query="""
-select sum(case when
-_st_intersects(point, poly) then 1 else 0 end)
-from sfcgal.point_polys;
+intersection_query="""
+select sum(st_npoints(st_intersection( geom1, geom2 ))) from sfcgal.geoms;
 """
 
 area_poly_query="""
-select sum(ST_area(poly1)) from sfcgal.polys;
+select sum(ST_area(geom1)) from sfcgal.geoms;
 """
 
 convexhull_query="""
@@ -137,13 +159,11 @@ convexhull_query="""
 --select id, st_convexhull(geom) as geom from sfcgal.points;
 --select sum(st_npoints(geom)) from sfcgal.%(out_name)s;
 
-select sum(st_npoints(st_convexhull(geom))) from sfcgal.points;
+select sum(st_npoints(st_convexhull(geom1))) from sfcgal.geoms;
 """
 
 cleaning_query="""
-drop function sfcgal.gen_poly1(int, float);
-drop table sfcgal.point_polys;
-drop table sfcgal.polys;
+-- drop table sfcgal.geoms;
 """
 
 parser = OptionParser()
@@ -165,13 +185,16 @@ print "dbname: ", options.db_name, " n_objs: ", options.n_objs, " n_pts: ", opti
 print "Preparing ..."
 bench.call_sql( prepare_query )
 
-#queries = { 'intersects_point_polygon': intersects_pt_poly_query,
-#            'intersects_polygon_polygon': intersects_poly_poly_query,
-#            'intersection_polygon_polygon': intersection_poly_poly_query,
-#            'area_polygon' : area_poly_query }
+#queries = { 'intersects_point_polygon': [ create_point_poly, intersects_query ],
+#            'intersects_polygon_polygon': [ create_poly_poly, intersects_query ],
+#            'intersection_polygon_polygon': [ create_poly_poly, intersection_query ],
+#            'area_polygon' : [ create_poly_poly, area_poly_query ] }
 
-#queries = { 'convexhull_multipoint': convexhull_query }
-queries = { 'intersection_poly_poly_h': intersection_poly_poly_h_query }
+#queries = { 'convexhull_multipoint': [create_multipoints, convexhull_query] }
+#queries = { 'intersection_poly_poly_h': [ create_poly_h_poly_h, intersection_query] }
+#queries = { 'intersects_poly_poly': [ create_poly_poly, intersects_query] }
+queries = { 'intersection_ls_poly_h': [ create_ls_poly_h, intersection_query] }
+#queries = { 'intersection_ls_tin': [ create_ls_tin, intersection_query] }
 
 # vary the number of points
 bench.bench_queries( queries )

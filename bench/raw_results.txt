@@ -79,3 +79,20 @@ GEOS:	46.207s result: 1736090.00
 SFCGAL:	45.532s result: 1736090.00
 GEOS:	117.423s result: 4687813.00
 SFCGAL:	119.138s result: 4687813.00
+
+==== intersection_ls_poly_h ====
+GEOS:	1.252s result: 27205.00
+SFCGAL:	2.247s result: 68254.00
+GEOS:	1.382s result: 34098.00
+SFCGAL:	2.465s result: 85142.00
+GEOS:	1.739s result: 53281.00
+SFCGAL:	4.106s result: 166094.00
+GEOS:	2.700s result: 92717.00
+SFCGAL:	5.892s result: 330292.00
+GEOS:	7.704s result: 249265.00
+SFCGAL:	11.312s result: 847252.00
+GEOS:	20.361s result: 661352.00
+SFCGAL:	30.074s result: 2019234.00
+GEOS:	68.416s result: 2045520.00
+SFCGAL:	143.233s result: 5620704.00
+

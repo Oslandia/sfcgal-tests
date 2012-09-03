@@ -5,7 +5,9 @@
 #include <fstream>
 
 #include <SFCGAL/Geometry.h>
+#include <SFCGAL/TriangulatedSurface.h>
 #include <SFCGAL/tools/Log.h>
+#include <SFCGAL/algorithm/triangulate.h>
 #include <SFCGAL/algorithm/intersects.h>
 #include <SFCGAL/algorithm/covers.h>
 #include <SFCGAL/algorithm/intersection.h>
@@ -253,10 +255,6 @@ extern "C" Datum sfcgal_convexhull3D(PG_FUNCTION_ARGS)
 	return sfcgal_unary_construction( fcinfo, "convexhull3D", SFCGAL::algorithm::convexHull3D );
 }
 
-extern "C" {
-PG_FUNCTION_INFO_V1(sfcgal_area);
-}
-
 ///
 /// Declaration of binary constructions
 extern "C" {
@@ -272,6 +270,10 @@ extern "C" Datum sfcgal_intersection(PG_FUNCTION_ARGS)
 extern "C" Datum sfcgal_intersection3D(PG_FUNCTION_ARGS)
 {
 	return sfcgal_binary_construction( fcinfo, "intersection3D", SFCGAL::algorithm::intersection3D );
+}
+
+extern "C" {
+PG_FUNCTION_INFO_V1(sfcgal_area);
 }
 
 extern "C" Datum sfcgal_area(PG_FUNCTION_ARGS)
@@ -305,3 +307,39 @@ extern "C" Datum sfcgal_area(PG_FUNCTION_ARGS)
 	PG_RETURN_FLOAT8(area);
 }
 
+extern "C" {
+	PG_FUNCTION_INFO_V1(sfcgal_triangulate);
+}
+
+extern "C" Datum sfcgal_triangulate(PG_FUNCTION_ARGS)
+{
+	GSERIALIZED *geom1;
+	GSERIALIZED *result;
+
+	geom1 = (GSERIALIZED *)PG_DETOAST_DATUM(PG_GETARG_DATUM(0));
+
+	std::auto_ptr<SFCGAL::Geometry> g1;
+	try {
+		g1 = POSTGIS2SFCGAL( geom1 );
+	}
+	catch ( std::exception& e ) {
+		lwerror("First argument geometry could not be converted to SFCGAL: %s", e.what() );
+		PG_RETURN_NULL();
+	}
+	
+	SFCGAL::TriangulatedSurface surf;
+	try {
+		SFCGAL::algorithm::triangulate( *g1, surf );
+		result = SFCGAL2POSTGIS( surf );
+	}
+	catch ( std::exception& e ) {
+		lwnotice("geom1: %s", g1->asText().c_str());
+		lwnotice(e.what());
+		lwerror("Error during execution of area()");
+		PG_RETURN_NULL();
+	}
+
+	PG_FREE_IF_COPY(geom1, 0);
+
+	PG_RETURN_POINTER(result);
+}
