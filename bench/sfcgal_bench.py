@@ -59,6 +59,23 @@ create or replace function sfcgal.gen_linestring( N int, maxr float) returns geo
 $$
 language SQL;
 
+-- generate a random 3D linestring ($1: # of points, $2: max radius)
+drop function if exists sfcgal.gen_linestring3D(int, float);
+create or replace function sfcgal.gen_linestring3D( N int, maxr float) returns geometry as $$
+  select st_makeline(array(
+    select st_makepoint(r*cos(alpha), r*sin(alpha), r*sin(alpha))
+    from (
+-- cut the circle into equal pieces and take a random point on each radius
+      select (f-1)*(2*pi()/$1) as alpha, random()*($2/2) + $2/2 as r
+      from generate_series(1,$1) as f
+      order by alpha asc
+      )
+    as t
+    )
+  ) as line
+$$
+language SQL;
+
 -- generate a random polygon ($1: # of points, $2: max radius)
 drop function if exists sfcgal.gen_poly1(int, float);
 create or replace function sfcgal.gen_poly1( N int, maxr float) returns geometry as $$
@@ -77,6 +94,14 @@ gen_ls as (select st_exteriorring(geom) as geom from gen_poly)
 select st_makepolygon( st_scale(geom, 2, 2), array[geom] ) from gen_ls
 $$
 language SQL;
+
+-- generate a random triangle ($1: max radius)
+-- drop function if exists sfcgal.gen_triangle(float);
+-- create or replace function sfcgal.gen_triangle(maxr float) returns geometry as $$
+-- with gen_poly as (select sfcgal.gen_poly1( 3, $1 ) as geom)
+-- select 
+-- $$
+-- language SQL;
 
 -- generate a random multipoint ($1: number of points)
 drop function if exists sfcgal.gen_mpoints(int);
@@ -97,6 +122,22 @@ language SQL;
 create_poly_poly = """
 select id, st_translate(sfcgal.gen_poly1(%(n_pts)d, 10), random()*16-8, random()*16-8) as geom1,
   st_translate(sfcgal.gen_poly1(%(n_pts)d, 10), random()*16-8, random()*16-8) as geom2
+from generate_series(1, %(n_id)d) as id;
+"""
+
+create_ls_ls = """
+select
+  id,
+  st_translate(sfcgal.gen_linestring(%(n_pts)d, 10), random()*16-8, random()*16-8) as geom1,
+  st_translate(sfcgal.gen_linestring(%(n_pts)d, 10), random()*16-8, random()*16-8) as geom2
+from generate_series(1, %(n_id)d) as id;
+"""
+
+create_ls_ls_3D = """
+select
+  id,
+  st_translate(sfcgal.gen_linestring3D(%(n_pts)d, 10), random()*16-8, random()*16-8) as geom1,
+  st_translate(sfcgal.gen_linestring3D(%(n_pts)d, 10), random()*16-8, random()*16-8) as geom2
 from generate_series(1, %(n_id)d) as id;
 """
 
@@ -193,8 +234,11 @@ bench.call_sql( prepare_query )
 #queries = { 'convexhull_multipoint': [create_multipoints, convexhull_query] }
 #queries = { 'intersection_poly_poly_h': [ create_poly_h_poly_h, intersection_query] }
 #queries = { 'intersects_poly_poly': [ create_poly_poly, intersects_query] }
-queries = { 'intersection_ls_poly_h': [ create_ls_poly_h, intersection_query] }
+#queries = { 'intersection_ls_poly_h': [ create_ls_poly_h, intersection_query] }
 #queries = { 'intersection_ls_tin': [ create_ls_tin, intersection_query] }
+
+queries = { 'intersection_ls_ls': [ create_ls_ls, intersection_query ],
+            'intersects_ls_ls': [ create_ls_ls, intersects_query ] }
 
 # vary the number of points
 bench.bench_queries( queries )

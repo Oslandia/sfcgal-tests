@@ -96,3 +96,35 @@ SFCGAL:	30.074s result: 2019234.00
 GEOS:	68.416s result: 2045520.00
 SFCGAL:	143.233s result: 5620704.00
 
+==== intersects_ls_ls ====
+GEOS:	0.354s result: 7698.00
+SFCGAL:	0.188s result: 7698.00
+GEOS:	0.382s result: 8575.00
+SFCGAL:	0.196s result: 8575.00
+GEOS:	0.485s result: 9417.00
+SFCGAL:	0.234s result: 9417.00
+GEOS:	0.788s result: 9701.00
+SFCGAL:	0.283s result: 9701.00
+GEOS:	1.735s result: 9844.00
+SFCGAL:	0.398s result: 9844.00
+GEOS:	3.936s result: 9912.00
+SFCGAL:	0.576s result: 9912.00
+GEOS:	10.595s result: 9958.00
+SFCGAL:	0.867s result: 9958.00
+
+==== intersection_ls_ls ====
+GEOS:	0.708s result: 9308.00
+SFCGAL:	0.158s result: 9308.00
+GEOS:	0.819s result: 12405.00
+SFCGAL:	0.164s result: 12405.00
+GEOS:	1.182s result: 18804.00
+SFCGAL:	0.216s result: 18804.00
+GEOS:	1.862s result: 30164.00
+SFCGAL:	0.287s result: 30164.00
+GEOS:	5.122s result: 88435.00
+SFCGAL:	0.592s result: 88435.00
+GEOS:	13.375s result: 272094.00
+SFCGAL:	1.518s result: 272094.00
+GEOS:	43.726s result: 984455.00
+SFCGAL:	8.286s result: 984455.00
+
