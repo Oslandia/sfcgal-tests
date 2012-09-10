@@ -14,7 +14,7 @@ LWGEOM* lwgeom_sfcgal_noop( const LWGEOM* geom_in );
 
 };
 
-extern "C++" LWGEOM*                         SFCGAL2LWGEOM( const SFCGAL::Geometry* geom );
+extern "C++" LWGEOM*                         SFCGAL2LWGEOM( const SFCGAL::Geometry* geom, bool force3D = false );
 extern "C++" std::auto_ptr<SFCGAL::Geometry> LWGEOM2SFCGAL( const LWGEOM* geom );
 
 #endif

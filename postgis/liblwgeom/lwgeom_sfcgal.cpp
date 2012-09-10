@@ -13,6 +13,7 @@
 #include <SFCGAL/MultiPolygon.h>
 #include <SFCGAL/PolyhedralSurface.h>
 #include <SFCGAL/TriangulatedSurface.h>
+#include <SFCGAL/Solid.h>
 
 extern "C"
 {
@@ -67,21 +68,26 @@ int SFCGAL_type_to_lwgeom_type( SFCGAL::GeometryType type )
     return 0;
 }
 
-POINTARRAY* ptarray_from_SFCGAL( const SFCGAL::Geometry* geom )
+POINTARRAY* ptarray_from_SFCGAL( const SFCGAL::Geometry* geom, bool force3D = false)
 {
     POINTARRAY* pa = 0;
     POINT4D point;
+    bool want3d = force3D || geom->is3D();
 
     switch ( geom->geometryTypeId() )
     {
     case SFCGAL::TYPE_POINT:
 	{
 	    const SFCGAL::Point* pt = static_cast<const SFCGAL::Point*>( geom );
-	    pa = ptarray_construct( pt->is3D(), 0, 1 );
+	    pa = ptarray_construct( want3d, 0, 1 );
 	    point.x = pt->x();
 	    point.y = pt->y();
-	    if ( pt->is3D() )
-		point.z = pt->z();
+	    if ( geom->is3D() ) {
+		    point.z = pt->z();
+	    }
+	    else if ( force3D ) {
+		    point.z = 0.0;
+	    }	    
 	    point.m = 0.0;
 	    ptarray_set_point4d( pa, 0, &point );
 	    break;
@@ -89,15 +95,20 @@ POINTARRAY* ptarray_from_SFCGAL( const SFCGAL::Geometry* geom )
     case SFCGAL::TYPE_LINESTRING:
 	{
 	    const SFCGAL::LineString* ls = static_cast<const SFCGAL::LineString*>( geom );
-	    pa = ptarray_construct( ls->is3D(), 0, ls->numPoints() );
+	    //	    pa = ptarray_construct( ls->is3D() ? 1 : 0, 0, ls->numPoints() );
+	    pa = ptarray_construct( want3d, 0, ls->numPoints() );
 
 	    for ( size_t i = 0; i < ls->numPoints(); i++ )
 	    {
 		const SFCGAL::Point* pt = &ls->pointN( i );
 		point.x = pt->x();
 		point.y = pt->y();
-		if ( pt->is3D() )
-		    point.z = pt->z();
+		if ( geom->is3D() ) {
+			point.z = pt->z();
+		}
+		else if ( force3D ) {
+			point.z = 0.0;
+		}
 		point.m = 0.0;
 		ptarray_set_point4d( pa, i, &point );		
 	    }
@@ -106,15 +117,19 @@ POINTARRAY* ptarray_from_SFCGAL( const SFCGAL::Geometry* geom )
     case SFCGAL::TYPE_TRIANGLE:
 	{
 	    const SFCGAL::Triangle* tri = static_cast<const SFCGAL::Triangle*>( geom );
-	    pa = ptarray_construct( tri->is3D(), 0, 3 );
+	    pa = ptarray_construct( want3d, 0, 3 );
 
 	    for ( size_t i = 0; i < 3; i++ )
 	    {
 		const SFCGAL::Point* pt = &tri->vertex( i );
 		point.x = pt->x();
 		point.y = pt->y();
-		if ( pt->is3D() )
-		    point.z = pt->z();
+		if ( geom->is3D() ) {
+			point.z = pt->z();
+		}
+		else if ( force3D ) {
+			point.z = 0.0;
+		}
 		point.m = 0.0;
 		ptarray_set_point4d( pa, i, &point );		
 	    }
@@ -199,11 +214,11 @@ std::auto_ptr<SFCGAL::Geometry> ptarray_to_SFCGAL( const POINTARRAY* pa, int typ
     return std::auto_ptr<SFCGAL::Geometry>(0);
 }
 
-LWGEOM* SFCGAL2LWGEOM( const SFCGAL::Geometry* geom )
+LWGEOM* SFCGAL2LWGEOM( const SFCGAL::Geometry* geom, bool force3D )
 {
     // default SRID
     int SRID = SRID_UNKNOWN;
-    bool want3d = true;
+    bool want3d = force3D || geom->is3D();
 
     switch ( geom->geometryTypeId() )
     {
@@ -211,21 +226,21 @@ LWGEOM* SFCGAL2LWGEOM( const SFCGAL::Geometry* geom )
 	{
 	    if ( geom->isEmpty() )
 		return (LWGEOM*)lwpoint_construct_empty( SRID, want3d, 0 );
-	    POINTARRAY* pa = ptarray_from_SFCGAL( geom );
+	    POINTARRAY* pa = ptarray_from_SFCGAL( geom, force3D );
 	    return (LWGEOM*)lwpoint_construct( SRID, /* bbox */ NULL, pa );
 	}
     case SFCGAL::TYPE_LINESTRING:
 	{
 	    if ( geom->isEmpty() )
 		return (LWGEOM*)lwline_construct_empty( SRID, want3d, 0 );
-	    POINTARRAY* pa = ptarray_from_SFCGAL( geom );
+	    POINTARRAY* pa = ptarray_from_SFCGAL( geom, force3D );
 	    return (LWGEOM*)lwline_construct( SRID, /* bbox */ NULL, pa );
 	}
     case SFCGAL::TYPE_TRIANGLE:
 	{
 	    if ( geom->isEmpty() )
 		return (LWGEOM*)lwtriangle_construct_empty( SRID, want3d, 0 );
-	    POINTARRAY* pa = ptarray_from_SFCGAL( geom );
+	    POINTARRAY* pa = ptarray_from_SFCGAL( geom, force3D );
 	    return (LWGEOM*)lwtriangle_construct( SRID, /* bbox */ NULL, pa );
 	}
     case SFCGAL::TYPE_POLYGON:
@@ -239,10 +254,10 @@ LWGEOM* SFCGAL2LWGEOM( const SFCGAL::Geometry* geom )
 	    POINTARRAY** pa = (POINTARRAY**) lwalloc( sizeof(POINTARRAY*) * (n_interiors + 1 ) );
 
 	    // write the exterior ring
-	    pa[0] = ptarray_from_SFCGAL( &poly->exteriorRing() );
+	    pa[0] = ptarray_from_SFCGAL( &poly->exteriorRing(), force3D );
 	    for ( size_t i = 0; i < n_interiors; i++ )
 	    {
-		pa[ i+1 ] = ptarray_from_SFCGAL( &poly->interiorRingN( i ) );
+		    pa[ i+1 ] = ptarray_from_SFCGAL( &poly->interiorRingN( i ), force3D );
 	    }
 	    return (LWGEOM*)lwpoly_construct( SRID, NULL, n_interiors + 1, pa );
 	}
@@ -297,6 +312,41 @@ LWGEOM* SFCGAL2LWGEOM( const SFCGAL::Geometry* geom )
 						    NULL,
 						    n_geoms,
 						    geoms );
+	}
+    case SFCGAL::TYPE_SOLID:
+	{
+		// a Solid is a closed PolyhedralSurface
+		const SFCGAL::Solid* solid = static_cast<const SFCGAL::Solid*>( geom );
+		// compute the number of polyhedral
+		size_t n_geoms = 0;
+		for ( size_t i = 0; i < solid->numShells(); ++i ) {
+			n_geoms += solid->shellN(i).numPolygons();
+		}
+		LWGEOM** geoms = 0;
+		if ( n_geoms )
+		{
+			geoms = (LWGEOM**)lwalloc( sizeof(LWGEOM*) * n_geoms );
+			size_t k = 0;
+			for ( size_t i = 0; i < solid->numShells(); i++ )
+			{
+				for ( size_t j = 0; j < solid->shellN(i).numPolygons(); ++j ) {
+					const SFCGAL::Geometry& g = solid->shellN(i).polygonN(j);
+					// recurse call
+					geoms[k] = SFCGAL2LWGEOM( &g, /* force3D = */ true );
+					++k;
+				}
+			}
+		}
+		LWGEOM* rgeom =  (LWGEOM*)lwcollection_construct( POLYHEDRALSURFACETYPE,
+								  SRID,
+								  NULL,
+								  n_geoms,
+								  geoms );
+		if ( n_geoms ) {
+			// set the 'Solid' flag before returning
+			FLAGS_SET_SOLID( rgeom->flags, 1 );
+		}
+		return rgeom;
 	}
     case SFCGAL::TYPE_TIN:
 	{
@@ -416,6 +466,12 @@ std::auto_ptr<SFCGAL::Geometry> LWGEOM2SFCGAL( const LWGEOM* geom )
 		BOOST_ASSERT( g->geometryTypeId() == SFCGAL::TYPE_POLYGON );
 		// add the obtained polygon to the surface
 		static_cast<SFCGAL::PolyhedralSurface*>(ret_geom)->addPolygon( *static_cast<SFCGAL::Polygon*>(g.get()) );
+	    }
+	    if ( FLAGS_GET_SOLID( lwp->flags ) ) {
+		    // return a Solid
+		    // FIXME: we treat polyhedral surface as the only exterior shell, since we do not have
+		    // any way to distinguish exterior from interior shells ...
+		    return std::auto_ptr<SFCGAL::Geometry>( new SFCGAL::Solid( ret_geom->as<SFCGAL::PolyhedralSurface>() ) );
 	    }
 	    return std::auto_ptr<SFCGAL::Geometry>(ret_geom);
 	}

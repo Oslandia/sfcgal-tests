@@ -13,6 +13,7 @@
 #include <SFCGAL/algorithm/intersection.h>
 #include <SFCGAL/algorithm/convexHull.h>
 #include <SFCGAL/algorithm/area.h>
+#include <SFCGAL/algorithm/extrude.h>
 
 /* TODO: we probaby don't need _all_ these pgsql headers */
 extern "C" {
@@ -44,13 +45,14 @@ std::auto_ptr<SFCGAL::Geometry> POSTGIS2SFCGAL(GSERIALIZED *pglwgeom)
 		throw std::runtime_error("POSTGIS2SFCGAL: unable to deserialize input");
 	}
 	std::auto_ptr<SFCGAL::Geometry> g(LWGEOM2SFCGAL(lwgeom));
+	//	lwnotice( "POSTGIS2SFCGAL serialized: %p lwgeom: %p SFCGAL::Geometry: %p (%d)", pglwgeom, lwgeom, g.get(), g->geometryTypeId() );
 	lwgeom_free(lwgeom);
 	return g;
 }
 
-GSERIALIZED* SFCGAL2POSTGIS(const SFCGAL::Geometry& geom)
+GSERIALIZED* SFCGAL2POSTGIS(const SFCGAL::Geometry& geom, bool force3D = false)
 {
-	LWGEOM* lwgeom = SFCGAL2LWGEOM( &geom );
+	LWGEOM* lwgeom = SFCGAL2LWGEOM( &geom, force3D );
 	if ( lwgeom_needs_bbox(lwgeom) == LW_TRUE )
 	{
 		lwgeom_add_bbox(lwgeom);
@@ -59,6 +61,7 @@ GSERIALIZED* SFCGAL2POSTGIS(const SFCGAL::Geometry& geom)
 	GSERIALIZED* result = geometry_serialize(lwgeom);
 	lwgeom_free(lwgeom);
 
+	//	lwnotice( "SFCGAL2POSTGIS result: %p SFCGAL::Geometry: %p (%d)", result, &geom, geom.geometryTypeId() );
 	return result;
 }
 
@@ -76,8 +79,15 @@ Datum sfcgal_binary_predicate(PG_FUNCTION_ARGS, const char* name, SFCGAL::Binary
 	GSERIALIZED *geom1;
 	GSERIALIZED *geom2;
 
+	//	lwnotice("context: %p", fcinfo->context);
+	//	lwnotice("datum 0: %p, datum 1: %p", PG_GETARG_DATUM(0), PG_GETARG_DATUM(1));
+	//	void* p1 = PG_GETARG_POINTER(0);
+	//	void* p2 = PG_GETARG_POINTER(1);
+	//	lwnotice("p1 = %p", p1);
+	//	lwnotice("p2 = %p", p2);
 	geom1 = (GSERIALIZED *)PG_DETOAST_DATUM(PG_GETARG_DATUM(0));
 	geom2 = (GSERIALIZED *)PG_DETOAST_DATUM(PG_GETARG_DATUM(1));
+	//	lwnotice("geom1: %p, geom2: %p", geom1, geom2);
 
 	std::auto_ptr<SFCGAL::Geometry> g1;
 	try {
@@ -166,6 +176,7 @@ Datum sfcgal_binary_construction( PG_FUNCTION_ARGS, const char* name, SFCGAL::Bi
 	GSERIALIZED *geom2;
 	GSERIALIZED *result;
 
+	
 	geom1 = (GSERIALIZED *)PG_DETOAST_DATUM(PG_GETARG_DATUM(0));
 	geom2 = (GSERIALIZED *)PG_DETOAST_DATUM(PG_GETARG_DATUM(1));
 
@@ -335,11 +346,56 @@ extern "C" Datum sfcgal_triangulate(PG_FUNCTION_ARGS)
 	catch ( std::exception& e ) {
 		lwnotice("geom1: %s", g1->asText().c_str());
 		lwnotice(e.what());
-		lwerror("Error during execution of area()");
+		lwerror("Error during execution of triangulate()");
 		PG_RETURN_NULL();
 	}
 
 	PG_FREE_IF_COPY(geom1, 0);
 
+	PG_RETURN_POINTER(result);
+}
+
+extern "C" {
+	PG_FUNCTION_INFO_V1(sfcgal_extrude);
+}
+
+extern "C" Datum sfcgal_extrude(PG_FUNCTION_ARGS)
+{
+	GSERIALIZED *geom1;
+	double dx, dy, dz;
+
+	GSERIALIZED *result;
+
+	geom1 = (GSERIALIZED *)PG_DETOAST_DATUM(PG_GETARG_DATUM(0));
+	dx = PG_GETARG_FLOAT8(1);
+	dy = PG_GETARG_FLOAT8(2);
+	dz = PG_GETARG_FLOAT8(3);
+
+	std::auto_ptr<SFCGAL::Geometry> g1;
+	try {
+		g1 = POSTGIS2SFCGAL( geom1 );
+	}
+	catch ( std::exception& e ) {
+		lwerror("First argument geometry could not be converted to SFCGAL: %s", e.what() );
+		PG_RETURN_NULL();
+	}
+	
+	try {
+		std::auto_ptr<SFCGAL::Geometry> gresult = SFCGAL::algorithm::extrude( *g1, dx, dy, dz );
+		result = SFCGAL2POSTGIS( *gresult, gresult->is3D() );
+	}
+	catch ( std::exception& e ) {
+		lwnotice("geom1: %s", g1->asText().c_str());
+		lwnotice("dx: %g", dx );
+		lwnotice("dy: %g", dy );
+		lwnotice("dz: %g", dz );
+		lwnotice(e.what());
+		lwerror("Error during execution of extrude()");
+		PG_RETURN_NULL();
+	}
+
+	PG_FREE_IF_COPY(geom1, 0);
+
+	lwnotice("result: %p context %p", PointerGetDatum(result), fcinfo->context);
 	PG_RETURN_POINTER(result);
 }

@@ -5067,4 +5067,9 @@ CREATE OR REPLACE FUNCTION sfcgal.ST_Area(geometry)
 	AS 'MODULE_PATHNAME','sfcgal_area'
 	LANGUAGE 'c' IMMUTABLE STRICT;
 
+CREATE OR REPLACE FUNCTION sfcgal.ST_Extrude(geometry, float8, float8, float8)
+	RETURNS geometry
+	AS 'MODULE_PATHNAME','sfcgal_extrude'
+	LANGUAGE 'c' IMMUTABLE STRICT;
+
 COMMIT;
