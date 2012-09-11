@@ -396,6 +396,5 @@ extern "C" Datum sfcgal_extrude(PG_FUNCTION_ARGS)
 
 	PG_FREE_IF_COPY(geom1, 0);
 
-	lwnotice("result: %p context %p", PointerGetDatum(result), fcinfo->context);
 	PG_RETURN_POINTER(result);
 }

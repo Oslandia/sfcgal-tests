@@ -40,6 +40,8 @@ int SFCGAL_type_to_lwgeom_type( SFCGAL::GeometryType type )
 	return MULTILINETYPE;
     case SFCGAL::TYPE_MULTIPOLYGON:
 	return MULTIPOLYGONTYPE;
+    case SFCGAL::TYPE_MULTISOLID:
+	return COLLECTIONTYPE;
     case SFCGAL::TYPE_GEOMETRYCOLLECTION:
 	return COLLECTIONTYPE;
 	//    case SFCGAL::TYPE_CIRCULARSTRING:
@@ -264,6 +266,7 @@ LWGEOM* SFCGAL2LWGEOM( const SFCGAL::Geometry* geom, bool force3D )
     case SFCGAL::TYPE_MULTIPOINT:
     case SFCGAL::TYPE_MULTILINESTRING:
     case SFCGAL::TYPE_MULTIPOLYGON:
+    case SFCGAL::TYPE_MULTISOLID:
     case SFCGAL::TYPE_GEOMETRYCOLLECTION:
 	{
 	    const SFCGAL::GeometryCollection* collection = static_cast<const SFCGAL::GeometryCollection*>( geom );
@@ -370,7 +373,7 @@ LWGEOM* SFCGAL2LWGEOM( const SFCGAL::Geometry* geom, bool force3D )
 						    geoms );
 	}
     default:
-	throw std::runtime_error( "Unsupported SFCGAL geometry of type " + geom->geometryType() );
+	throw std::runtime_error( "SFCGAL2LWGEOM: Unsupported SFCGAL geometry of type " + geom->geometryType() );
 	break;
     }
 }
