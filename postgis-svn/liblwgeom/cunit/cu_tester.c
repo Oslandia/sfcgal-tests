@@ -33,6 +33,7 @@ extern CU_SuiteInfo libgeom_suite;
 extern CU_SuiteInfo split_suite;
 extern CU_SuiteInfo geodetic_suite;
 extern CU_SuiteInfo geos_suite;
+extern CU_SuiteInfo sfcgal_suite;
 extern CU_SuiteInfo tree_suite;
 extern CU_SuiteInfo triangulate_suite;
 extern CU_SuiteInfo homogenize_suite;
@@ -70,6 +71,7 @@ int main(int argc, char *argv[])
 		split_suite,
 		geodetic_suite,
 		geos_suite,
+		sfcgal_suite,
 		tree_suite,
 		triangulate_suite,
 		stringbuffer_suite,

@@ -5032,4 +5032,69 @@ CREATE OR REPLACE FUNCTION ST_AsX3D(geom geometry, maxdecimaldigits integer DEFA
 	AS $$SELECT _ST_AsX3D(3,$1,$2,$3,'');$$
 	LANGUAGE 'sql' IMMUTABLE;
 
+-----------------------------------------------------------------------
+-- SFCGAL
+-----------------------------------------------------------------------
+DROP SCHEMA IF EXISTS sfcgal CASCADE;
+CREATE SCHEMA sfcgal;
+
+CREATE OR REPLACE FUNCTION sfcgal._ST_Covers3D(geom1 geometry, geom2 geometry)
+	RETURNS boolean
+	AS 'MODULE_PATHNAME','sfcgal_covers3D'
+	LANGUAGE 'c' IMMUTABLE STRICT
+	COST 100;
+
+CREATE OR REPLACE FUNCTION sfcgal._ST_Intersects(geom1 geometry, geom2 geometry)
+	RETURNS boolean
+	AS 'MODULE_PATHNAME','sfcgal_intersects'
+	LANGUAGE 'c' IMMUTABLE STRICT
+	COST 100;
+
+CREATE OR REPLACE FUNCTION sfcgal._ST_Intersects3D(geom1 geometry, geom2 geometry)
+	RETURNS boolean
+	AS 'MODULE_PATHNAME','sfcgal_intersects3D'
+	LANGUAGE 'c' IMMUTABLE STRICT
+	COST 100;
+
+CREATE OR REPLACE FUNCTION sfcgal.ST_Intersection(geom1 geometry, geom2 geometry)
+	RETURNS geometry
+	AS 'MODULE_PATHNAME','sfcgal_intersection'
+	LANGUAGE 'c' IMMUTABLE STRICT
+	COST 100;
+
+CREATE OR REPLACE FUNCTION sfcgal.ST_Intersection3D(geom1 geometry, geom2 geometry)
+	RETURNS geometry
+	AS 'MODULE_PATHNAME','sfcgal_intersection3D'
+	LANGUAGE 'c' IMMUTABLE STRICT
+	COST 100;
+
+CREATE OR REPLACE FUNCTION sfcgal.ST_ConvexHull(geometry)
+	RETURNS geometry
+	AS 'MODULE_PATHNAME','sfcgal_convexhull'
+	LANGUAGE 'c' IMMUTABLE STRICT
+	COST 100;
+
+CREATE OR REPLACE FUNCTION sfcgal.ST_ConvexHull3D(geometry)
+	RETURNS geometry
+	AS 'MODULE_PATHNAME','sfcgal_convexhull3D'
+	LANGUAGE 'c' IMMUTABLE STRICT
+	COST 100;
+
+-- temporary function - will be replaced by ST_DelaunayTriangles()
+CREATE OR REPLACE FUNCTION sfcgal.ST_Triangulate(geometry)
+	RETURNS geometry
+	AS 'MODULE_PATHNAME','sfcgal_triangulate'
+	LANGUAGE 'c' IMMUTABLE STRICT
+	COST 100;
+
+CREATE OR REPLACE FUNCTION sfcgal.ST_Area(geometry)
+	RETURNS FLOAT8
+	AS 'MODULE_PATHNAME','sfcgal_area'
+	LANGUAGE 'c' IMMUTABLE STRICT;
+
+CREATE OR REPLACE FUNCTION sfcgal.ST_Extrude(geometry, float8, float8, float8)
+	RETURNS geometry
+	AS 'MODULE_PATHNAME','sfcgal_extrude'
+	LANGUAGE 'c' IMMUTABLE STRICT;
+
 COMMIT;

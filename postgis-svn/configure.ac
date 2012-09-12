@@ -601,6 +601,31 @@ AC_SUBST([POSTGIS_GEOS_VERSION])
 
 
 dnl ===========================================================================
+dnl
+dnl Selection of the geometric backend.
+dnl Geos is still needed for now.
+dnl
+dnl ===========================================================================
+
+AC_ARG_WITH(
+	[sfcgald],
+ 	AC_HELP_STRING([--with-sfcgald], [Use SFCGAL in debug mode]),
+ 	[], [])
+
+if test "x$with_sfcgald" != "xno"; then
+   EXTRA_FLAGS="-DPOSTGIS_WITH_SFCGAL -frounding-math"
+   POSTGIS_SFCGAL_OBJS="lwgeom_sfcgal.o"
+   SFCGAL_LDFLAGS="-lCGAL -lSFCGALd -lmpfr"
+else
+   EXTRA_FLAGS="-DPOSTGIS_WITH_SFCGAL -frounding-math"
+   POSTGIS_SFCGAL_OBJS="lwgeom_sfcgal.o"
+   SFCGAL_LDFLAGS="-lCGAL -lSFCGAL -lmpfr"
+fi
+AC_SUBST(EXTRA_FLAGS, $EXTRA_FLAGS)
+AC_SUBST(POSTGIS_SFCGAL_OBJS, $POSTGIS_SFCGAL_OBJS)
+AC_SUBST(SFCGAL_LDFLAGS, $SFCGAL_LDFLAGS)
+
+dnl ===========================================================================
 dnl Detect gettext
 dnl ===========================================================================
 
@@ -1070,6 +1095,7 @@ else
 	AC_MSG_RESULT([RASTER: Raster support disabled])
 	RT_MAKEFILE_LIST="raster/Makefile"
 fi
+
 
 dnl ===========================================================================
 dnl See if we have the requirements for building the extensions, namely

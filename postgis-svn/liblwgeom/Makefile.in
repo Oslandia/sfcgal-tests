@@ -12,7 +12,8 @@
 
 CC = @CC@
 CFLAGS = @CFLAGS@ @PICFLAGS@ @WARNFLAGS@ @GEOS_CPPFLAGS@ @PROJ_CPPFLAGS@
-LDFLAGS = @LDFLAGS@ @GEOS_LDFLAGS@ -lgeos_c @PROJ_LDFLAGS@ -lproj
+CXXFLAGS = @CFLAGS@ @PICFLAGS@ @GEOS_CPPFLAGS@ @PROJ_CPPFLAGS@ @EXTRA_FLAGS@
+LDFLAGS = @LDFLAGS@ @GEOS_LDFLAGS@ -lgeos_c @PROJ_LDFLAGS@ -lproj @SFCGAL_LDFLAGS@
 NUMERICFLAGS = @NUMERICFLAGS@
 top_builddir = @top_builddir@
 prefix = @prefix@
@@ -91,9 +92,12 @@ SA_OBJS = \
 NM_OBJS = \
 	lwspheroid.o 
 
+CPP_OBJS = lwgeom_sfcgal.o
+
 LT_SA_OBJS = $(SA_OBJS:.o=.lo)
 LT_NM_OBJS = $(NM_OBJS:.o=.lo)
-LT_OBJS = $(LT_SA_OBJS) $(LT_NM_OBJS)
+LT_CPP_OBJS = $(CPP_OBJS:.o=.lo)
+LT_OBJS = $(LT_SA_OBJS) $(LT_NM_OBJS) $(LT_CPP_OBJS)
 
 SA_HEADERS = \
 	liblwgeom.h \
@@ -153,12 +157,14 @@ $(LT_SA_OBJS): %.lo: %.c
 $(LT_NM_OBJS): %.lo: %.c
 	$(LIBTOOL) --mode=compile $(CC) $(CFLAGS) $(NUMERICFLAGS) -c -o $@ $<
 
+$(LT_CPP_OBJS): %.lo: %.cpp
+	$(LIBTOOL) --mode=compile $(CXX) $(CXXFLAGS) $(NUMERICFLAGS) -c -o $@ $<
+
 # Manually generate WKT parser from Flex/Bison inputs
 # Bison 2.5, Flex 2.5.35
 parser:
 	$(YACC) -o'lwin_wkt_parse.c' -d lwin_wkt_parse.y
 	$(LEX) -i lwin_wkt_lex.l
-	
 #	$(YACC) --debug --verbose -o'$@' -d $<
 #	$(YACC) -o'$@' -d $^
 #	$(LEX) -i $<
