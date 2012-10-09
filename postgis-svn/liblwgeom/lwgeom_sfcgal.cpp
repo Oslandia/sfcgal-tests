@@ -183,9 +183,9 @@ std::auto_ptr<SFCGAL::Geometry> ptarray_to_SFCGAL( const POINTARRAY* pa, int typ
 	    {
 		getPoint3dz_p( pa, i, &point );
 		if ( is_3d )
-		    ret_geom->points().push_back( SFCGAL::Point( point.x, point.y, point.z ) );
+		    ret_geom->addPoint( SFCGAL::Point( point.x, point.y, point.z ) );
 		else
-		    ret_geom->points().push_back( SFCGAL::Point( point.x, point.y ) );		    
+		    ret_geom->addPoint( SFCGAL::Point( point.x, point.y ) );
 	    }
 	    return std::auto_ptr<SFCGAL::Geometry>(ret_geom);
 	}
@@ -419,15 +419,15 @@ std::auto_ptr<SFCGAL::Geometry> LWGEOM2SFCGAL( const LWGEOM* geom )
 		return std::auto_ptr<SFCGAL::Geometry>(new SFCGAL::Polygon());
 
 	    size_t n_rings = poly->nrings - 1;
-	    SFCGAL::Polygon* ret_poly = new SFCGAL::Polygon();
 	    
 	    std::auto_ptr<SFCGAL::Geometry> ext_ring(ptarray_to_SFCGAL( poly->rings[0], LINETYPE ));
-	    ret_poly->exteriorRing() = *(static_cast<SFCGAL::LineString*>(ext_ring.get()));
+	    SFCGAL::Polygon* ret_poly = new SFCGAL::Polygon( *static_cast<SFCGAL::LineString*>(ext_ring.get()) );
 
 	    for ( size_t i = 0; i < n_rings; i++ )
 	    {
 		std::auto_ptr<SFCGAL::Geometry> ring(ptarray_to_SFCGAL( poly->rings[ i + 1 ], LINETYPE ));
-		ret_poly->rings().push_back( *(static_cast<SFCGAL::LineString*>(ring.get())) );
+		// takes ownership
+		ret_poly->addRing( static_cast<SFCGAL::LineString*>(ring.release()) );
 	    }
 	    return std::auto_ptr<SFCGAL::Geometry>(ret_poly);
 	}
@@ -468,7 +468,8 @@ std::auto_ptr<SFCGAL::Geometry> LWGEOM2SFCGAL( const LWGEOM* geom )
 		std::auto_ptr<SFCGAL::Geometry> g(LWGEOM2SFCGAL( (const LWGEOM*)lwp->geoms[i] ));
 		BOOST_ASSERT( g->geometryTypeId() == SFCGAL::TYPE_POLYGON );
 		// add the obtained polygon to the surface
-		static_cast<SFCGAL::PolyhedralSurface*>(ret_geom)->addPolygon( *static_cast<SFCGAL::Polygon*>(g.get()) );
+		// (pass ownership )
+		static_cast<SFCGAL::PolyhedralSurface*>(ret_geom)->addPolygon( static_cast<SFCGAL::Polygon*>(g.release()) );
 	    }
 	    if ( FLAGS_GET_SOLID( lwp->flags ) ) {
 		    // return a Solid
@@ -476,6 +477,7 @@ std::auto_ptr<SFCGAL::Geometry> LWGEOM2SFCGAL( const LWGEOM* geom )
 		    // any way to distinguish exterior from interior shells ...
 		    return std::auto_ptr<SFCGAL::Geometry>( new SFCGAL::Solid( ret_geom->as<SFCGAL::PolyhedralSurface>() ) );
 	    }
+	    const SFCGAL::PolyhedralSurface& p = static_cast<const SFCGAL::PolyhedralSurface&>(*ret_geom);
 	    return std::auto_ptr<SFCGAL::Geometry>(ret_geom);
 	}
     case TINTYPE:

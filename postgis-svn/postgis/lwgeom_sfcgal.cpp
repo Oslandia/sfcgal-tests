@@ -14,6 +14,7 @@
 #include <SFCGAL/algorithm/convexHull.h>
 #include <SFCGAL/algorithm/area.h>
 #include <SFCGAL/algorithm/extrude.h>
+#include <SFCGAL/io/wkt.h>
 
 /* TODO: we probaby don't need _all_ these pgsql headers */
 extern "C" {
@@ -45,8 +46,8 @@ std::auto_ptr<SFCGAL::Geometry> POSTGIS2SFCGAL(GSERIALIZED *pglwgeom)
 		throw std::runtime_error("POSTGIS2SFCGAL: unable to deserialize input");
 	}
 	std::auto_ptr<SFCGAL::Geometry> g(LWGEOM2SFCGAL(lwgeom));
-	//	lwnotice( "POSTGIS2SFCGAL serialized: %p lwgeom: %p SFCGAL::Geometry: %p (%d)", pglwgeom, lwgeom, g.get(), g->geometryTypeId() );
 	lwgeom_free(lwgeom);
+	//	lwnotice( "POSTGIS2SFCGAL serialized: %p lwgeom: %p SFCGAL::Geometry: %p (%d)", pglwgeom, lwgeom, g.get(), g->geometryTypeId() );
 	return g;
 }
 
@@ -196,7 +197,7 @@ Datum sfcgal_binary_construction( PG_FUNCTION_ARGS, const char* name, SFCGAL::Bi
 		lwerror("Second argument geometry could not be converted to SFCGAL: %s", e.what() );
 		PG_RETURN_NULL();
 	}
-	
+
 	std::auto_ptr<SFCGAL::Geometry> inter;
 	try {
 		inter = ( *fun_ptr )( *g1, *g2 );
@@ -397,4 +398,63 @@ extern "C" Datum sfcgal_extrude(PG_FUNCTION_ARGS)
 	PG_FREE_IF_COPY(geom1, 0);
 
 	PG_RETURN_POINTER(result);
+}
+
+extern "C" {
+	PG_FUNCTION_INFO_V1(sfcgal_in);
+}
+
+extern "C" Datum sfcgal_in(PG_FUNCTION_ARGS)
+{
+	lwnotice("sfcgal_in");
+	const char *str = PG_GETARG_CSTRING(0);
+
+	std::auto_ptr<SFCGAL::Geometry> g;
+	try {
+		g = SFCGAL::io::readWkt( str );
+	}
+	catch ( std::exception& e ) {
+		lwerror("ERROR: %s", e.what() );
+		PG_RETURN_NULL();
+	}
+	SFCGAL::Geometry* geom = g.release();
+	lwnotice("geom = %p", geom);
+
+	void* retp = palloc( sizeof(void*));
+	memmove( retp, &geom, sizeof(void*) );
+	PG_RETURN_POINTER(retp);
+}
+
+extern "C" {
+	PG_FUNCTION_INFO_V1(sfcgal_out);
+}
+
+extern "C" Datum sfcgal_out(PG_FUNCTION_ARGS)
+{
+	lwnotice("sfcgal_out");
+	void** p = (void **)PG_GETARG_POINTER(0);
+	SFCGAL::Geometry* geom = reinterpret_cast<SFCGAL::Geometry*>(*p);
+	lwnotice("geom = %p", geom);
+
+	std::string astxt = geom->asText();
+
+	char *retstr = (char*)palloc( astxt.size() + 1 );
+	strncpy( retstr, astxt.c_str(), astxt.size() + 1 );
+	delete geom;
+
+	PG_RETURN_CSTRING(retstr);
+}
+
+extern "C" {
+	PG_FUNCTION_INFO_V1(sfcgal_recv);
+}
+
+extern "C" Datum sfcgal_recv(PG_FUNCTION_ARGS)
+{
+	lwnotice("sfcgal_recv");
+}
+
+extern "C" Datum sfcgal_send(PG_FUNCTION_ARGS)
+{
+	lwnotice("sfcgal_send");
 }
