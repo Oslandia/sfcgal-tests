@@ -6,6 +6,7 @@
 
 #include <SFCGAL/Geometry.h>
 #include <SFCGAL/TriangulatedSurface.h>
+#include <SFCGAL/Solid.h>
 #include <SFCGAL/tools/Log.h>
 #include <SFCGAL/algorithm/triangulate.h>
 #include <SFCGAL/algorithm/intersects.h>
@@ -398,6 +399,50 @@ extern "C" Datum sfcgal_extrude(PG_FUNCTION_ARGS)
 	PG_FREE_IF_COPY(geom1, 0);
 
 	PG_RETURN_POINTER(result);
+}
+
+extern "C" {
+	PG_FUNCTION_INFO_V1(sfcgal_make_solid);
+}
+
+extern "C" Datum sfcgal_make_solid(PG_FUNCTION_ARGS)
+{
+    // transform a polyhedral surface into a solid with only one exterior shell
+    GSERIALIZED *geom1;
+    
+    GSERIALIZED *result;
+    
+    geom1 = (GSERIALIZED *)PG_DETOAST_DATUM(PG_GETARG_DATUM(0));
+
+    std::auto_ptr<SFCGAL::Geometry> g1;
+    try {
+	g1 = POSTGIS2SFCGAL( geom1 );
+    }
+    catch ( std::exception& e ) {
+	lwerror("First argument geometry could not be converted to SFCGAL: %s", e.what() );
+	PG_RETURN_NULL();
+    }
+    if ( g1->geometryTypeId() != SFCGAL::TYPE_POLYHEDRALSURFACE )
+    {
+	lwerror( "make_solid only applies to polyhedral surfaces" );
+	PG_RETURN_NULL();
+    }
+    
+    SFCGAL::Solid* solid = new SFCGAL::Solid( static_cast<const SFCGAL::PolyhedralSurface&>(*g1.get()) );
+    try
+    {
+	result = SFCGAL2POSTGIS( *solid, /* force3D */ true );
+    }
+    catch ( std::exception& e ) {
+	lwnotice("geom1: %s", g1->asText().c_str());
+	lwnotice(e.what());
+	lwerror("Error during execution of make_solid()");
+	PG_RETURN_NULL();
+    }
+    
+    PG_FREE_IF_COPY(geom1, 0);
+    
+    PG_RETURN_POINTER(result);
 }
 
 extern "C" {

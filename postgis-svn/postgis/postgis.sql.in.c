@@ -5038,7 +5038,44 @@ CREATE OR REPLACE FUNCTION ST_AsX3D(geom geometry, maxdecimaldigits integer DEFA
 DROP SCHEMA IF EXISTS sfcgal CASCADE;
 CREATE SCHEMA sfcgal;
 
-CREATE OR REPLACE FUNCTION sfcgal._ST_Covers3D(geom1 geometry, geom2 geometry)
+CREATE TYPE sfcgal_geometry;
+
+CREATE FUNCTION sfcgal_in(cstring)
+    RETURNS sfcgal_geometry
+    AS 'MODULE_PATHNAME'
+    LANGUAGE C IMMUTABLE STRICT;
+
+CREATE FUNCTION sfcgal_out(sfcgal_geometry)
+    RETURNS cstring
+    AS 'MODULE_PATHNAME'
+    LANGUAGE C IMMUTABLE STRICT;
+
+CREATE FUNCTION sfcgal_recv(internal)
+   RETURNS sfcgal_geometry
+   AS 'MODULE_PATHNAME'
+   LANGUAGE C IMMUTABLE STRICT;
+
+CREATE FUNCTION sfcgal_send(sfcgal_geometry)
+   RETURNS bytea
+   AS 'MODULE_PATHNAME'
+   LANGUAGE C IMMUTABLE STRICT;
+
+CREATE TYPE sfcgal_geometry (
+    internallength = 8,
+    input = sfcgal_in,
+    output = sfcgal_out,
+    receive = sfcgal_recv,
+    send = sfcgal_send
+);
+
+
+
+CREATE OR REPLACE FUNCTION sfcgal.ST_MakeSolid(geometry)
+	RETURNS geometry
+	AS 'MODULE_PATHNAME','sfcgal_make_solid'
+	LANGUAGE 'c' IMMUTABLE STRICT;
+
+CREATE OR REPLACE FUNCTION sfcgal._ST_3DCovers(geom1 geometry, geom2 geometry)
 	RETURNS boolean
 	AS 'MODULE_PATHNAME','sfcgal_covers3D'
 	LANGUAGE 'c' IMMUTABLE STRICT
@@ -5050,7 +5087,7 @@ CREATE OR REPLACE FUNCTION sfcgal._ST_Intersects(geom1 geometry, geom2 geometry)
 	LANGUAGE 'c' IMMUTABLE STRICT
 	COST 100;
 
-CREATE OR REPLACE FUNCTION sfcgal._ST_Intersects3D(geom1 geometry, geom2 geometry)
+CREATE OR REPLACE FUNCTION sfcgal.ST_3DIntersects(geom1 geometry, geom2 geometry)
 	RETURNS boolean
 	AS 'MODULE_PATHNAME','sfcgal_intersects3D'
 	LANGUAGE 'c' IMMUTABLE STRICT
@@ -5062,7 +5099,7 @@ CREATE OR REPLACE FUNCTION sfcgal.ST_Intersection(geom1 geometry, geom2 geometry
 	LANGUAGE 'c' IMMUTABLE STRICT
 	COST 100;
 
-CREATE OR REPLACE FUNCTION sfcgal.ST_Intersection3D(geom1 geometry, geom2 geometry)
+CREATE OR REPLACE FUNCTION sfcgal.ST_3DIntersection(geom1 geometry, geom2 geometry)
 	RETURNS geometry
 	AS 'MODULE_PATHNAME','sfcgal_intersection3D'
 	LANGUAGE 'c' IMMUTABLE STRICT
@@ -5074,14 +5111,13 @@ CREATE OR REPLACE FUNCTION sfcgal.ST_ConvexHull(geometry)
 	LANGUAGE 'c' IMMUTABLE STRICT
 	COST 100;
 
-CREATE OR REPLACE FUNCTION sfcgal.ST_ConvexHull3D(geometry)
+CREATE OR REPLACE FUNCTION sfcgal.ST_3DConvexHull(geometry)
 	RETURNS geometry
 	AS 'MODULE_PATHNAME','sfcgal_convexhull3D'
 	LANGUAGE 'c' IMMUTABLE STRICT
 	COST 100;
 
--- temporary function - will be replaced by ST_DelaunayTriangles()
-CREATE OR REPLACE FUNCTION sfcgal.ST_Triangulate(geometry)
+CREATE OR REPLACE FUNCTION sfcgal.ST_DelaunayTriangles(geometry)
 	RETURNS geometry
 	AS 'MODULE_PATHNAME','sfcgal_triangulate'
 	LANGUAGE 'c' IMMUTABLE STRICT

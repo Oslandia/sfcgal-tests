@@ -117,6 +117,14 @@ create or replace function sfcgal.gen_tin( N int, maxr float) returns geometry a
 select sfcgal.st_triangulate( sfcgal.gen_poly_with_hole($1,$2) )
 $$
 language SQL;
+
+-- generate a random solid (extrusion from a polygon) ($1: # of triangles, $2: max radius)
+drop function if exists sfcgal.gen_solid(int, float);
+create or replace function sfcgal.gen_solid( N int, maxr float) returns geometry as $$
+-- generate a polygon and extrude it
+select sfcgal.st_extrude( st_force_3d(sfcgal.gen_poly1($1,$2)), 0.0, 0.0, $2 )
+$$
+language SQL;
 """
 
 create_poly_poly = """
@@ -185,6 +193,13 @@ then 1 else 0 end)
 from sfcgal.geoms;
 """
 
+intersects3D_query="""
+select sum(case when
+st_3Dintersects( geom1, geom2 )
+then 1 else 0 end)
+from sfcgal.geoms;
+"""
+
 intersection_query="""
 select sum(st_npoints(st_intersection( geom1, geom2 ))) from sfcgal.geoms;
 """
@@ -201,6 +216,10 @@ convexhull_query="""
 --select sum(st_npoints(geom)) from sfcgal.%(out_name)s;
 
 select sum(st_npoints(st_convexhull(geom1))) from sfcgal.geoms;
+"""
+
+triangulate_query="""
+select sum(st_numgeometries(st_delaunaytriangles(geom1))) from sfcgal.geoms;
 """
 
 cleaning_query="""
@@ -237,8 +256,12 @@ bench.call_sql( prepare_query )
 #queries = { 'intersection_ls_poly_h': [ create_ls_poly_h, intersection_query] }
 #queries = { 'intersection_ls_tin': [ create_ls_tin, intersection_query] }
 
-queries = { 'intersection_ls_ls': [ create_ls_ls, intersection_query ],
-            'intersects_ls_ls': [ create_ls_ls, intersects_query ] }
+#queries = { 'intersection_ls_ls': [ create_ls_ls, intersection_query ],
+#            'intersects_ls_ls': [ create_ls_ls, intersects_query ] }
+
+
+queries = { 'triangulate_poly': [ create_poly_poly, triangulate_query] }
+#queries = { 'intersects3D_ls_ls': [ create_ls_ls_3D, intersects3D_query] }
 
 # vary the number of points
 bench.bench_queries( queries )
