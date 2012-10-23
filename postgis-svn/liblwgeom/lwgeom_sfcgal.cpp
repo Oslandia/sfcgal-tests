@@ -62,7 +62,7 @@ int SFCGAL_type_to_lwgeom_type( SFCGAL::GeometryType type )
 	//	return 0;
     case SFCGAL::TYPE_POLYHEDRALSURFACE:
 	return POLYHEDRALSURFACETYPE;
-    case SFCGAL::TYPE_TIN:
+    case SFCGAL::TYPE_TRIANGULATEDSURFACE:
 	return TINTYPE;
     case SFCGAL::TYPE_TRIANGLE:
 	return TRIANGLETYPE;
@@ -151,7 +151,7 @@ POINTARRAY* ptarray_from_SFCGAL( const SFCGAL::Geometry* geom, bool force3D = fa
 	//    case SFCGAL::TYPE_CURVE:
 	//    case SFCGAL::TYPE_SURFACE:
     case SFCGAL::TYPE_POLYHEDRALSURFACE:
-    case SFCGAL::TYPE_TIN:
+    case SFCGAL::TYPE_TRIANGULATEDSURFACE:
     default:
 	throw std::runtime_error( "ptarray_from_SFCGAL: Unsupported SFCGAL geometry of type " + geom->geometryType() );
 	break;
@@ -351,7 +351,7 @@ LWGEOM* SFCGAL2LWGEOM( const SFCGAL::Geometry* geom, bool force3D )
 		}
 		return rgeom;
 	}
-    case SFCGAL::TYPE_TIN:
+    case SFCGAL::TYPE_TRIANGULATEDSURFACE:
 	{
 	    const SFCGAL::TriangulatedSurface* collection = static_cast<const SFCGAL::TriangulatedSurface*>( geom );
 	    size_t n_geoms = collection->numTriangles();
