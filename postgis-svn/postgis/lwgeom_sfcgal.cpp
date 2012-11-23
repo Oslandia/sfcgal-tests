@@ -15,6 +15,7 @@
 #include <SFCGAL/algorithm/convexHull.h>
 #include <SFCGAL/algorithm/area.h>
 #include <SFCGAL/algorithm/extrude.h>
+#include <SFCGAL/algorithm/plane.h>
 #include <SFCGAL/io/wkt.h>
 
 /* TODO: we probaby don't need _all_ these pgsql headers */
@@ -52,9 +53,9 @@ std::auto_ptr<SFCGAL::Geometry> POSTGIS2SFCGAL(GSERIALIZED *pglwgeom)
 	return g;
 }
 
-GSERIALIZED* SFCGAL2POSTGIS(const SFCGAL::Geometry& geom, bool force3D = false)
+GSERIALIZED* SFCGAL2POSTGIS(const SFCGAL::Geometry& geom, bool force3D, int SRID )
 {
-	LWGEOM* lwgeom = SFCGAL2LWGEOM( &geom, force3D );
+	LWGEOM* lwgeom = SFCGAL2LWGEOM( &geom, force3D, SRID );
 	if ( lwgeom_needs_bbox(lwgeom) == LW_TRUE )
 	{
 		lwgeom_add_bbox(lwgeom);
@@ -157,7 +158,7 @@ Datum sfcgal_unary_construction( PG_FUNCTION_ARGS, const char* name, SFCGAL::Una
 
 	if ( inter.get() ) {
 	    try {
-		result = SFCGAL2POSTGIS( *inter );
+		    result = SFCGAL2POSTGIS( *inter, /* force 3d */ false, gserialized_get_srid( geom1 ) );
 	    }
 	    catch ( std::exception& e ) {
 		lwerror("Result geometry could not be converted to lwgeom: %s", e.what() );
@@ -213,7 +214,7 @@ Datum sfcgal_binary_construction( PG_FUNCTION_ARGS, const char* name, SFCGAL::Bi
 
 	if ( inter.get() ) {
 	    try {
-		result = SFCGAL2POSTGIS( *inter );
+		    result = SFCGAL2POSTGIS( *inter, /* force3D */ false, gserialized_get_srid( geom1 ) );
 	    }
 	    catch ( std::exception& e ) {
 		lwerror("Result geometry could not be converted to lwgeom: %s", e.what() );
@@ -287,6 +288,7 @@ extern "C" Datum sfcgal_intersection3D(PG_FUNCTION_ARGS)
 
 extern "C" {
 PG_FUNCTION_INFO_V1(sfcgal_area);
+PG_FUNCTION_INFO_V1(sfcgal_area3d);
 }
 
 extern "C" Datum sfcgal_area(PG_FUNCTION_ARGS)
@@ -320,6 +322,77 @@ extern "C" Datum sfcgal_area(PG_FUNCTION_ARGS)
 	PG_RETURN_FLOAT8(area);
 }
 
+extern "C" Datum sfcgal_area3d(PG_FUNCTION_ARGS)
+{
+	GSERIALIZED *geom1;
+
+	geom1 = (GSERIALIZED *)PG_DETOAST_DATUM(PG_GETARG_DATUM(0));
+
+	std::auto_ptr<SFCGAL::Geometry> g1;
+	try {
+		g1 = POSTGIS2SFCGAL( geom1 );
+	}
+	catch ( std::exception& e ) {
+		lwerror("First argument geometry could not be converted to SFCGAL: %s", e.what() );
+		PG_RETURN_NULL();
+	}
+	
+	double area = 0.0;
+	try {
+		area = SFCGAL::algorithm::area3D( *g1 );
+	}
+	catch ( std::exception& e ) {
+		lwnotice("geom1: %s", g1->asText().c_str());
+		lwnotice(e.what());
+		lwerror("Error during execution of area3D()");
+		PG_RETURN_NULL();
+	}
+
+	PG_FREE_IF_COPY(geom1, 0);
+
+	PG_RETURN_FLOAT8(area);
+}
+
+extern "C" {
+PG_FUNCTION_INFO_V1(sfcgal_hasplane);
+}
+extern "C" Datum sfcgal_hasplane(PG_FUNCTION_ARGS)
+{
+	GSERIALIZED *geom1;
+
+	geom1 = (GSERIALIZED *)PG_DETOAST_DATUM(PG_GETARG_DATUM(0));
+
+	std::auto_ptr<SFCGAL::Geometry> g1;
+	try {
+		g1 = POSTGIS2SFCGAL( geom1 );
+	}
+	catch ( std::exception& e ) {
+		lwerror("First argument geometry could not be converted to SFCGAL: %s", e.what() );
+		PG_RETURN_NULL();
+	}
+	
+	if ( g1->geometryTypeId() != SFCGAL::TYPE_POLYGON )
+	{
+		lwerror( "hasPlane() cannot be applied to a geometry of type %s", g1->geometryType().c_str() );
+		PG_RETURN_NULL();
+	}
+
+	bool result = false;
+	try {
+		result = SFCGAL::algorithm::hasPlane3D< CGAL::Exact_predicates_exact_constructions_kernel >( g1->as< const SFCGAL::Polygon >() );
+	}
+	catch ( std::exception& e ) {
+		lwnotice("geom1: %s", g1->asText().c_str());
+		lwnotice(e.what());
+		lwerror("Error during execution of hasPlane3D()");
+		PG_RETURN_NULL();
+	}
+
+	PG_FREE_IF_COPY(geom1, 0);
+
+	PG_RETURN_BOOL(result);
+}
+
 extern "C" {
 	PG_FUNCTION_INFO_V1(sfcgal_triangulate);
 }
@@ -343,7 +416,7 @@ extern "C" Datum sfcgal_triangulate(PG_FUNCTION_ARGS)
 	SFCGAL::TriangulatedSurface surf;
 	try {
 		SFCGAL::algorithm::triangulate( *g1, surf );
-		result = SFCGAL2POSTGIS( surf );
+		result = SFCGAL2POSTGIS( surf, false, gserialized_get_srid( geom1 ) );
 	}
 	catch ( std::exception& e ) {
 		lwnotice("geom1: %s", g1->asText().c_str());
@@ -384,7 +457,7 @@ extern "C" Datum sfcgal_extrude(PG_FUNCTION_ARGS)
 	
 	try {
 		std::auto_ptr<SFCGAL::Geometry> gresult = SFCGAL::algorithm::extrude( *g1, dx, dy, dz );
-		result = SFCGAL2POSTGIS( *gresult, gresult->is3D() );
+		result = SFCGAL2POSTGIS( *gresult, gresult->is3D(), gserialized_get_srid( geom1 ) );
 	}
 	catch ( std::exception& e ) {
 		lwnotice("geom1: %s", g1->asText().c_str());
@@ -431,7 +504,7 @@ extern "C" Datum sfcgal_make_solid(PG_FUNCTION_ARGS)
     SFCGAL::Solid* solid = new SFCGAL::Solid( static_cast<const SFCGAL::PolyhedralSurface&>(*g1.get()) );
     try
     {
-	result = SFCGAL2POSTGIS( *solid, /* force3D */ true );
+	    result = SFCGAL2POSTGIS( *solid, /* force3D */ true, gserialized_get_srid( geom1 ) );
     }
     catch ( std::exception& e ) {
 	lwnotice("geom1: %s", g1->asText().c_str());

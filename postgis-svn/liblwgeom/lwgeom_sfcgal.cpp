@@ -216,10 +216,8 @@ std::auto_ptr<SFCGAL::Geometry> ptarray_to_SFCGAL( const POINTARRAY* pa, int typ
     return std::auto_ptr<SFCGAL::Geometry>(0);
 }
 
-LWGEOM* SFCGAL2LWGEOM( const SFCGAL::Geometry* geom, bool force3D )
+LWGEOM* SFCGAL2LWGEOM( const SFCGAL::Geometry* geom, bool force3D, int SRID )
 {
-    // default SRID
-    int SRID = SRID_UNKNOWN;
     bool want3d = force3D || geom->is3D();
 
     switch ( geom->geometryTypeId() )
@@ -275,12 +273,18 @@ LWGEOM* SFCGAL2LWGEOM( const SFCGAL::Geometry* geom, bool force3D )
 	    if ( n_geoms )
 	    {
 		geoms = (LWGEOM**)lwalloc( sizeof(LWGEOM*) * n_geoms );
+		size_t j = 0;
 		for ( size_t i = 0; i < n_geoms; i++ )
 		{
 		    const SFCGAL::Geometry& g = collection->geometryN( i );
-		    // recurse call
-		    geoms[i] = SFCGAL2LWGEOM( &g );
+		    if ( !g.isEmpty() )
+		    {
+			    // recurse call
+			    geoms[j++] = SFCGAL2LWGEOM( &g );
+		    }
 		}
+		n_geoms = j;
+		geoms = (LWGEOM**)lwrealloc( geoms, sizeof(LWGEOM*) * n_geoms );
 	    }
 	    return (LWGEOM*)lwcollection_construct( SFCGAL_type_to_lwgeom_type( geom->geometryTypeId() ),
 						    SRID,

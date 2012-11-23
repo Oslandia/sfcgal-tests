@@ -5128,6 +5128,16 @@ CREATE OR REPLACE FUNCTION sfcgal.ST_Area(geometry)
 	AS 'MODULE_PATHNAME','sfcgal_area'
 	LANGUAGE 'c' IMMUTABLE STRICT;
 
+CREATE OR REPLACE FUNCTION sfcgal.ST_3DArea(geometry)
+	RETURNS FLOAT8
+	AS 'MODULE_PATHNAME','sfcgal_area3d'
+	LANGUAGE 'c' IMMUTABLE STRICT;
+
+CREATE OR REPLACE FUNCTION sfcgal.ST_HasPlane(geometry)
+	RETURNS BOOL
+	AS 'MODULE_PATHNAME','sfcgal_hasplane'
+	LANGUAGE 'c' IMMUTABLE STRICT;
+
 CREATE OR REPLACE FUNCTION sfcgal.ST_Extrude(geometry, float8, float8, float8)
 	RETURNS geometry
 	AS 'MODULE_PATHNAME','sfcgal_extrude'
