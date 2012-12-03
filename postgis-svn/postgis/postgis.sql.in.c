@@ -5038,38 +5038,6 @@ CREATE OR REPLACE FUNCTION ST_AsX3D(geom geometry, maxdecimaldigits integer DEFA
 DROP SCHEMA IF EXISTS sfcgal CASCADE;
 CREATE SCHEMA sfcgal;
 
-CREATE TYPE sfcgal_geometry;
-
-CREATE FUNCTION sfcgal_in(cstring)
-    RETURNS sfcgal_geometry
-    AS 'MODULE_PATHNAME'
-    LANGUAGE C IMMUTABLE STRICT;
-
-CREATE FUNCTION sfcgal_out(sfcgal_geometry)
-    RETURNS cstring
-    AS 'MODULE_PATHNAME'
-    LANGUAGE C IMMUTABLE STRICT;
-
-CREATE FUNCTION sfcgal_recv(internal)
-   RETURNS sfcgal_geometry
-   AS 'MODULE_PATHNAME'
-   LANGUAGE C IMMUTABLE STRICT;
-
-CREATE FUNCTION sfcgal_send(sfcgal_geometry)
-   RETURNS bytea
-   AS 'MODULE_PATHNAME'
-   LANGUAGE C IMMUTABLE STRICT;
-
-CREATE TYPE sfcgal_geometry (
-    internallength = 8,
-    input = sfcgal_in,
-    output = sfcgal_out,
-    receive = sfcgal_recv,
-    send = sfcgal_send
-);
-
-
-
 CREATE OR REPLACE FUNCTION sfcgal.ST_MakeSolid(geometry)
 	RETURNS geometry
 	AS 'MODULE_PATHNAME','sfcgal_make_solid'
@@ -5141,6 +5109,21 @@ CREATE OR REPLACE FUNCTION sfcgal.ST_HasPlane(geometry)
 CREATE OR REPLACE FUNCTION sfcgal.ST_Extrude(geometry, float8, float8, float8)
 	RETURNS geometry
 	AS 'MODULE_PATHNAME','sfcgal_extrude'
+	LANGUAGE 'c' IMMUTABLE STRICT;
+
+CREATE OR REPLACE FUNCTION sfcgal.ST_ForceZUp(geometry)
+	RETURNS geometry
+	AS 'MODULE_PATHNAME','sfcgal_force_z_up'
+	LANGUAGE 'c' IMMUTABLE STRICT;
+
+CREATE OR REPLACE FUNCTION sfcgal.ST_PointingUp(geometry)
+	RETURNS BOOL
+	AS 'MODULE_PATHNAME','sfcgal_pointing_up'
+	LANGUAGE 'c' IMMUTABLE STRICT;
+
+CREATE OR REPLACE FUNCTION sfcgal.ST_CollectionExtract(geometry, int4)
+	RETURNS geometry
+	AS 'MODULE_PATHNAME','sfcgal_collection_extract'
 	LANGUAGE 'c' IMMUTABLE STRICT;
 
 COMMIT;

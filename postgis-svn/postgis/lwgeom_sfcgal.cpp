@@ -16,6 +16,8 @@
 #include <SFCGAL/algorithm/area.h>
 #include <SFCGAL/algorithm/extrude.h>
 #include <SFCGAL/algorithm/plane.h>
+#include <SFCGAL/transform/ForceZOrderPoints.h>
+#include <SFCGAL/algorithm/collectionExtract.h>
 #include <SFCGAL/io/wkt.h>
 
 /* TODO: we probaby don't need _all_ these pgsql headers */
@@ -394,6 +396,46 @@ extern "C" Datum sfcgal_hasplane(PG_FUNCTION_ARGS)
 }
 
 extern "C" {
+PG_FUNCTION_INFO_V1(sfcgal_pointing_up);
+}
+extern "C" Datum sfcgal_pointing_up(PG_FUNCTION_ARGS)
+{
+	GSERIALIZED *geom1;
+
+	geom1 = (GSERIALIZED *)PG_DETOAST_DATUM(PG_GETARG_DATUM(0));
+
+	std::auto_ptr<SFCGAL::Geometry> g1;
+	try {
+		g1 = POSTGIS2SFCGAL( geom1 );
+	}
+	catch ( std::exception& e ) {
+		lwerror("First argument geometry could not be converted to SFCGAL: %s", e.what() );
+		PG_RETURN_NULL();
+	}
+	
+	if ( g1->geometryTypeId() != SFCGAL::TYPE_POLYGON )
+	{
+		lwerror( "pointingUp() cannot be applied to a geometry of type %s", g1->geometryType().c_str() );
+		PG_RETURN_NULL();
+	}
+
+	bool result = false;
+	try {
+		result = g1->as<SFCGAL::Polygon>().isPointingUp();
+	}
+	catch ( std::exception& e ) {
+		lwnotice("geom1: %s", g1->asText().c_str());
+		lwnotice(e.what());
+		lwerror("Error during execution of pointingUp()");
+		PG_RETURN_NULL();
+	}
+
+	PG_FREE_IF_COPY(geom1, 0);
+
+	PG_RETURN_BOOL(result);
+}
+
+extern "C" {
 	PG_FUNCTION_INFO_V1(sfcgal_triangulate);
 }
 
@@ -445,6 +487,7 @@ extern "C" Datum sfcgal_extrude(PG_FUNCTION_ARGS)
 	dx = PG_GETARG_FLOAT8(1);
 	dy = PG_GETARG_FLOAT8(2);
 	dz = PG_GETARG_FLOAT8(3);
+	// TODO: forbid negative values
 
 	std::auto_ptr<SFCGAL::Geometry> g1;
 	try {
@@ -454,6 +497,9 @@ extern "C" Datum sfcgal_extrude(PG_FUNCTION_ARGS)
 		lwerror("First argument geometry could not be converted to SFCGAL: %s", e.what() );
 		PG_RETURN_NULL();
 	}
+	// force Z
+	SFCGAL::transform::ForceZOrderPoints forceZ;
+	g1->accept( forceZ );
 	
 	try {
 		std::auto_ptr<SFCGAL::Geometry> gresult = SFCGAL::algorithm::extrude( *g1, dx, dy, dz );
@@ -495,6 +541,11 @@ extern "C" Datum sfcgal_make_solid(PG_FUNCTION_ARGS)
 	lwerror("First argument geometry could not be converted to SFCGAL: %s", e.what() );
 	PG_RETURN_NULL();
     }
+    if ( g1->geometryTypeId() == SFCGAL::TYPE_SOLID )
+    {
+	    // already a solid, return
+	    PG_RETURN_POINTER( geom1 );
+    }
     if ( g1->geometryTypeId() != SFCGAL::TYPE_POLYHEDRALSURFACE )
     {
 	lwerror( "make_solid only applies to polyhedral surfaces" );
@@ -519,60 +570,86 @@ extern "C" Datum sfcgal_make_solid(PG_FUNCTION_ARGS)
 }
 
 extern "C" {
-	PG_FUNCTION_INFO_V1(sfcgal_in);
+	PG_FUNCTION_INFO_V1(sfcgal_force_z_up);
 }
 
-extern "C" Datum sfcgal_in(PG_FUNCTION_ARGS)
+extern "C" Datum sfcgal_force_z_up(PG_FUNCTION_ARGS)
 {
-	lwnotice("sfcgal_in");
-	const char *str = PG_GETARG_CSTRING(0);
+	// transform a 2d surface to a 3d one, with the normal pointing up
+    GSERIALIZED *geom1;
+    
+    GSERIALIZED *result;
+    
+    geom1 = (GSERIALIZED *)PG_DETOAST_DATUM(PG_GETARG_DATUM(0));
 
-	std::auto_ptr<SFCGAL::Geometry> g;
-	try {
-		g = SFCGAL::io::readWkt( str );
-	}
-	catch ( std::exception& e ) {
-		lwerror("ERROR: %s", e.what() );
-		PG_RETURN_NULL();
-	}
-	SFCGAL::Geometry* geom = g.release();
-	lwnotice("geom = %p", geom);
+    std::auto_ptr<SFCGAL::Geometry> g1;
+    try {
+	g1 = POSTGIS2SFCGAL( geom1 );
+    }
+    catch ( std::exception& e ) {
+	lwerror("First argument geometry could not be converted to SFCGAL: %s", e.what() );
+	PG_RETURN_NULL();
+    }
 
-	void* retp = palloc( sizeof(void*));
-	memmove( retp, &geom, sizeof(void*) );
-	PG_RETURN_POINTER(retp);
+    try
+    {
+	    SFCGAL::transform::ForceZOrderPoints forceZ;
+	    g1->accept( forceZ );
+	    result = SFCGAL2POSTGIS( *g1, /* force3D */ true, gserialized_get_srid( geom1 ) );
+    }
+    catch ( std::exception& e ) {
+	lwnotice("geom1: %s", g1->asText().c_str());
+	lwnotice(e.what());
+	lwerror("Error during execution of force_z_up()");
+	PG_RETURN_NULL();
+    }
+    
+    PG_FREE_IF_COPY(geom1, 0);
+    
+    PG_RETURN_POINTER(result);
 }
 
 extern "C" {
-	PG_FUNCTION_INFO_V1(sfcgal_out);
+	PG_FUNCTION_INFO_V1(sfcgal_collection_extract);
 }
 
-extern "C" Datum sfcgal_out(PG_FUNCTION_ARGS)
+extern "C" Datum sfcgal_collection_extract(PG_FUNCTION_ARGS)
 {
-	lwnotice("sfcgal_out");
-	void** p = (void **)PG_GETARG_POINTER(0);
-	SFCGAL::Geometry* geom = reinterpret_cast<SFCGAL::Geometry*>(*p);
-	lwnotice("geom = %p", geom);
+    // transform a polyhedral surface into a solid with only one exterior shell
+    GSERIALIZED *geom1;
+    
+    GSERIALIZED *result;
+    
+    geom1 = (GSERIALIZED *)PG_DETOAST_DATUM(PG_GETARG_DATUM(0));
+    uint32_t extractType = PG_GETARG_INT32(1);
 
-	std::string astxt = geom->asText();
+    std::auto_ptr<SFCGAL::Geometry> g1;
+    try {
+	g1 = POSTGIS2SFCGAL( geom1 );
+    }
+    catch ( std::exception& e ) {
+	lwerror("First argument geometry could not be converted to SFCGAL: %s", e.what() );
+	PG_RETURN_NULL();
+    }
+    if ( extractType != 3 ) {
+	    lwerror( "collectionExtract is only supported for polygons(3)");
+	    PG_RETURN_NULL();
+    }
 
-	char *retstr = (char*)palloc( astxt.size() + 1 );
-	strncpy( retstr, astxt.c_str(), astxt.size() + 1 );
-	delete geom;
-
-	PG_RETURN_CSTRING(retstr);
+    try
+    {
+	    std::auto_ptr<SFCGAL::Geometry> gresult = SFCGAL::algorithm::collectionExtractPolygons( g1 );
+	    result = SFCGAL2POSTGIS( *gresult, /* force3D */ true, gserialized_get_srid( geom1 ) );
+    }
+    catch ( std::exception& e ) {
+	lwnotice("geom1: %s", g1->asText().c_str());
+	lwnotice(e.what());
+	lwerror("Error during execution of collectionExtract()");
+	PG_RETURN_NULL();
+    }
+    
+    PG_FREE_IF_COPY(geom1, 0);
+    
+    PG_RETURN_POINTER(result);
 }
 
-extern "C" {
-	PG_FUNCTION_INFO_V1(sfcgal_recv);
-}
-
-extern "C" Datum sfcgal_recv(PG_FUNCTION_ARGS)
-{
-	lwnotice("sfcgal_recv");
-}
-
-extern "C" Datum sfcgal_send(PG_FUNCTION_ARGS)
-{
-	lwnotice("sfcgal_send");
-}
