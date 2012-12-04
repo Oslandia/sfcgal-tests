@@ -421,7 +421,7 @@ extern "C" Datum sfcgal_pointing_up(PG_FUNCTION_ARGS)
 
 	bool result = false;
 	try {
-		result = g1->as<SFCGAL::Polygon>().isPointingUp();
+		result = g1->as<SFCGAL::Polygon>().isCounterClockWiseOriented();
 	}
 	catch ( std::exception& e ) {
 		lwnotice("geom1: %s", g1->asText().c_str());
