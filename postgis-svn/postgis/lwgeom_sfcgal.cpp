@@ -19,6 +19,7 @@
 #include <SFCGAL/transform/ForceZOrderPoints.h>
 #include <SFCGAL/algorithm/collectionExtract.h>
 #include <SFCGAL/io/wkt.h>
+#include <SFCGAL/io/Serialization.h>
 
 /* TODO: we probaby don't need _all_ these pgsql headers */
 extern "C" {
@@ -84,15 +85,8 @@ Datum sfcgal_binary_predicate(PG_FUNCTION_ARGS, const char* name, SFCGAL::Binary
 	GSERIALIZED *geom1;
 	GSERIALIZED *geom2;
 
-	//	lwnotice("context: %p", fcinfo->context);
-	//	lwnotice("datum 0: %p, datum 1: %p", PG_GETARG_DATUM(0), PG_GETARG_DATUM(1));
-	//	void* p1 = PG_GETARG_POINTER(0);
-	//	void* p2 = PG_GETARG_POINTER(1);
-	//	lwnotice("p1 = %p", p1);
-	//	lwnotice("p2 = %p", p2);
 	geom1 = (GSERIALIZED *)PG_DETOAST_DATUM(PG_GETARG_DATUM(0));
 	geom2 = (GSERIALIZED *)PG_DETOAST_DATUM(PG_GETARG_DATUM(1));
-	//	lwnotice("geom1: %p, geom2: %p", geom1, geom2);
 
 	std::auto_ptr<SFCGAL::Geometry> g1;
 	try {
@@ -653,3 +647,145 @@ extern "C" Datum sfcgal_collection_extract(PG_FUNCTION_ARGS)
     PG_RETURN_POINTER(result);
 }
 
+struct ExactGeometry
+{
+	uint32_t size;
+	char data[1];
+};
+
+ExactGeometry* serializeExactGeometry( const SFCGAL::Geometry& g1 )
+{
+    std::string raw = SFCGAL::io::writeBinary( g1 );
+    ExactGeometry* g = (ExactGeometry*)palloc( raw.size() + 1 + 4 );
+    memmove( &g->data[0], raw.data(), raw.size() );
+    SET_VARSIZE( g, raw.size() );
+    return g;
+}
+
+std::auto_ptr<SFCGAL::Geometry> unserializeExactGeometry( ExactGeometry* ptr )
+{
+    uint32_t s = VARSIZE( ptr );
+    std::string gstr( &ptr->data[0], s );
+    return SFCGAL::io::readBinary( gstr );	
+}
+
+extern "C" {
+	PG_FUNCTION_INFO_V1(sfcgal_exact_out);
+}
+
+extern "C" Datum sfcgal_exact_out(PG_FUNCTION_ARGS)
+{
+    ExactGeometry *geom1;
+    
+    geom1 = (ExactGeometry *)PG_GETARG_DATUM(0);
+
+    std::auto_ptr<SFCGAL::Geometry> g = unserializeExactGeometry( geom1 );
+
+    std::string wkt = g->asText( /* exact */ -1 );
+    char * retstr = (char*)palloc( wkt.size() + 1 );
+    strncpy( retstr, wkt.c_str(), wkt.size() + 1 );
+
+    PG_RETURN_CSTRING( retstr );
+}
+
+extern "C" {
+	PG_FUNCTION_INFO_V1(sfcgal_exact_in);
+}
+
+extern "C" Datum sfcgal_exact_in(PG_FUNCTION_ARGS)
+{
+	char* cstring = PG_GETARG_CSTRING( 0 );
+	std::string rstr( cstring );
+	std::auto_ptr<SFCGAL::Geometry> g;
+	try
+	{
+		g = SFCGAL::io::readWkt( rstr );
+	}
+	catch ( std::exception& e )
+	{
+		lwerror("First argument geometry could not be converted to SFCGAL: %s", e.what() );
+		PG_RETURN_NULL();
+	}
+
+	ExactGeometry* exactG = serializeExactGeometry( *g );
+	PG_RETURN_POINTER( exactG );
+}
+
+extern "C" {
+	PG_FUNCTION_INFO_V1(sfcgal_exact);
+}
+
+extern "C" Datum sfcgal_exact(PG_FUNCTION_ARGS)
+{
+    GSERIALIZED *geom1;
+    
+    geom1 = (GSERIALIZED *)PG_DETOAST_DATUM(PG_GETARG_DATUM(0));
+
+    std::auto_ptr<SFCGAL::Geometry> g1;
+    try {
+	g1 = POSTGIS2SFCGAL( geom1 );
+    }
+    catch ( std::exception& e ) {
+	lwerror("First argument geometry could not be converted to SFCGAL: %s", e.what() );
+	PG_RETURN_NULL();
+    }
+
+    ExactGeometry* g = serializeExactGeometry( *g1 );
+
+    PG_FREE_IF_COPY( geom1, 0 );
+
+    PG_RETURN_POINTER( g );
+}
+
+extern "C" {
+	PG_FUNCTION_INFO_V1(sfcgal_exact_intersects);
+}
+
+extern "C" Datum sfcgal_exact_intersects(PG_FUNCTION_ARGS)
+{
+	ExactGeometry* exact1 = (ExactGeometry*)PG_DETOAST_DATUM(PG_GETARG_DATUM( 0 ));
+	ExactGeometry* exact2 = (ExactGeometry*)PG_DETOAST_DATUM(PG_GETARG_DATUM( 1 ));
+
+	std::auto_ptr<SFCGAL::Geometry> g1 = unserializeExactGeometry( exact1 );
+	std::auto_ptr<SFCGAL::Geometry> g2 = unserializeExactGeometry( exact2 );
+
+	bool result;
+	try
+	{
+		result = SFCGAL::algorithm::intersects( *g1, *g2 );
+	}
+	catch ( std::exception& e )
+	{
+		lwerror("Problem during sfcgal_exact_intersects: %s", e.what() );
+		PG_RETURN_NULL();		
+	}
+
+	PG_RETURN_BOOL( result );
+}
+
+extern "C" {
+	PG_FUNCTION_INFO_V1(sfcgal_exact_intersection);
+}
+
+extern "C" Datum sfcgal_exact_intersection(PG_FUNCTION_ARGS)
+{
+	ExactGeometry* exact1 = (ExactGeometry*)PG_DETOAST_DATUM(PG_GETARG_DATUM( 0 ));
+	ExactGeometry* exact2 = (ExactGeometry*)PG_DETOAST_DATUM(PG_GETARG_DATUM( 1 ));
+
+	std::auto_ptr<SFCGAL::Geometry> g1 = unserializeExactGeometry( exact1 );
+	std::auto_ptr<SFCGAL::Geometry> g2 = unserializeExactGeometry( exact2 );
+
+	ExactGeometry* result;
+	try
+	{
+		std::auto_ptr<SFCGAL::Geometry> rg = SFCGAL::algorithm::intersection( *g1, *g2 );
+		result = serializeExactGeometry( *rg );
+	}
+	catch ( std::exception& e )
+	{
+		lwerror("Problem during sfcgal_exact_intersection: %s", e.what() );
+		PG_RETURN_NULL();		
+	}
+
+	PG_RETURN_POINTER( result );
+}

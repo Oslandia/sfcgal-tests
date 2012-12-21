@@ -82,10 +82,10 @@ POINTARRAY* ptarray_from_SFCGAL( const SFCGAL::Geometry* geom, bool force3D = fa
 	{
 	    const SFCGAL::Point* pt = static_cast<const SFCGAL::Point*>( geom );
 	    pa = ptarray_construct( want3d, 0, 1 );
-	    point.x = pt->x();
-	    point.y = pt->y();
+	    point.x = CGAL::to_double( pt->x() );
+	    point.y = CGAL::to_double( pt->y() );
 	    if ( geom->is3D() ) {
-		    point.z = pt->z();
+		    point.z = CGAL::to_double( pt->z() );
 	    }
 	    else if ( force3D ) {
 		    point.z = 0.0;
@@ -103,10 +103,10 @@ POINTARRAY* ptarray_from_SFCGAL( const SFCGAL::Geometry* geom, bool force3D = fa
 	    for ( size_t i = 0; i < ls->numPoints(); i++ )
 	    {
 		const SFCGAL::Point* pt = &ls->pointN( i );
-		point.x = pt->x();
-		point.y = pt->y();
+		point.x = CGAL::to_double( pt->x() );
+		point.y = CGAL::to_double( pt->y() );
 		if ( geom->is3D() ) {
-			point.z = pt->z();
+			point.z = CGAL::to_double( pt->z() );
 		}
 		else if ( force3D ) {
 			point.z = 0.0;
@@ -124,10 +124,10 @@ POINTARRAY* ptarray_from_SFCGAL( const SFCGAL::Geometry* geom, bool force3D = fa
 	    for ( size_t i = 0; i < 3; i++ )
 	    {
 		const SFCGAL::Point* pt = &tri->vertex( i );
-		point.x = pt->x();
-		point.y = pt->y();
+		point.x = CGAL::to_double( pt->x() );
+		point.y = CGAL::to_double( pt->y() );
 		if ( geom->is3D() ) {
-			point.z = pt->z();
+			point.z = CGAL::to_double( pt->z() );
 		}
 		else if ( force3D ) {
 			point.z = 0.0;
