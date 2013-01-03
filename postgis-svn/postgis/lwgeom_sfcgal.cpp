@@ -647,6 +647,203 @@ extern "C" Datum sfcgal_collection_extract(PG_FUNCTION_ARGS)
     PG_RETURN_POINTER(result);
 }
 
+
+void list_children( MemoryContext context, MemoryContext refContext, int depth )
+{
+	char depthstr[ depth + 1 ];
+	memset( depthstr, ' ', depth );
+	depthstr[ depth ] = 0;
+	if ( context == refContext ) {
+		depthstr[0] = '>';
+	}
+
+	lwnotice( "%s%s %p", depthstr, context->name, context );
+
+	MemoryContext iter = context->firstchild;
+	while ( iter ) {
+		list_children( iter, refContext, depth + 2 );
+		iter = iter->nextchild;
+	}
+}
+void list_contexts( MemoryContext context )
+{
+	// find root context
+	MemoryContext root = TopMemoryContext;
+	list_children( root, context, 0 );
+}
+
+class GeometryPool
+{
+public:
+	void reference( void* context, SFCGAL::Geometry* geometry )
+	{
+		lwnotice( "reference %p in %p", geometry, context );
+		//		list_parent_contexts( (MemoryContext)context );
+		pool_[context].push_back( geometry );
+	}
+
+	void deleteAll( void* context )
+	{
+		if ( pool_.find( context ) == pool_.end() ) {
+			return;
+		}
+		GeometryList& l = pool_[ context ];
+		if ( l.size() == 0 ) {
+			return;
+		}
+		for ( int i = l.size() - 1; i >= 0; --i ) {
+			SFCGAL::Geometry* g = l[i];
+			lwnotice( "delete %p from %p", g, context );
+			delete g;
+			l.pop_back();
+		}
+	}
+private:
+	typedef std::vector<SFCGAL::Geometry*> GeometryList;
+	std::map<void*, GeometryList> pool_;
+};
+
+GeometryPool refGeometryPool;
+
+void (*oldDelete) (MemoryContext );
+void myDelete( MemoryContext context )
+{
+	//	lwnotice("myDelete %p, name: %s", context, context->name );
+	refGeometryPool.deleteAll( context );
+	(*oldDelete) ( context );
+}
+void (*oldReset) (MemoryContext );
+void myReset( MemoryContext context )
+{
+	//	lwnotice("myReset %p, name: %s", context, context->name );
+	refGeometryPool.deleteAll( context );
+	(*oldReset) ( context );
+}
+
+void override_destructors( MemoryContext context )
+{
+	// overwrite destructors on the current memory context
+	if ( context->methods->delete_context != myDelete ) {
+		oldDelete = context->methods->delete_context;
+		oldReset = context->methods->reset;
+		context->methods->delete_context = myDelete;
+		context->methods->reset = myReset;
+	}
+}
+
+SFCGAL::Geometry* get_geometry_arg( FunctionCallInfo fcinfo, size_t n )
+{
+	void** p = (void**)PG_GETARG_POINTER( n );
+	SFCGAL::Geometry* pp = (SFCGAL::Geometry*)(*p);
+	return pp;
+}
+
+MemoryContext get_parent_context()
+{
+	//
+	// returns the memory context used to store SFCGAL::Geometry*
+	// Ideally, this would be in the closest parent context of the current function evaluation.
+	return MessageContext;
+}
+
+Datum return_geometry( SFCGAL::Geometry* geometry )
+{
+	void** p = (void**)palloc( sizeof(void*) );
+	*p = (void*)(geometry);
+	return Datum(p);
+}
+
+extern "C" {
+	PG_FUNCTION_INFO_V1(sfcgal_ref_in);
+}
+
+extern "C" Datum sfcgal_ref_in(PG_FUNCTION_ARGS)
+{
+	char* cstring = PG_GETARG_CSTRING( 0 );
+	std::string rstr( cstring );
+	std::auto_ptr<SFCGAL::Geometry> g;
+	try
+	{
+		g = SFCGAL::io::readWkt( rstr );
+	}
+	catch ( std::exception& e )
+	{
+		lwerror("First argument geometry could not be converted to SFCGAL: %s", e.what() );
+		PG_RETURN_NULL();
+	}
+
+	MemoryContext parentContext = get_parent_context();
+	override_destructors( parentContext );
+
+	SFCGAL::Geometry* geo = g.release();
+	refGeometryPool.reference( parentContext, geo );
+	return return_geometry( geo );
+}
+
+extern "C" {
+	PG_FUNCTION_INFO_V1(sfcgal_ref_out);
+}
+
+extern "C" Datum sfcgal_ref_out(PG_FUNCTION_ARGS)
+{
+	SFCGAL::Geometry* g = get_geometry_arg( fcinfo, 0 );
+	//	lwnotice( "ref_out: %p", g );
+
+	std::string wkt = g->asText( /* exact */ -1 );
+	char * retstr = (char*)palloc( wkt.size() + 1 );
+	strncpy( retstr, wkt.c_str(), wkt.size() + 1 );
+	
+	PG_RETURN_CSTRING( retstr );
+}
+
+extern "C" {
+	PG_FUNCTION_INFO_V1(sfcgal_ref_intersects);
+}
+
+extern "C" Datum sfcgal_ref_intersects(PG_FUNCTION_ARGS)
+{
+	SFCGAL::Geometry* ref1 = get_geometry_arg( fcinfo, 0 );
+	SFCGAL::Geometry* ref2 = get_geometry_arg( fcinfo, 1 );
+
+	bool result;
+	try
+	{
+		result = SFCGAL::algorithm::intersects( *ref1, *ref2 );
+	}
+	catch ( std::exception& e )
+	{
+		lwerror("Problem during sfcgal_ref_intersects: %s", e.what() );
+		PG_RETURN_NULL();
+	}
+
+	PG_RETURN_BOOL( result );
+}
+
+extern "C" {
+	PG_FUNCTION_INFO_V1(sfcgal_ref_intersection);
+}
+
+extern "C" Datum sfcgal_ref_intersection(PG_FUNCTION_ARGS)
+{
+	SFCGAL::Geometry* ref1 = get_geometry_arg( fcinfo, 0 );
+	SFCGAL::Geometry* ref2 = get_geometry_arg( fcinfo, 1 );
+
+	std::auto_ptr<SFCGAL::Geometry> result;
+	try
+	{
+		result = SFCGAL::algorithm::intersection( *ref1, *ref2 );
+	}
+	catch ( std::exception& e )
+	{
+		lwerror("Problem during sfcgal_ref_intersection: %s", e.what() );
+		PG_RETURN_NULL();
+	}
+
+	SFCGAL::Geometry* geo = result.release();
+	refGeometryPool.reference( get_parent_context(), geo );
+	return return_geometry( geo );
+}
+
 struct ExactGeometry
 {
 	uint32_t size;

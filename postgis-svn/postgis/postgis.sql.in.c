@@ -5038,6 +5038,38 @@ CREATE OR REPLACE FUNCTION ST_AsX3D(geom geometry, maxdecimaldigits integer DEFA
 DROP SCHEMA IF EXISTS sfcgal CASCADE;
 CREATE SCHEMA sfcgal;
 
+CREATE TYPE ref_geometry;
+
+-- ??
+CREATE FUNCTION sfcgal.ref_in(cstring)
+    RETURNS ref_geometry
+    AS 'MODULE_PATHNAME', 'sfcgal_ref_in'
+    LANGUAGE C IMMUTABLE STRICT;
+
+-- display an exact_geometry
+CREATE FUNCTION sfcgal.ref_out(ref_geometry)
+    RETURNS cstring
+    AS 'MODULE_PATHNAME', 'sfcgal_ref_out'
+    LANGUAGE C IMMUTABLE STRICT;
+
+CREATE TYPE ref_geometry (
+    internallength = 8,
+    input = sfcgal.ref_in,
+    output = sfcgal.ref_out
+);
+
+CREATE OR REPLACE FUNCTION sfcgal._ST_Intersects(geom1 ref_geometry, geom2 ref_geometry)
+	RETURNS boolean
+	AS 'MODULE_PATHNAME','sfcgal_ref_intersects'
+	LANGUAGE 'c' IMMUTABLE STRICT
+	COST 200;
+
+CREATE OR REPLACE FUNCTION sfcgal.ST_Intersection(geom1 ref_geometry, geom2 ref_geometry)
+	RETURNS ref_geometry
+	AS 'MODULE_PATHNAME','sfcgal_ref_intersection'
+	LANGUAGE 'c' IMMUTABLE STRICT
+	COST 200;
+
 CREATE TYPE exact_geometry;
 
 -- ??
