@@ -601,28 +601,71 @@ AC_SUBST([POSTGIS_GEOS_VERSION])
 
 
 dnl ===========================================================================
+dnl SFCGAL library support
+dnl ===========================================================================
+
+dnl ===========================================================================
+dnl CGAL library
+dnl ===========================================================================
+
+AC_ARG_WITH([cgaldir], 
+	[AS_HELP_STRING([--with-cgaldir=PATH], [specify the CGAL installation directory])], 
+	[CGALDIR="$withval"], [CGALDIR="/usr/local"])
+
+if test -d "$CGALDIR"; then
+	AC_MSG_RESULT([Using CGAL directory: $CGALDIR])
+	dnl Add the include directory to SFCGAL_CPPFLAGS	
+	CGAL_CPPFLAGS="-I$CGALDIR/include"
+	CGAL_LDFLAGS="-L$CGALDIR/lib"
+else
+	AC_MSG_ERROR([the --with-cgaldir directory "$CGALDIR" cannot be found]) 
+fi
+
+SFCGAL_CPPFLAGS="$CGAL_CPPFLAGS"
+SFCGAL_LDFLAGS="$CGAL_LDFLAGS"
+
+dnl ===========================================================================
+dnl SFCGAL library
+dnl ===========================================================================
+
+AC_ARG_WITH([sfcgaldir], 
+	[AS_HELP_STRING([--with-sfcgaldir=PATH], [specify the SFCGAL installation directory])], 
+	[SFCGALDIR="$withval"], [SFCGALDIR="/usr/local"])
+
+if test -d "$SFCGALDIR"; then
+	AC_MSG_RESULT([Using SFCGAL directory: $SFCGALDIR])
+	dnl Add the include directory to SFCGAL_CPPFLAGS	
+	SFCGAL_CPPFLAGS+=" -I$SFCGALDIR/include"
+	SFCGAL_LDFLAGS+=" -L$SFCGALDIR/lib"
+else
+	AC_MSG_ERROR([the --with-sfcgaldir directory "$SFCGALDIR" cannot be found]) 
+fi
+
+AC_SUBST([SFCGAL_CPPFLAGS])
+AC_SUBST([SFCGAL_LDFLAGS])
+
+dnl ===========================================================================
 dnl
 dnl Selection of the geometric backend.
 dnl Geos is still needed for now.
 dnl
 dnl ===========================================================================
 
-AC_ARG_WITH(
-	[sfcgald],
- 	AC_HELP_STRING([--with-sfcgald], [Use SFCGAL in debug mode]),
- 	[], [])
+AC_ARG_ENABLE([debug-sfcgal], AC_HELP_STRING([--enable-debug-sfcgal], [Use SFCGAL in debug mode]), 
+	[SFCGAL_MODE=Debug], [SFCGAL_MODE=Release]) 
 
-if test "x$with_sfcgald" != "xno"; then
-   EXTRA_FLAGS="-DPOSTGIS_WITH_SFCGAL -frounding-math"
+if test "x$SFCGAL_MODE" = "xDebug"; then
+   SFCGAL_CPPFLAGS+=" -DPOSTGIS_WITH_SFCGAL -frounding-math"
    POSTGIS_SFCGAL_OBJS="lwgeom_sfcgal.o"
-   SFCGAL_LDFLAGS="-lCGAL -lSFCGALd -lmpfr"
+   SFCGAL_LDFLAGS+=" -lCGAL -lSFCGALd"
 else
-   EXTRA_FLAGS="-DPOSTGIS_WITH_SFCGAL -frounding-math"
+   SFCGAL_CPPFLAGS+=" -DPOSTGIS_WITH_SFCGAL -frounding-math"
    POSTGIS_SFCGAL_OBJS="lwgeom_sfcgal.o"
-   SFCGAL_LDFLAGS="-lCGAL -lSFCGAL -lmpfr"
+   SFCGAL_LDFLAGS+=" -lCGAL -lSFCGAL"
 fi
-AC_SUBST(EXTRA_FLAGS, $EXTRA_FLAGS)
+
 AC_SUBST(POSTGIS_SFCGAL_OBJS, $POSTGIS_SFCGAL_OBJS)
+AC_SUBST(SFCGAL_CPPFLAGS, $SFCGAL_CPPFLAGS)
 AC_SUBST(SFCGAL_LDFLAGS, $SFCGAL_LDFLAGS)
 
 dnl ===========================================================================
@@ -1167,6 +1210,9 @@ if test "x$RASTER" = "xraster"; then
     AC_MSG_RESULT([  GDAL config:          ${GDAL_CONFIG}])
     AC_MSG_RESULT([  GDAL version:         ${GDAL_FULL_VERSION}])
 fi
+AC_MSG_RESULT([  CGAL directory:       ${CGALDIR}])
+AC_MSG_RESULT([  SFCGAL directory:     ${SFCGALDIR}])
+AC_MSG_RESULT([  SFCGAL mode:          ${SFCGAL_MODE}])
 AC_MSG_RESULT([  PostgreSQL config:    ${PGCONFIG}])
 AC_MSG_RESULT([  PostgreSQL version:   ${PGSQL_FULL_VERSION}])
 AC_MSG_RESULT([  PROJ4 version:        ${POSTGIS_PROJ_VERSION}])

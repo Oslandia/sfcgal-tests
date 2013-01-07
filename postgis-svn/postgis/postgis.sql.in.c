@@ -5038,63 +5038,6 @@ CREATE OR REPLACE FUNCTION ST_AsX3D(geom geometry, maxdecimaldigits integer DEFA
 DROP SCHEMA IF EXISTS sfcgal CASCADE;
 CREATE SCHEMA sfcgal;
 
-CREATE TYPE ref_geometry;
-
--- ??
-CREATE FUNCTION sfcgal.ref_in(cstring)
-    RETURNS ref_geometry
-    AS 'MODULE_PATHNAME', 'sfcgal_ref_in'
-    LANGUAGE C IMMUTABLE STRICT;
-
--- display an exact_geometry
-CREATE FUNCTION sfcgal.ref_out(ref_geometry)
-    RETURNS cstring
-    AS 'MODULE_PATHNAME', 'sfcgal_ref_out'
-    LANGUAGE C IMMUTABLE STRICT;
-
-CREATE TYPE ref_geometry (
-    internallength = 8,
-    input = sfcgal.ref_in,
-    output = sfcgal.ref_out
-);
-
-CREATE OR REPLACE FUNCTION sfcgal._ST_Intersects(geom1 ref_geometry, geom2 ref_geometry)
-	RETURNS boolean
-	AS 'MODULE_PATHNAME','sfcgal_ref_intersects'
-	LANGUAGE 'c' IMMUTABLE STRICT
-	COST 200;
-
-CREATE OR REPLACE FUNCTION sfcgal.ST_Intersection(geom1 ref_geometry, geom2 ref_geometry)
-	RETURNS ref_geometry
-	AS 'MODULE_PATHNAME','sfcgal_ref_intersection'
-	LANGUAGE 'c' IMMUTABLE STRICT
-	COST 200;
-
-CREATE TYPE exact_geometry;
-
--- ??
-CREATE FUNCTION sfcgal.exact_in(cstring)
-    RETURNS exact_geometry
-    AS 'MODULE_PATHNAME', 'sfcgal_exact_in'
-    LANGUAGE C IMMUTABLE STRICT;
-
--- display an exact_geometry
-CREATE FUNCTION sfcgal.exact_out(exact_geometry)
-    RETURNS cstring
-    AS 'MODULE_PATHNAME', 'sfcgal_exact_out'
-    LANGUAGE C IMMUTABLE STRICT;
-
-CREATE TYPE exact_geometry (
-    internallength = VARIABLE,
-    input = sfcgal.exact_in,
-    output = sfcgal.exact_out
-);
-
-CREATE OR REPLACE FUNCTION sfcgal.ST_Exact(geometry)
-	RETURNS exact_geometry
-	AS 'MODULE_PATHNAME','sfcgal_exact'
-	LANGUAGE 'c' IMMUTABLE STRICT;
-
 CREATE OR REPLACE FUNCTION sfcgal.ST_MakeSolid(geometry)
 	RETURNS geometry
 	AS 'MODULE_PATHNAME','sfcgal_make_solid'
@@ -5112,12 +5055,6 @@ CREATE OR REPLACE FUNCTION sfcgal._ST_Intersects(geom1 geometry, geom2 geometry)
 	LANGUAGE 'c' IMMUTABLE STRICT
 	COST 100;
 
-CREATE OR REPLACE FUNCTION sfcgal._ST_Intersects(geom1 exact_geometry, geom2 exact_geometry)
-	RETURNS boolean
-	AS 'MODULE_PATHNAME','sfcgal_exact_intersects'
-	LANGUAGE 'c' IMMUTABLE STRICT
-	COST 200;
-
 CREATE OR REPLACE FUNCTION sfcgal.ST_3DIntersects(geom1 geometry, geom2 geometry)
 	RETURNS boolean
 	AS 'MODULE_PATHNAME','sfcgal_intersects3D'
@@ -5129,12 +5066,6 @@ CREATE OR REPLACE FUNCTION sfcgal.ST_Intersection(geom1 geometry, geom2 geometry
 	AS 'MODULE_PATHNAME','sfcgal_intersection'
 	LANGUAGE 'c' IMMUTABLE STRICT
 	COST 100;
-
-CREATE OR REPLACE FUNCTION sfcgal.ST_Intersection(geom1 exact_geometry, geom2 exact_geometry)
-	RETURNS exact_geometry
-	AS 'MODULE_PATHNAME','sfcgal_exact_intersection'
-	LANGUAGE 'c' IMMUTABLE STRICT
-	COST 200;
 
 CREATE OR REPLACE FUNCTION sfcgal.ST_3DIntersection(geom1 geometry, geom2 geometry)
 	RETURNS geometry
@@ -5155,6 +5086,12 @@ CREATE OR REPLACE FUNCTION sfcgal.ST_3DConvexHull(geometry)
 	COST 100;
 
 CREATE OR REPLACE FUNCTION sfcgal.ST_DelaunayTriangles(geometry)
+	RETURNS geometry
+	AS 'MODULE_PATHNAME','sfcgal_triangulate2D'
+	LANGUAGE 'c' IMMUTABLE STRICT
+	COST 100;
+
+CREATE OR REPLACE FUNCTION sfcgal.ST_3DDelaunayTriangles(geometry)
 	RETURNS geometry
 	AS 'MODULE_PATHNAME','sfcgal_triangulate'
 	LANGUAGE 'c' IMMUTABLE STRICT
@@ -5194,5 +5131,74 @@ CREATE OR REPLACE FUNCTION sfcgal.ST_CollectionExtract(geometry, int4)
 	RETURNS geometry
 	AS 'MODULE_PATHNAME','sfcgal_collection_extract'
 	LANGUAGE 'c' IMMUTABLE STRICT;
+
+CREATE TYPE ref_geometry;
+
+-- ??
+CREATE FUNCTION sfcgal.ref_in(cstring)
+    RETURNS ref_geometry
+    AS 'MODULE_PATHNAME', 'sfcgal_ref_in'
+    LANGUAGE C IMMUTABLE STRICT;
+
+-- display a ref_geometry
+CREATE FUNCTION sfcgal.ref_out(ref_geometry)
+    RETURNS cstring
+    AS 'MODULE_PATHNAME', 'sfcgal_ref_out'
+    LANGUAGE C IMMUTABLE STRICT;
+
+CREATE TYPE ref_geometry (
+    internallength = 8,
+    input = sfcgal.ref_in,
+    output = sfcgal.ref_out
+);
+
+CREATE OR REPLACE FUNCTION sfcgal.ref_ST_Intersects(geom1 ref_geometry, geom2 ref_geometry)
+	RETURNS boolean
+	AS 'MODULE_PATHNAME','sfcgal_ref_intersects'
+	LANGUAGE 'c' IMMUTABLE STRICT
+	COST 200;
+
+CREATE OR REPLACE FUNCTION sfcgal.ref_ST_Intersection(geom1 ref_geometry, geom2 ref_geometry)
+	RETURNS ref_geometry
+	AS 'MODULE_PATHNAME','sfcgal_ref_intersection'
+	LANGUAGE 'c' IMMUTABLE STRICT
+	COST 200;
+
+CREATE TYPE exact_geometry;
+
+-- ??
+CREATE FUNCTION sfcgal.exact_in(cstring)
+    RETURNS exact_geometry
+    AS 'MODULE_PATHNAME', 'sfcgal_exact_in'
+    LANGUAGE C IMMUTABLE STRICT;
+
+-- display an exact_geometry
+CREATE FUNCTION sfcgal.exact_out(exact_geometry)
+    RETURNS cstring
+    AS 'MODULE_PATHNAME', 'sfcgal_exact_out'
+    LANGUAGE C IMMUTABLE STRICT;
+
+CREATE TYPE exact_geometry (
+    internallength = VARIABLE,
+    input = sfcgal.exact_in,
+    output = sfcgal.exact_out
+);
+
+CREATE OR REPLACE FUNCTION sfcgal.ST_Exact(geometry)
+	RETURNS exact_geometry
+	AS 'MODULE_PATHNAME','sfcgal_exact'
+	LANGUAGE 'c' IMMUTABLE STRICT;
+
+CREATE OR REPLACE FUNCTION sfcgal.exact_ST_Intersection(geom1 exact_geometry, geom2 exact_geometry)
+	RETURNS exact_geometry
+	AS 'MODULE_PATHNAME','sfcgal_exact_intersection'
+	LANGUAGE 'c' IMMUTABLE STRICT
+	COST 200;
+
+CREATE OR REPLACE FUNCTION sfcgal.exact_ST_Intersects(geom1 exact_geometry, geom2 exact_geometry)
+	RETURNS boolean
+	AS 'MODULE_PATHNAME','sfcgal_exact_intersects'
+	LANGUAGE 'c' IMMUTABLE STRICT
+	COST 200;
 
 COMMIT;
