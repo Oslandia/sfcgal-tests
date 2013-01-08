@@ -616,7 +616,8 @@ if test -d "$CGALDIR"; then
 	AC_MSG_RESULT([Using CGAL directory: $CGALDIR])
 	dnl Add the include directory to SFCGAL_CPPFLAGS	
 	CGAL_CPPFLAGS="-I$CGALDIR/include"
-	CGAL_LDFLAGS="-L$CGALDIR/lib"
+	# use RUNPATH
+	CGAL_LDFLAGS="-L$CGALDIR/lib -lCGAL -Wl,-rpath=$CGALDIR/lib,--enable-new-dtags"
 else
 	AC_MSG_ERROR([the --with-cgaldir directory "$CGALDIR" cannot be found]) 
 fi
@@ -636,7 +637,8 @@ if test -d "$SFCGALDIR"; then
 	AC_MSG_RESULT([Using SFCGAL directory: $SFCGALDIR])
 	dnl Add the include directory to SFCGAL_CPPFLAGS	
 	SFCGAL_CPPFLAGS+=" -I$SFCGALDIR/include"
-	SFCGAL_LDFLAGS+=" -L$SFCGALDIR/lib"
+	# Use RUNPATH
+	SFCGAL_LDFLAGS+=" -L$SFCGALDIR/lib -Wl,-rpath=$SFCGALDIR/lib,--enable-new-dtags"
 else
 	AC_MSG_ERROR([the --with-sfcgaldir directory "$SFCGALDIR" cannot be found]) 
 fi
@@ -657,11 +659,11 @@ AC_ARG_ENABLE([debug-sfcgal], AC_HELP_STRING([--enable-debug-sfcgal], [Use SFCGA
 if test "x$SFCGAL_MODE" = "xDebug"; then
    SFCGAL_CPPFLAGS+=" -DPOSTGIS_WITH_SFCGAL -frounding-math"
    POSTGIS_SFCGAL_OBJS="lwgeom_sfcgal.o"
-   SFCGAL_LDFLAGS+=" -lCGAL -lSFCGALd"
+   SFCGAL_LDFLAGS+=" -lSFCGALd"
 else
    SFCGAL_CPPFLAGS+=" -DPOSTGIS_WITH_SFCGAL -frounding-math"
    POSTGIS_SFCGAL_OBJS="lwgeom_sfcgal.o"
-   SFCGAL_LDFLAGS+=" -lCGAL -lSFCGAL"
+   SFCGAL_LDFLAGS+=" -lSFCGAL"
 fi
 
 AC_SUBST(POSTGIS_SFCGAL_OBJS, $POSTGIS_SFCGAL_OBJS)
