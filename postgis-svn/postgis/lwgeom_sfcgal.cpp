@@ -467,6 +467,43 @@ extern "C" Datum sfcgal_triangulate(PG_FUNCTION_ARGS)
 }
 
 extern "C" {
+	PG_FUNCTION_INFO_V1(sfcgal_triangulate2D);
+}
+
+extern "C" Datum sfcgal_triangulate2D(PG_FUNCTION_ARGS)
+{
+	GSERIALIZED *geom1;
+	GSERIALIZED *result;
+
+	geom1 = (GSERIALIZED *)PG_DETOAST_DATUM(PG_GETARG_DATUM(0));
+
+	std::auto_ptr<SFCGAL::Geometry> g1;
+	try {
+		g1 = POSTGIS2SFCGAL( geom1 );
+	}
+	catch ( std::exception& e ) {
+		lwerror("First argument geometry could not be converted to SFCGAL: %s", e.what() );
+		PG_RETURN_NULL();
+	}
+	
+	SFCGAL::TriangulatedSurface surf;
+	try {
+		SFCGAL::algorithm::triangulate2D( *g1, surf );
+		result = SFCGAL2POSTGIS( surf, false, gserialized_get_srid( geom1 ) );
+	}
+	catch ( std::exception& e ) {
+		lwnotice("geom1: %s", g1->asText().c_str());
+		lwnotice(e.what());
+		lwerror("Error during execution of triangulate()");
+		PG_RETURN_NULL();
+	}
+
+	PG_FREE_IF_COPY(geom1, 0);
+
+	PG_RETURN_POINTER(result);
+}
+
+extern "C" {
 	PG_FUNCTION_INFO_V1(sfcgal_extrude);
 }
 
