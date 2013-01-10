@@ -7,10 +7,11 @@ from optparse import OptionParser
 
 class PgBench(object):
 
-    def __init__( self, db_name, n_objs, n_pts ):
+    def __init__( self, db_name, n_objs, n_pts, quiet ):
         self.db_name = db_name
         self.n_objs = n_objs
         self.n_pts = n_pts
+        self.quiet = quiet
 
     def call_sql( self, query, out_name = '' ):
         fmt_query = query % { 'n_id' : self.n_objs, 'n_pts' : self.n_pts, 'out_name' : out_name }
@@ -25,20 +26,21 @@ class PgBench(object):
 
             prepare_query = query[0]
             request = query[1]
-            print "==== %s ====" % name
+            if not self.quiet:
+                print "==== %s ====" % name
 
             self.call_sql( "drop table if exists sfcgal.geoms; create table sfcgal.geoms as " + prepare_query)
-
-            # geos id = 0
             geos = self.call_sql( 'set search_path=public;' + request, 'geos_' + name  )
-
             geos_result = float(geos[1][0][1:-2])
-            print "GEOS:\t%.3fs result: %.2f" % (geos[0], geos_result)
+            if not self.quiet:
+                print "GEOS:\t%.3fs result: %.2f" % (geos[0], geos_result)
             # use 'SET search_path' to override the default st_intersects
             sfcgal = self.call_sql( 'set search_path=sfcgal,public;' + request, 'sfcgal_' + name )
             sfcgal_result = float(sfcgal[1][0][1:-2])
-            print "SFCGAL:\t%.3fs result: %.2f" % (sfcgal[0], sfcgal_result)
-
+            if not self.quiet:
+                print "SFCGAL:\t%.3fs result: %.2f" % (sfcgal[0], sfcgal_result)
+            if self.quiet:
+                print "%d;%.3f;%.2f;%.3f;%.2f" % (self.n_pts, geos[0], geos_result, sfcgal[0], sfcgal_result)
 
 # generate a star-shaped polygon based on random points around a circle
 prepare_query="""
@@ -114,7 +116,7 @@ language SQL;
 drop function if exists sfcgal.gen_tin(int, float);
 create or replace function sfcgal.gen_tin( N int, maxr float) returns geometry as $$
 -- generate a polygon with hole and triangulate it
-select sfcgal.st_triangulate( sfcgal.gen_poly_with_hole($1,$2) )
+select sfcgal.st_delaunaytriangles( sfcgal.gen_poly_with_hole($1,$2) )
 $$
 language SQL;
 
@@ -226,46 +228,87 @@ cleaning_query="""
 -- drop table sfcgal.geoms;
 """
 
+queries = {}
+queries['intersects_point_polygon'] = [ create_point_poly, intersects_query ]
+queries['intersects_polygon_polygon'] = [ create_poly_poly, intersects_query ]
+queries['intersects_ls_ls'] = [ create_ls_ls, intersects_query ]
+queries['intersects_ls_poly_h'] = [ create_ls_poly_h, intersects_query]
+queries['intersects3D_ls_ls'] = [ create_ls_ls_3D, intersects3D_query]
+
+queries['intersection_polygon_polygon'] = [ create_poly_poly, intersection_query ]
+queries['intersection_poly_poly_h'] = [ create_poly_h_poly_h, intersection_query]
+queries['intersection_ls_ls'] = [ create_ls_ls, intersection_query ]
+queries['intersection_ls_poly_h'] = [ create_ls_poly_h, intersection_query]
+queries['intersection_ls_tin'] = [ create_ls_tin, intersection_query]
+
+queries['area_polygon'] = [ create_poly_poly, area_poly_query ]
+
+queries['convexhull_multipoint'] = [create_multipoints, convexhull_query]
+
+queries['triangulate_poly'] = [ create_poly_poly, triangulate_query]
+
 parser = OptionParser()
 parser.add_option("-d", "--db", dest="db_name", default="eplu_test",
                   help="Name of the database" )
+
 parser.add_option("-n", "--nobjs",
                   dest="n_objs", default=1000, type="int",
                   help="Number of objects to generate" )
 
 parser.add_option("-p", "--npts",
-                  dest="n_pts", default=10, type="int",
+                  action="append", dest="n_pts", type="int",
                   help="Number of points for each object" )
+
+parser.add_option("-q", "--quiet",
+                  action="store_true", dest="quiet", default=False,
+                  help="Quiet mode" )
+
+parser.add_option("-x", 
+                  action="append", dest="selected",
+                  help="Add a query to execute" )
+
+parser.add_option("-l", "--list-queries",
+                  action="store_true", dest="list_queries", default=False,
+                  help="List existing queries" )
 
 (options, args) = parser.parse_args()
 
-bench = PgBench( options.db_name, options.n_objs, options.n_pts )
+if options.list_queries:
+    print "Available queries:"
+    for q in queries.keys():
+        print q
+    exit(0)
 
-print "dbname: ", options.db_name, " n_objs: ", options.n_objs, " n_pts: ", options.n_pts
-print "Preparing ..."
-bench.call_sql( prepare_query )
+if options.selected is None:
+    print "No query selected, aborting"
 
-#queries = { 'intersects_point_polygon': [ create_point_poly, intersects_query ],
-#            'intersects_polygon_polygon': [ create_poly_poly, intersects_query ],
-#            'intersection_polygon_polygon': [ create_poly_poly, intersection_query ],
-#            'area_polygon' : [ create_poly_poly, area_poly_query ] }
+    print "Available queries:"
+    for q in queries.keys():
+        print q
+    exit(1)
 
-#queries = { 'convexhull_multipoint': [create_multipoints, convexhull_query] }
-#queries = { 'intersection_poly_poly_h': [ create_poly_h_poly_h, intersection_query] }
-#queries = { 'intersects_poly_poly': [ create_poly_poly, intersects_query] }
-#queries = { 'intersection_ls_poly_h': [ create_ls_poly_h, intersection_query] }
-#queries = { 'intersection_ls_tin': [ create_ls_tin, intersection_query] }
+if options.n_pts is None:
+    options.n_pts = [10]
 
-#queries = { 'intersection_ls_ls': [ create_ls_ls, intersection_query ],
-#            'intersects_ls_ls': [ create_ls_ls, intersects_query ] }
+for n_pts in options.n_pts:
+    bench = PgBench( options.db_name, options.n_objs, n_pts, options.quiet )
 
+    if not options.quiet:
+        print "dbname: ", options.db_name, " n_objs: ", options.n_objs, " n_pts: ", n_pts
+        print "Preparing ..."
 
-queries = { 'triangulate_poly': [ create_poly_poly, triangulate_query] }
-#queries = { 'intersects3D_ls_ls': [ create_ls_ls_3D, intersects3D_query] }
+    bench.call_sql( prepare_query )
 
-# vary the number of points
-bench.bench_queries( queries )
+    selqueries = {}
+    for sel in options.selected:
+        if not sel in queries:
+            print "%s query does not exist" % sel
+        else:
+            selqueries[sel] = queries[sel]
 
-print "Cleaning ..."
-bench.call_sql( cleaning_query )
+    bench.bench_queries( selqueries )
+
+    if not options.quiet:
+        print "Cleaning ..."
+    bench.call_sql( cleaning_query )
 
