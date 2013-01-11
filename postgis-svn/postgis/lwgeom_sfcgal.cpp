@@ -685,6 +685,31 @@ extern "C" Datum sfcgal_collection_extract(PG_FUNCTION_ARGS)
 }
 
 
+extern "C" {
+	PG_FUNCTION_INFO_V1(sfcgal_from_text);
+}
+
+extern "C" Datum sfcgal_from_text(PG_FUNCTION_ARGS)
+{
+	GSERIALIZED* result;
+	text *wkttext = PG_GETARG_TEXT_P(0);
+	char *cstring = text2cstring(wkttext);
+
+	std::auto_ptr<SFCGAL::Geometry> g;
+	try
+	{
+		g = SFCGAL::io::readWkt( cstring, strlen(cstring) );
+	}
+	catch ( std::exception& e )
+	{
+		lwerror("First argument geometry could not be converted to SFCGAL: %s", e.what() );
+		return 0;
+	}
+	result = SFCGAL2POSTGIS( *g, false, 0 );
+	PG_RETURN_POINTER(result);
+}
+
+
 void list_children( MemoryContext context, MemoryContext refContext, int depth )
 {
 	char depthstr[ depth + 1 ];
@@ -714,7 +739,7 @@ class GeometryPool
 public:
 	void reference( void* context, SFCGAL::Geometry* geometry )
 	{
-		lwnotice( "reference %p in %p", geometry, context );
+		//		lwnotice( "reference %p in %p", geometry, context );
 		//		list_parent_contexts( (MemoryContext)context );
 		pool_[context].push_back( geometry );
 	}
@@ -730,7 +755,7 @@ public:
 		}
 		for ( int i = l.size() - 1; i >= 0; --i ) {
 			SFCGAL::Geometry* g = l[i];
-			lwnotice( "delete %p from %p", g, context );
+			//lwnotice( "delete %p from %p", g, context );
 			delete g;
 			l.pop_back();
 		}
@@ -790,23 +815,17 @@ Datum return_geometry( SFCGAL::Geometry* geometry )
 	return Datum(p);
 }
 
-extern "C" {
-	PG_FUNCTION_INFO_V1(sfcgal_ref_in);
-}
-
-extern "C" Datum sfcgal_ref_in(PG_FUNCTION_ARGS)
+SFCGAL::Geometry* refGeometryFromCString( char* cstring )
 {
-	char* cstring = PG_GETARG_CSTRING( 0 );
-	std::string rstr( cstring );
 	std::auto_ptr<SFCGAL::Geometry> g;
 	try
 	{
-		g = SFCGAL::io::readWkt( rstr );
+		g = SFCGAL::io::readWkt( cstring, strlen(cstring) );
 	}
 	catch ( std::exception& e )
 	{
 		lwerror("First argument geometry could not be converted to SFCGAL: %s", e.what() );
-		PG_RETURN_NULL();
+		return 0;
 	}
 
 	MemoryContext parentContext = get_parent_context();
@@ -814,6 +833,30 @@ extern "C" Datum sfcgal_ref_in(PG_FUNCTION_ARGS)
 
 	SFCGAL::Geometry* geo = g.release();
 	refGeometryPool.reference( parentContext, geo );
+	return geo;
+}
+
+extern "C" {
+	PG_FUNCTION_INFO_V1(sfcgal_ref_in);
+	PG_FUNCTION_INFO_V1(sfcgal_ref_from_text);
+}
+
+extern "C" Datum sfcgal_ref_in(PG_FUNCTION_ARGS)
+{
+	char* cstring = PG_GETARG_CSTRING( 0 );
+	SFCGAL::Geometry* geo = refGeometryFromCString( cstring );
+	if (!geo)
+		PG_RETURN_NULL();
+	return return_geometry( geo );
+}
+
+extern "C" Datum sfcgal_ref_from_text(PG_FUNCTION_ARGS)
+{
+	text *wkttext = PG_GETARG_TEXT_P(0);
+	char *cstring = text2cstring(wkttext);
+	SFCGAL::Geometry* geo = refGeometryFromCString( cstring );
+	if (!geo)
+		PG_RETURN_NULL();
 	return return_geometry( geo );
 }
 
@@ -924,26 +967,45 @@ extern "C" Datum sfcgal_exact_out(PG_FUNCTION_ARGS)
 
 extern "C" {
 	PG_FUNCTION_INFO_V1(sfcgal_exact_in);
+	PG_FUNCTION_INFO_V1(sfcgal_exact_from_text);
+}
+
+ExactGeometry* exactFromCString( char* cstring )
+{
+	std::auto_ptr<SFCGAL::Geometry> g;
+	try
+	{
+		g = SFCGAL::io::readWkt( cstring, strlen(cstring) );
+	}
+	catch ( std::exception& e )
+	{
+		lwerror("First argument geometry could not be converted to SFCGAL: %s", e.what() );
+		return 0;
+	}
+
+	ExactGeometry* exactG = serializeExactGeometry( *g );
+	return exactG;
 }
 
 extern "C" Datum sfcgal_exact_in(PG_FUNCTION_ARGS)
 {
 	char* cstring = PG_GETARG_CSTRING( 0 );
-	std::string rstr( cstring );
-	std::auto_ptr<SFCGAL::Geometry> g;
-	try
-	{
-		g = SFCGAL::io::readWkt( rstr );
-	}
-	catch ( std::exception& e )
-	{
-		lwerror("First argument geometry could not be converted to SFCGAL: %s", e.what() );
+	ExactGeometry* e =  exactFromCString( cstring );
+	if (!e)
 		PG_RETURN_NULL();
-	}
-
-	ExactGeometry* exactG = serializeExactGeometry( *g );
-	PG_RETURN_POINTER( exactG );
+	PG_RETURN_POINTER( e );
 }
+
+extern "C" Datum sfcgal_exact_from_text(PG_FUNCTION_ARGS)
+{
+	text *wkttext = PG_GETARG_TEXT_P(0);
+	char *wkt = text2cstring(wkttext);
+	ExactGeometry* e = exactFromCString( wkt );
+	if (!e)
+		PG_RETURN_NULL();
+	PG_RETURN_POINTER( e );
+}
+
 
 extern "C" {
 	PG_FUNCTION_INFO_V1(sfcgal_exact);

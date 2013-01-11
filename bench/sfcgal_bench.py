@@ -25,22 +25,29 @@ class PgBench(object):
         for (name, query) in queries.items():
 
             prepare_query = query[0]
-            request = query[1]
-            if not self.quiet:
-                print "==== %s ====" % name
-
             self.call_sql( "drop table if exists sfcgal.geoms; create table sfcgal.geoms as " + prepare_query)
-            geos = self.call_sql( 'set search_path=public;' + request, 'geos_' + name  )
-            geos_result = float(geos[1][0][1:-2])
-            if not self.quiet:
-                print "GEOS:\t%.3fs result: %.2f" % (geos[0], geos_result)
-            # use 'SET search_path' to override the default st_intersects
-            sfcgal = self.call_sql( 'set search_path=sfcgal,public;' + request, 'sfcgal_' + name )
-            sfcgal_result = float(sfcgal[1][0][1:-2])
-            if not self.quiet:
-                print "SFCGAL:\t%.3fs result: %.2f" % (sfcgal[0], sfcgal_result)
-            if self.quiet:
-                print "%d;%.3f;%.2f;%.3f;%.2f" % (self.n_pts, geos[0], geos_result, sfcgal[0], sfcgal_result)
+
+            request = query[1]
+            # if it's an array, it is a special query
+            if isinstance( request, list ):
+                for q in request:
+                    r = self.call_sql( q )
+                    print r
+            else:
+                if not self.quiet:
+                    print "==== %s ====" % name
+
+                    geos = self.call_sql( 'set search_path=public;' + request, 'geos_' + name  )
+                    geos_result = float(geos[1][0][1:-2])
+                    if not self.quiet:
+                        print "GEOS:\t%.3fs result: %.2f" % (geos[0], geos_result)
+                    # use 'SET search_path' to override the default st_intersects
+                    sfcgal = self.call_sql( 'set search_path=sfcgal,public;' + request, 'sfcgal_' + name )
+                    sfcgal_result = float(sfcgal[1][0][1:-2])
+                if not self.quiet:
+                    print "SFCGAL:\t%.3fs result: %.2f" % (sfcgal[0], sfcgal_result)
+                if self.quiet:
+                    print "%d;%.3f;%.2f;%.3f;%.2f" % (self.n_pts, geos[0], geos_result, sfcgal[0], sfcgal_result)
 
 # generate a star-shaped polygon based on random points around a circle
 prepare_query="""
@@ -228,6 +235,57 @@ cleaning_query="""
 -- drop table sfcgal.geoms;
 """
 
+unserialization1_query="""
+select sum(case when
+sfcgal._st_intersects( sfcgal.st_geomfromtext(st_astext(geom1)), sfcgal.st_geomfromtext(st_astext(geom2)) )
+then 1 else 0 end)
+from sfcgal.geoms;
+"""
+
+unserialization2_query="""
+select sum(case when
+sfcgal.exact_st_intersects( sfcgal.st_exactgeomfromtext(st_astext(geom1)), sfcgal.st_exactgeomfromtext(st_astext(geom2)) )
+then 1 else 0 end)
+from sfcgal.geoms;
+"""
+
+unserialization3_query="""
+select sum(case when
+sfcgal.ref_st_intersects( sfcgal.st_refgeomfromtext(st_astext(geom1)), sfcgal.st_refgeomfromtext(st_astext(geom2)) )
+then 1 else 0 end)
+from sfcgal.geoms;
+"""
+
+serialization1_query="""
+select sum(case when
+sfcgal._st_intersects(
+  sfcgal.st_intersection( sfcgal.st_geomfromtext(st_astext(geom1)), sfcgal.st_geomfromtext(st_astext(geom2)) ),
+  sfcgal.st_geomfromtext(st_astext(geom1))
+)
+then 1 else 0 end)
+from sfcgal.geoms;
+"""
+
+serialization2_query="""
+select sum(case when
+sfcgal.exact_st_intersects(
+  sfcgal.exact_st_intersection( sfcgal.st_exactgeomfromtext(st_astext(geom1)), sfcgal.st_exactgeomfromtext(st_astext(geom2)) ),
+  sfcgal.st_exactgeomfromtext(st_astext(geom1))
+)
+then 1 else 0 end)
+from sfcgal.geoms;
+"""
+
+serialization3_query="""
+select sum(case when
+sfcgal.ref_st_intersects(
+  sfcgal.ref_st_intersection( sfcgal.st_refgeomfromtext(st_astext(geom1)), sfcgal.st_refgeomfromtext(st_astext(geom2)) ),
+  sfcgal.st_refgeomfromtext(st_astext(geom1))
+)
+then 1 else 0 end)
+from sfcgal.geoms;
+"""
+
 queries = {}
 queries['intersects_point_polygon'] = [ create_point_poly, intersects_query ]
 queries['intersects_polygon_polygon'] = [ create_poly_poly, intersects_query ]
@@ -246,6 +304,15 @@ queries['area_polygon'] = [ create_poly_poly, area_poly_query ]
 queries['convexhull_multipoint'] = [create_multipoints, convexhull_query]
 
 queries['triangulate_poly'] = [ create_poly_poly, triangulate_query]
+
+# special query: unserialization
+queries['unserialization'] = [ create_poly_poly, [ unserialization1_query,
+                                                   unserialization2_query,
+                                                   unserialization3_query ] ]
+# special query: chaining of serialization / unserialization
+queries['serialization'] = [ create_poly_poly, [ serialization1_query,
+                                                 serialization2_query,
+                                                 serialization3_query ] ]
 
 parser = OptionParser()
 parser.add_option("-d", "--db", dest="db_name", default="eplu_test",

@@ -5038,6 +5038,11 @@ CREATE OR REPLACE FUNCTION ST_AsX3D(geom geometry, maxdecimaldigits integer DEFA
 DROP SCHEMA IF EXISTS sfcgal CASCADE;
 CREATE SCHEMA sfcgal;
 
+CREATE FUNCTION sfcgal.ST_GeomFromText(text)
+    RETURNS geometry
+    AS 'MODULE_PATHNAME', 'sfcgal_from_text'
+    LANGUAGE C IMMUTABLE STRICT;
+
 CREATE OR REPLACE FUNCTION sfcgal.ST_MakeSolid(geometry)
 	RETURNS geometry
 	AS 'MODULE_PATHNAME','sfcgal_make_solid'
@@ -5152,6 +5157,11 @@ CREATE TYPE ref_geometry (
     output = sfcgal.ref_out
 );
 
+CREATE FUNCTION sfcgal.ST_RefGeomFromText(text)
+    RETURNS ref_geometry
+    AS 'MODULE_PATHNAME', 'sfcgal_ref_from_text'
+    LANGUAGE C IMMUTABLE STRICT;
+
 CREATE OR REPLACE FUNCTION sfcgal.ref_ST_Intersects(geom1 ref_geometry, geom2 ref_geometry)
 	RETURNS boolean
 	AS 'MODULE_PATHNAME','sfcgal_ref_intersects'
@@ -5183,6 +5193,11 @@ CREATE TYPE exact_geometry (
     input = sfcgal.exact_in,
     output = sfcgal.exact_out
 );
+
+CREATE FUNCTION sfcgal.ST_ExactGeomFromText(text)
+    RETURNS exact_geometry
+    AS 'MODULE_PATHNAME', 'sfcgal_exact_from_text'
+    LANGUAGE C IMMUTABLE STRICT;
 
 CREATE OR REPLACE FUNCTION sfcgal.ST_Exact(geometry)
 	RETURNS exact_geometry
