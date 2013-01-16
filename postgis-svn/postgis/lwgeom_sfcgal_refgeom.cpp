@@ -11,6 +11,8 @@
 #include <SFCGAL/algorithm/intersects.h>
 #include <SFCGAL/algorithm/intersection.h>
 #include <SFCGAL/algorithm/convexHull.h>
+#include <SFCGAL/algorithm/distance.h>
+#include <SFCGAL/algorithm/distance3d.h>
 #include <SFCGAL/algorithm/area.h>
 #include <SFCGAL/algorithm/plane.h>
 #include <SFCGAL/transform/ForceZOrderPoints.h>
@@ -248,4 +250,6 @@ WRAPPER_DECLARE_SFCGAL_FUNCTION( ref_triangulate2D, _sfcgal_triangulate2D, refGe
 WRAPPER_DECLARE_SFCGAL_FUNCTION( ref_extrude, _sfcgal_extrude, refGeometry, (refGeometry)(double)(double)(double) )
 WRAPPER_DECLARE_SFCGAL_FUNCTION( ref_make_solid, _sfcgal_make_solid, refGeometry, (refGeometry) )
 WRAPPER_DECLARE_SFCGAL_FUNCTION( ref_force_z_up, _sfcgal_force_z_up, refGeometry, (refGeometry) )
+WRAPPER_DECLARE_SFCGAL_FUNCTION( ref_distance, SFCGAL::algorithm::distance, double, (refGeometry)(refGeometry) )
+WRAPPER_DECLARE_SFCGAL_FUNCTION( ref_distance3D, SFCGAL::algorithm::distance3D, double, (refGeometry)(refGeometry) )
 

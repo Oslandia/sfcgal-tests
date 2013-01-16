@@ -5,6 +5,7 @@
 #include <fstream>
 
 #include <SFCGAL/Geometry.h>
+#include <SFCGAL/PreparedGeometry.h>
 #include <SFCGAL/TriangulatedSurface.h>
 #include <SFCGAL/Solid.h>
 #include <SFCGAL/tools/Log.h>
@@ -15,10 +16,13 @@
 #include <SFCGAL/algorithm/convexHull.h>
 #include <SFCGAL/algorithm/area.h>
 #include <SFCGAL/algorithm/extrude.h>
+#include <SFCGAL/algorithm/distance.h>
+#include <SFCGAL/algorithm/distance3d.h>
 #include <SFCGAL/algorithm/plane.h>
 #include <SFCGAL/transform/ForceZOrderPoints.h>
 #include <SFCGAL/algorithm/collectionExtract.h>
 #include <SFCGAL/io/wkt.h>
+#include <SFCGAL/io/ewkt.h>
 #include <SFCGAL/io/Serialization.h>
 
 /* TODO: we probaby don't need _all_ these pgsql headers */
@@ -44,6 +48,21 @@ extern "C" {
 #include "lwgeom_sfcgal.h"
 #include "lwgeom_sfcgal_wrapper.h"
 
+std::auto_ptr<SFCGAL::PreparedGeometry> POSTGIS2SFCGALp(GSERIALIZED *pglwgeom)
+{
+	LWGEOM *lwgeom = lwgeom_from_gserialized(pglwgeom);
+	if ( ! lwgeom )
+	{
+		throw std::runtime_error("POSTGIS2SFCGAL: unable to deserialize input");
+	}
+	std::auto_ptr<SFCGAL::PreparedGeometry> g(new SFCGAL::PreparedGeometry(LWGEOM2SFCGAL(lwgeom), gserialized_get_srid(pglwgeom)) );
+	lwgeom_free(lwgeom);
+	return g;
+}
+
+
+//
+// Obsolete
 std::auto_ptr<SFCGAL::Geometry> POSTGIS2SFCGAL(GSERIALIZED *pglwgeom)
 {
 	LWGEOM *lwgeom = lwgeom_from_gserialized(pglwgeom);
@@ -53,7 +72,6 @@ std::auto_ptr<SFCGAL::Geometry> POSTGIS2SFCGAL(GSERIALIZED *pglwgeom)
 	}
 	std::auto_ptr<SFCGAL::Geometry> g(LWGEOM2SFCGAL(lwgeom));
 	lwgeom_free(lwgeom);
-	//	lwnotice( "POSTGIS2SFCGAL serialized: %p lwgeom: %p SFCGAL::Geometry: %p (%d)", pglwgeom, lwgeom, g.get(), g->geometryTypeId() );
 	return g;
 }
 
@@ -72,6 +90,10 @@ GSERIALIZED* SFCGAL2POSTGIS(const SFCGAL::Geometry& geom, bool force3D, int SRID
 	return result;
 }
 
+GSERIALIZED* SFCGAL2POSTGIS( const SFCGAL::PreparedGeometry& geom, bool force3D )
+{
+	return SFCGAL2POSTGIS( geom.geometry(), force3D, geom.SRID() );
+}
 
 ///
 ///
@@ -85,17 +107,17 @@ extern "C" Datum sfcgal_from_text(PG_FUNCTION_ARGS)
 	text *wkttext = PG_GETARG_TEXT_P(0);
 	char *cstring = text2cstring(wkttext);
 
-	std::auto_ptr<SFCGAL::Geometry> g;
+	std::auto_ptr<SFCGAL::PreparedGeometry> g;
 	try
 	{
-		g = SFCGAL::io::readWkt( cstring, strlen(cstring) );
+		g = SFCGAL::io::readEwkt( cstring, strlen(cstring) );
 	}
 	catch ( std::exception& e )
 	{
 		lwerror("First argument geometry could not be converted to SFCGAL: %s", e.what() );
 		return 0;
 	}
-	result = SFCGAL2POSTGIS( *g, false, 0 );
+	result = SFCGAL2POSTGIS( *g, false );
 	PG_RETURN_POINTER(result);
 }
 
@@ -114,6 +136,8 @@ WRAPPER_DECLARE_SFCGAL_FUNCTION( triangulate2D, _sfcgal_triangulate2D, Geometry,
 WRAPPER_DECLARE_SFCGAL_FUNCTION( extrude, _sfcgal_extrude, Geometry, (Geometry)(double)(double)(double) )
 WRAPPER_DECLARE_SFCGAL_FUNCTION( make_solid, _sfcgal_make_solid, Geometry, (Geometry) )
 WRAPPER_DECLARE_SFCGAL_FUNCTION( force_z_up, _sfcgal_force_z_up, Geometry, (Geometry) )
+WRAPPER_DECLARE_SFCGAL_FUNCTION( distance, SFCGAL::algorithm::distance, double, (Geometry)(Geometry) )
+WRAPPER_DECLARE_SFCGAL_FUNCTION( distance3D, SFCGAL::algorithm::distance3D, double, (Geometry)(Geometry) )
 
 extern "C" {
 	PG_FUNCTION_INFO_V1(sfcgal_collection_extract);

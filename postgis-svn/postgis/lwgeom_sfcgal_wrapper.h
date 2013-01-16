@@ -34,7 +34,7 @@
 	GSERIALIZED* gresult;						\
 	if ( result.get() ) {						\
 		try {							\
-			gresult = SFCGAL2POSTGIS( *result, result->is3D(), gserialized_get_srid( input0 ) ); \
+			gresult = SFCGAL2POSTGIS( *result, result->is3D(), gserialized_get_srid(input0) ); \
 		}							\
 		catch ( std::exception& e ) {				\
 			lwerror("Result geometry could not be converted to lwgeom: %s", e.what() ); \
@@ -46,7 +46,7 @@
 	PG_RETURN_POINTER( gresult )
 
 #define WRAPPER_TO_CSTR_Geometry( i )				\
-	"%s", BOOST_PP_CAT( geom, i ) ->asText().c_str()
+	"%s", BOOST_PP_CAT( geom, i )->asText().c_str()
 
 #define WRAPPER_FREE_INPUT_Geometry( i )		\
 	PG_FREE_IF_COPY( BOOST_PP_CAT( input, i ), i )
@@ -159,6 +159,13 @@
 
 /**
  * This is the heart of the wrapping function
+ *
+ * fname: name of the C function exposed as a PostGIS API
+ * function: SFCGAL function
+ * return_type: return type of the SFCGAL function
+ * types: BOOST_PP sequence of argument types
+ *
+ * Example : WRAPPER_DECLARE_SFCGAL_FUNCTION( intersects, SFCGAL::algorithm::intersects, bool, (Geometry)(Geometry) )
  */
 #define WRAPPER_DECLARE_SFCGAL_FUNCTION( fname, function, return_type, types ) \
 	extern "C" { PG_FUNCTION_INFO_V1( BOOST_PP_CAT( sfcgal_, fname ) ); } \
@@ -185,6 +192,11 @@
  * Conversion from a GSERIALIZED to a SFCGAL::Geometry
  */
 std::auto_ptr<SFCGAL::Geometry> POSTGIS2SFCGAL(GSERIALIZED *pglwgeom);
+
+/**
+ * Conversion from a GSERIALIZED to a SFCGAL::PreparedGeometry
+ */
+std::auto_ptr<SFCGAL::PreparedGeometry> POSTGIS2SFCGALp(GSERIALIZED *pglwgeom);
 
 /**
  * Conversion from a SFCGAL::Geometry to a GSERIALIZED
