@@ -244,14 +244,14 @@ from sfcgal.geoms;
 
 unserialization2_query="""
 select sum(case when
-sfcgal.exact_st_intersects( sfcgal.st_exactgeomfromtext(st_astext(geom1)), sfcgal.st_exactgeomfromtext(st_astext(geom2)) )
+sfcgal.st_intersects( sfcgal.st_exactgeomfromtext(st_astext(geom1)), sfcgal.st_exactgeomfromtext(st_astext(geom2)) )
 then 1 else 0 end)
 from sfcgal.geoms;
 """
 
 unserialization3_query="""
 select sum(case when
-sfcgal.ref_st_intersects( sfcgal.st_refgeomfromtext(st_astext(geom1)), sfcgal.st_refgeomfromtext(st_astext(geom2)) )
+sfcgal.st_intersects( sfcgal.st_refgeomfromtext(st_astext(geom1)), sfcgal.st_refgeomfromtext(st_astext(geom2)) )
 then 1 else 0 end)
 from sfcgal.geoms;
 """
