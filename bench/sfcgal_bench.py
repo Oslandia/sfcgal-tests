@@ -1,5 +1,8 @@
 #!/usr/bin/env python
 
+import matplotlib.pyplot as plt
+# for multipage pdfs
+from matplotlib.backends.backend_pdf import PdfPages
 import subprocess
 import sys
 import time
@@ -22,6 +25,7 @@ class PgBench(object):
         return [duration, result]
 
     def bench_queries( self, queries ):
+        results = {}
         for (name, query) in queries.items():
 
             prepare_query = query[0]
@@ -37,17 +41,23 @@ class PgBench(object):
                 if not self.quiet:
                     print "==== %s ====" % name
 
-                    geos = self.call_sql( 'set search_path=public;' + request, 'geos_' + name  )
-                    geos_result = float(geos[1][0][1:-2])
-                    if not self.quiet:
-                        print "GEOS:\t%.3fs result: %.2f" % (geos[0], geos_result)
-                    # use 'SET search_path' to override the default st_intersects
-                    sfcgal = self.call_sql( 'set search_path=sfcgal,public;' + request, 'sfcgal_' + name )
-                    sfcgal_result = float(sfcgal[1][0][1:-2])
+                geos = self.call_sql( 'set search_path=public;' + request, 'geos_' + name  )
+                geos_result = float(geos[1][0][1:-2])
+                if not self.quiet:
+                    print "GEOS:\t%.3fs result: %.2f" % (geos[0], geos_result)
+                
+                # use 'SET search_path' to override the default st_intersects
+                sfcgal = self.call_sql( 'set search_path=sfcgal,public;' + request, 'sfcgal_' + name )
+                sfcgal_result = float(sfcgal[1][0][1:-2])
+
                 if not self.quiet:
                     print "SFCGAL:\t%.3fs result: %.2f" % (sfcgal[0], sfcgal_result)
                 if self.quiet:
                     print "%d;%.3f;%.2f;%.3f;%.2f" % (self.n_pts, geos[0], geos_result, sfcgal[0], sfcgal_result)
+
+                results[ name ] = [ geos[0], sfcgal[0] ]
+
+        return results
 
 # generate a star-shaped polygon based on random points around a circle
 prepare_query="""
@@ -338,6 +348,10 @@ parser.add_option("-l", "--list-queries",
                   action="store_true", dest="list_queries", default=False,
                   help="List existing queries" )
 
+parser.add_option("-r", "--report-file",
+                  dest="report_file", default='', type="string",
+                  help="Generate a report file" )
+
 (options, args) = parser.parse_args()
 
 if options.list_queries:
@@ -357,6 +371,15 @@ if options.selected is None:
 if options.n_pts is None:
     options.n_pts = [10]
 
+results = {}
+selqueries = {}
+for sel in options.selected:
+    if not sel in queries:
+        print "%s query does not exist" % sel
+    else:
+        selqueries[sel] = queries[sel]
+        results[sel] = [ [], [] ]
+
 for n_pts in options.n_pts:
     bench = PgBench( options.db_name, options.n_objs, n_pts, options.quiet )
 
@@ -366,16 +389,40 @@ for n_pts in options.n_pts:
 
     bench.call_sql( prepare_query )
 
-    selqueries = {}
-    for sel in options.selected:
-        if not sel in queries:
-            print "%s query does not exist" % sel
-        else:
-            selqueries[sel] = queries[sel]
+    lresults = bench.bench_queries( selqueries )
 
-    bench.bench_queries( selqueries )
+    # extract results
+    for query, r in lresults.items():
+        geos = r[0]
+        sfcgal = r[1]
+        results[query][0].append(geos)
+        results[query][1].append(sfcgal)
 
     if not options.quiet:
         print "Cleaning ..."
     bench.call_sql( cleaning_query )
 
+
+if options.report_file:
+    print "Generating report %s" % options.report_file
+    pdf = PdfPages( options.report_file )
+    for q, v in results.items():
+        X = options.n_pts
+        plt.clf()
+        plt.xlabel( "# of points" )
+        plt.ylabel( "Time (s)" )
+
+        plt.title( q )
+        # GEOS
+        plt.plot( X, v[0], marker='o', label='GEOS' )
+        # SFCGAL
+        plt.plot( X, v[1], marker='o', label='SFCGAL' )
+        plt.legend(loc='upper left')
+        pdf.savefig()
+
+        # text report
+        print "== %s == " % q
+        print "# pts\t",';'.join( str(x) for x in X )
+        print "GEOS:\t", ';'.join( str(x) for x in v[0] )
+        print "SFCGAL:\t", ';'.join( str(x) for x in v[1] )
+    pdf.close()

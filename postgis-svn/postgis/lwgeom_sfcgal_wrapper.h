@@ -2,7 +2,11 @@
 #define LWGEOM_SFCGAL_WRAPPER_H
 
 #include "lwgeom_sfcgal.h"
+
 #include <boost/preprocessor.hpp>
+
+#include <SFCGAL/Geometry.h>
+#include <SFCGAL/PreparedGeometry.h>
 
 /**
  *
@@ -11,89 +15,6 @@
  * Each argument type must have the associated macros declared.
  * Please refer to the definition of WRAPPER_DECLARE_SFCGAL_FUNCTION if you want to add a new type.
  */
-// Type index, unique for each type
-#define WRAPPER_TYPE_Geometry 0
-// How to extract a ith argument of type Geometry
-#define WRAPPER_INPUT_Geometry( i )					\
-	GSERIALIZED* BOOST_PP_CAT(input, i);				\
-	BOOST_PP_CAT(input,i) = (GSERIALIZED*)PG_DETOAST_DATUM(PG_GETARG_DATUM(i)); \
-	std::auto_ptr<SFCGAL::Geometry> BOOST_PP_CAT(geom,i);		\
-	try								\
-	{								\
-		BOOST_PP_CAT( geom, i ) = POSTGIS2SFCGAL( BOOST_PP_CAT( input, i ) ); \
-	}								\
-	catch ( std::exception& e ) {					\
-		lwerror( "Argument geometry could not be converted to SFCGAL: %s", e.what() ); \
-		PG_RETURN_NULL();					\
-	}
-// Use dereference for std::auto_ptr<Geometry>
-#define WRAPPER_ACCESS_INPUT_Geometry( i )  \
-	* BOOST_PP_CAT( geom, i )
-
-#define WRAPPER_CONVERT_RESULT_Geometry()					\
-	GSERIALIZED* gresult;						\
-	if ( result.get() ) {						\
-		try {							\
-			gresult = SFCGAL2POSTGIS( *result, result->is3D(), gserialized_get_srid(input0) ); \
-		}							\
-		catch ( std::exception& e ) {				\
-			lwerror("Result geometry could not be converted to lwgeom: %s", e.what() ); \
-			PG_RETURN_NULL();				\
-		}							\
-	}
-
-#define WRAPPER_RETURN_Geometry() \
-	PG_RETURN_POINTER( gresult )
-
-#define WRAPPER_TO_CSTR_Geometry( i )				\
-	"%s", BOOST_PP_CAT( geom, i )->asText().c_str()
-
-#define WRAPPER_FREE_INPUT_Geometry( i )		\
-	PG_FREE_IF_COPY( BOOST_PP_CAT( input, i ), i )
-
-#define WRAPPER_DECLARE_RETURN_VAR_Geometry() \
-	std::auto_ptr<SFCGAL::Geometry> result
-
-/**
- * ref geometry argument wrapper
- */
-#define WRAPPER_TYPE_refGeometry 1
-#define WRAPPER_INPUT_refGeometry( i ) \
-	SFCGAL::Geometry* BOOST_PP_CAT( input, i ) = get_geometry_arg( fcinfo, i );
-
-#define WRAPPER_ACCESS_INPUT_refGeometry( i )  \
-	* BOOST_PP_CAT( input, i )
-
-#define WRAPPER_FREE_INPUT_refGeometry( i )  /* */
-#define WRAPPER_CONVERT_RESULT_refGeometry()   /* */
-#define WRAPPER_RETURN_refGeometry() \
-	SFCGAL::Geometry* geo = result.release();		\
-	GeometryPool::reference( get_reference_context(), geo );	\
-	return return_geometry( geo );
-#define WRAPPER_TO_CSTR_refGeometry( i )   			\
-	"%s", BOOST_PP_CAT( input, i ) ->asText().c_str()
-#define WRAPPER_DECLARE_RETURN_VAR_refGeometry() \
-	std::auto_ptr<SFCGAL::Geometry> result
-
-/**
- * exact geometry argument wrapper
- */
-#define WRAPPER_TYPE_exactGeometry 2
-#define WRAPPER_INPUT_exactGeometry( i ) \
-	std::auto_ptr<SFCGAL::Geometry> BOOST_PP_CAT( input, i )  = unserializeExactGeometry( (ExactGeometry*)PG_DETOAST_DATUM(PG_GETARG_DATUM(i)) );
-
-#define WRAPPER_ACCESS_INPUT_exactGeometry( i )  \
-	* BOOST_PP_CAT( input, i )
-
-#define WRAPPER_FREE_INPUT_exactGeometry( i )  /* */
-#define WRAPPER_CONVERT_RESULT_exactGeometry()   /* */
-#define WRAPPER_DECLARE_RETURN_VAR_exactGeometry() \
-	std::auto_ptr<SFCGAL::Geometry> result
-#define WRAPPER_RETURN_exactGeometry() \
-	PG_RETURN_POINTER( serializeExactGeometry( *result ) );
-
-#define WRAPPER_TO_CSTR_exactGeometry( i )   			\
-	"%s", BOOST_PP_CAT( input, i ) ->asText().c_str()
 
 /**
  * bool argument wrapper
@@ -202,6 +123,11 @@ std::auto_ptr<SFCGAL::PreparedGeometry> POSTGIS2SFCGALp(GSERIALIZED *pglwgeom);
  * Conversion from a SFCGAL::Geometry to a GSERIALIZED
  */
 GSERIALIZED* SFCGAL2POSTGIS(const SFCGAL::Geometry& geom, bool force3D, int SRID );
+
+/**
+ * Conversion from a SFCGAL::PreparedGeometry to a GSERIALIZED
+ */
+GSERIALIZED* SFCGAL2POSTGIS( const SFCGAL::PreparedGeometry& geom, bool force3D );
 
 /**
  * Wrappers around SFCGAL, when direct call is not possible

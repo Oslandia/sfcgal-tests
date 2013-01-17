@@ -121,6 +121,55 @@ extern "C" Datum sfcgal_from_text(PG_FUNCTION_ARGS)
 	PG_RETURN_POINTER(result);
 }
 
+/**
+ *
+ * Macros needed for arguments of type SFCGAL::Geometry
+ *
+ */
+
+// Type index, unique for each type
+#define WRAPPER_TYPE_Geometry 0
+// How to extract a ith argument of type Geometry
+#define WRAPPER_INPUT_Geometry( i )					\
+	GSERIALIZED* BOOST_PP_CAT(input, i);				\
+	BOOST_PP_CAT(input,i) = (GSERIALIZED*)PG_DETOAST_DATUM(PG_GETARG_DATUM(i)); \
+	std::auto_ptr<SFCGAL::Geometry> BOOST_PP_CAT(geom,i);		\
+	try								\
+	{								\
+		BOOST_PP_CAT( geom, i ) = POSTGIS2SFCGAL( BOOST_PP_CAT( input, i ) ); \
+	}								\
+	catch ( std::exception& e ) {					\
+		lwerror( "Argument geometry could not be converted to SFCGAL: %s", e.what() ); \
+		PG_RETURN_NULL();					\
+	}
+// Use dereference for std::auto_ptr<Geometry>
+#define WRAPPER_ACCESS_INPUT_Geometry( i )  \
+	* BOOST_PP_CAT( geom, i )
+
+#define WRAPPER_CONVERT_RESULT_Geometry()					\
+	GSERIALIZED* gresult;						\
+	if ( result.get() ) {						\
+		try {							\
+			gresult = SFCGAL2POSTGIS( *result, result->is3D(), gserialized_get_srid(input0) ); \
+		}							\
+		catch ( std::exception& e ) {				\
+			lwerror("Result geometry could not be converted to lwgeom: %s", e.what() ); \
+			PG_RETURN_NULL();				\
+		}							\
+	}
+
+#define WRAPPER_RETURN_Geometry() \
+	PG_RETURN_POINTER( gresult )
+
+#define WRAPPER_TO_CSTR_Geometry( i )				\
+	"%s", BOOST_PP_CAT( geom, i )->asText().c_str()
+
+#define WRAPPER_FREE_INPUT_Geometry( i )		\
+	PG_FREE_IF_COPY( BOOST_PP_CAT( input, i ), i )
+
+#define WRAPPER_DECLARE_RETURN_VAR_Geometry() \
+	std::auto_ptr<SFCGAL::Geometry> result
+
 WRAPPER_DECLARE_SFCGAL_FUNCTION( intersects, SFCGAL::algorithm::intersects, bool, (Geometry)(Geometry) )
 WRAPPER_DECLARE_SFCGAL_FUNCTION( intersects3D, SFCGAL::algorithm::intersects3D, bool, (Geometry)(Geometry) )
 WRAPPER_DECLARE_SFCGAL_FUNCTION( intersection, SFCGAL::algorithm::intersection, Geometry, (Geometry)(Geometry) )

@@ -14,6 +14,7 @@
 #include <SFCGAL/algorithm/plane.h>
 #include <SFCGAL/transform/ForceZOrderPoints.h>
 #include <SFCGAL/io/wkt.h>
+#include <SFCGAL/io/ewkt.h>
 #include <SFCGAL/io/Serialization.h>
 
 extern "C" {
@@ -40,9 +41,9 @@ struct ExactGeometry
 /**
  * Convert a SFCGAL::Geometry to its binary serialization
  */
-ExactGeometry* serializeExactGeometry( const SFCGAL::Geometry& g1 )
+ExactGeometry* serializeExactGeometry( const SFCGAL::PreparedGeometry& g1 )
 {
-    std::string raw = SFCGAL::io::writeBinary( g1 );
+    std::string raw = SFCGAL::io::writeBinaryPrepared( g1 );
     ExactGeometry* g = (ExactGeometry*)palloc( raw.size() + 1 + 4 );
     memmove( &g->data[0], raw.data(), raw.size() );
     SET_VARSIZE( g, raw.size() );
@@ -52,11 +53,11 @@ ExactGeometry* serializeExactGeometry( const SFCGAL::Geometry& g1 )
 /**
  * Convert a binary serialization of a SFCGAL::Geometry to an instanciation
  */
-std::auto_ptr<SFCGAL::Geometry> unserializeExactGeometry( ExactGeometry* ptr )
+std::auto_ptr<SFCGAL::PreparedGeometry> unserializeExactGeometry( ExactGeometry* ptr )
 {
     uint32_t s = VARSIZE( ptr );
     std::string gstr( &ptr->data[0], s );
-    return SFCGAL::io::readBinary( gstr );	
+    return SFCGAL::io::readBinaryPrepared( gstr );	
 }
 
 /**
@@ -72,9 +73,9 @@ extern "C" Datum sfcgal_exact_out(PG_FUNCTION_ARGS)
     
     geom1 = (ExactGeometry *)PG_GETARG_DATUM(0);
 
-    std::auto_ptr<SFCGAL::Geometry> g = unserializeExactGeometry( geom1 );
+    std::auto_ptr<SFCGAL::PreparedGeometry> g = unserializeExactGeometry( geom1 );
 
-    std::string wkt = g->asText( /* exact */ -1 );
+    std::string wkt = g->asEWKT( /* exact */ -1 );
     char * retstr = (char*)palloc( wkt.size() + 1 );
     strncpy( retstr, wkt.c_str(), wkt.size() + 1 );
 
@@ -91,10 +92,10 @@ extern "C" {
 
 ExactGeometry* exactFromCString( char* cstring )
 {
-	std::auto_ptr<SFCGAL::Geometry> g;
+	std::auto_ptr<SFCGAL::PreparedGeometry> g;
 	try
 	{
-		g = SFCGAL::io::readWkt( cstring, strlen(cstring) );
+		g = SFCGAL::io::readEwkt( cstring, strlen(cstring) );
 	}
 	catch ( std::exception& e )
 	{
@@ -139,9 +140,9 @@ extern "C" Datum sfcgal_exact_from_geom(PG_FUNCTION_ARGS)
     
     geom1 = (GSERIALIZED *)PG_DETOAST_DATUM(PG_GETARG_DATUM(0));
 
-    std::auto_ptr<SFCGAL::Geometry> g1;
+    std::auto_ptr<SFCGAL::PreparedGeometry> g1;
     try {
-	g1 = POSTGIS2SFCGAL( geom1 );
+	g1 = POSTGIS2SFCGALp( geom1 );
     }
     catch ( std::exception& e ) {
 	lwerror("First argument geometry could not be converted to SFCGAL: %s", e.what() );
@@ -164,11 +165,35 @@ extern "C" {
 extern "C" Datum sfcgal_geom_from_exact(PG_FUNCTION_ARGS)
 {
     ExactGeometry *geom1 = (ExactGeometry *)PG_GETARG_DATUM(0);
-    std::auto_ptr<SFCGAL::Geometry> g = unserializeExactGeometry( geom1 );
+    std::auto_ptr<SFCGAL::PreparedGeometry> g = unserializeExactGeometry( geom1 );
 
-    GSERIALIZED* result = SFCGAL2POSTGIS( *g, false, /* TODO */ 0 );
+    GSERIALIZED* result = SFCGAL2POSTGIS( *g, false );
     PG_RETURN_POINTER( result );
 }
+
+/**
+ *
+ * Macros for exact geometry argument wrapping
+ *
+ */
+
+#define WRAPPER_TYPE_exactGeometry 2
+#define WRAPPER_INPUT_exactGeometry( i ) \
+	std::auto_ptr<SFCGAL::PreparedGeometry> BOOST_PP_CAT( input, i )  = unserializeExactGeometry( (ExactGeometry*)PG_DETOAST_DATUM(PG_GETARG_DATUM(i)) );
+
+#define WRAPPER_ACCESS_INPUT_exactGeometry( i )  \
+	BOOST_PP_CAT( input, i )->geometry()
+
+#define WRAPPER_FREE_INPUT_exactGeometry( i )  /* */
+#define WRAPPER_CONVERT_RESULT_exactGeometry()   /* */
+#define WRAPPER_DECLARE_RETURN_VAR_exactGeometry() \
+	std::auto_ptr<SFCGAL::Geometry> result
+#define WRAPPER_RETURN_exactGeometry() \
+	SFCGAL::PreparedGeometry pgeom( result, input0->SRID() ); \
+	PG_RETURN_POINTER( serializeExactGeometry( pgeom ) );
+
+#define WRAPPER_TO_CSTR_exactGeometry( i )   			\
+	"%s", BOOST_PP_CAT( input, i ) ->asEWKT().c_str()
 
 WRAPPER_DECLARE_SFCGAL_FUNCTION( exact_intersects, SFCGAL::algorithm::intersects, bool, (exactGeometry)(exactGeometry) )
 WRAPPER_DECLARE_SFCGAL_FUNCTION( exact_intersects3D, SFCGAL::algorithm::intersects3D, bool, (exactGeometry)(exactGeometry) )
