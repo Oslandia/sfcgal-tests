@@ -1,6 +1,6 @@
 -- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 --
--- $Id: postgis.sql.in.c 9994 2012-06-27 15:53:53Z strk $
+-- $Id: postgis.sql.in.c 10806 2012-12-06 17:56:37Z pramsey $
 --
 -- PostGIS - Spatial Types for PostgreSQL
 -- http://postgis.refractions.net
@@ -74,7 +74,7 @@ CREATE OR REPLACE FUNCTION geometry_typmod_out(integer)
 
 CREATE OR REPLACE FUNCTION geometry_analyze(internal)
 	RETURNS bool
-	AS 'MODULE_PATHNAME', 'geometry_analyze_2d'
+	AS 'MODULE_PATHNAME', 'gserialized_analyze_nd'
 	LANGUAGE 'c' VOLATILE STRICT;
 
 CREATE OR REPLACE FUNCTION geometry_recv(internal)
@@ -112,6 +112,49 @@ CREATE OR REPLACE FUNCTION geometry(geometry, integer, boolean)
 -- Availability: 2.0.0
 CREATE CAST (geometry AS geometry) WITH FUNCTION geometry(geometry, integer, boolean) AS IMPLICIT;
 
+
+-- Availability: 2.1.0
+CREATE OR REPLACE FUNCTION geometry(point)
+	RETURNS geometry
+	AS 'MODULE_PATHNAME','point_to_geometry'
+	LANGUAGE 'c' IMMUTABLE STRICT; 
+
+-- Availability: 2.1.0
+CREATE OR REPLACE FUNCTION point(geometry)
+	RETURNS point
+	AS 'MODULE_PATHNAME','geometry_to_point'
+	LANGUAGE 'c' IMMUTABLE STRICT; 
+
+-- Availability: 2.1.0
+CREATE OR REPLACE FUNCTION geometry(path)
+	RETURNS geometry
+	AS 'MODULE_PATHNAME','path_to_geometry'
+	LANGUAGE 'c' IMMUTABLE STRICT; 
+
+-- Availability: 2.1.0
+CREATE OR REPLACE FUNCTION path(geometry)
+	RETURNS path
+	AS 'MODULE_PATHNAME','geometry_to_path'
+	LANGUAGE 'c' IMMUTABLE STRICT; 
+
+-- Availability: 2.1.0
+CREATE OR REPLACE FUNCTION geometry(polygon)
+	RETURNS geometry
+	AS 'MODULE_PATHNAME','polygon_to_geometry'
+	LANGUAGE 'c' IMMUTABLE STRICT; 
+
+-- Availability: 2.1.0
+CREATE OR REPLACE FUNCTION polygon(geometry)
+	RETURNS polygon
+	AS 'MODULE_PATHNAME','geometry_to_polygon'
+	LANGUAGE 'c' IMMUTABLE STRICT; 
+
+CREATE CAST (geometry AS point) WITH FUNCTION point(geometry);
+CREATE CAST (point AS geometry) WITH FUNCTION geometry(point);
+CREATE CAST (geometry AS path) WITH FUNCTION path(geometry);
+CREATE CAST (path AS geometry) WITH FUNCTION geometry(path);
+CREATE CAST (geometry AS polygon) WITH FUNCTION polygon(geometry);
+CREATE CAST (polygon AS geometry) WITH FUNCTION geometry(polygon);
 
 -------------------------------------------------------------------
 --  BOX3D TYPE
@@ -385,6 +428,62 @@ CREATE OR REPLACE FUNCTION geometry_gist_joinsel_2d(internal, oid, internal, sma
 	AS 'MODULE_PATHNAME', 'geometry_gist_joinsel_2d'
 	LANGUAGE 'c';
 
+
+-----------------------------------------------------------------------------
+
+-- Availability: 2.1.0
+-- Given a table, column and query geometry, returns the estimate of what proportion
+-- of the table would be returned by a query using the &&/&&& operators. The mode
+-- changes whether the estimate is in x/y only or in all available dimensions.
+CREATE OR REPLACE FUNCTION _postgis_selectivity(tbl regclass, att_name text, geom geometry, mode text default '2')
+	RETURNS float8
+	AS 'MODULE_PATHNAME', '_postgis_gserialized_sel'
+	LANGUAGE 'c' STRICT;
+
+-- Availability: 2.1.0
+-- Given a two tables and columns, returns estimate of the proportion of rows
+-- a &&/&&& join will return relative to the number of rows an unconstrained
+-- table join would return. Mode flips result between evaluation in x/y only
+-- and evaluation in all available dimensions.
+CREATE OR REPLACE FUNCTION _postgis_join_selectivity(regclass, text, regclass, text, text default '2')
+	RETURNS float8
+	AS 'MODULE_PATHNAME', '_postgis_gserialized_joinsel'
+	LANGUAGE 'c' STRICT;
+
+-- Availability: 2.1.0
+-- Given a table and a column, returns the statistics information stored by 
+-- PostgreSQL, in a JSON text form. Mode determines whether the 2D statistics
+-- or the ND statistics are returned.
+CREATE OR REPLACE FUNCTION _postgis_stats(tbl regclass, att_name text, text default '2')
+	RETURNS text
+	AS 'MODULE_PATHNAME', '_postgis_gserialized_stats'
+	LANGUAGE 'c' STRICT;
+
+-- Availability: 2.1.0
+CREATE OR REPLACE FUNCTION gserialized_gist_sel_2d (internal, oid, internal, int4)
+	RETURNS float8
+	AS 'MODULE_PATHNAME', 'gserialized_gist_sel_2d'
+	LANGUAGE 'c';
+
+-- Availability: 2.1.0
+CREATE OR REPLACE FUNCTION gserialized_gist_sel_nd (internal, oid, internal, int4)
+	RETURNS float8
+	AS 'MODULE_PATHNAME', 'gserialized_gist_sel_nd'
+	LANGUAGE 'c';
+
+-- Availability: 2.1.0
+CREATE OR REPLACE FUNCTION gserialized_gist_joinsel_2d (internal, oid, internal, smallint)
+	RETURNS float8
+	AS 'MODULE_PATHNAME', 'gserialized_gist_joinsel_2d'
+	LANGUAGE 'c';
+
+-- Availability: 2.1.0
+CREATE OR REPLACE FUNCTION gserialized_gist_joinsel_nd (internal, oid, internal, smallint)
+	RETURNS float8
+	AS 'MODULE_PATHNAME', 'gserialized_gist_joinsel_nd'
+	LANGUAGE 'c';
+
+
 -----------------------------------------------------------------------------
 -- GEOMETRY Operators
 -----------------------------------------------------------------------------
@@ -401,9 +500,9 @@ CREATE OR REPLACE FUNCTION geometry_overlaps(geom1 geometry, geom2 geometry)
 
 CREATE OPERATOR && (
 	LEFTARG = geometry, RIGHTARG = geometry, PROCEDURE = geometry_overlaps,
-	COMMUTATOR = '&&'
---	,RESTRICT = contsel, JOIN = contjoinsel
- 	,RESTRICT = geometry_gist_sel_2d, JOIN = geometry_gist_joinsel_2d	
+	COMMUTATOR = '&&',
+ 	RESTRICT = gserialized_gist_sel_2d, 
+	JOIN = gserialized_gist_joinsel_2d	
 );
 
 -- Availability: 2.0.0
@@ -641,17 +740,6 @@ CREATE OR REPLACE FUNCTION geometry_gist_decompress_nd(internal)
 	AS 'MODULE_PATHNAME' ,'gserialized_gist_decompress'
 	LANGUAGE 'c';
 
--- Availability: 2.0.0
---CREATE OR REPLACE FUNCTION geometry_gist_selectivity_nd (internal, oid, internal, int4)
---	RETURNS float8
---	AS 'MODULE_PATHNAME', 'geometry_gist_selectivity_nd'
---	LANGUAGE 'c';
-
--- Availability: 2.0.0
---CREATE OR REPLACE FUNCTION geography_gist_join_selectivity_nd(internal, oid, internal, smallint)
---	RETURNS float8
---	AS 'MODULE_PATHNAME', 'geometry_gist_join_selectivity_nd'
---	LANGUAGE 'c';
 
 -- ---------- ---------- ---------- ---------- ---------- ---------- ----------
 -- N-D GEOMETRY Operators
@@ -666,10 +754,9 @@ CREATE OR REPLACE FUNCTION geometry_overlaps_nd(geometry, geometry)
 -- Availability: 2.0.0
 CREATE OPERATOR &&& (
 	LEFTARG = geometry, RIGHTARG = geometry, PROCEDURE = geometry_overlaps_nd,
-	COMMUTATOR = '&&&'
-	,RESTRICT = contsel, JOIN = contjoinsel
---	,RESTRICT = geometry_gist_selectivity_nd 
---	,JOIN = geometry_gist_join_selectivity_nd
+	COMMUTATOR = '&&&',
+	RESTRICT = gserialized_gist_sel_nd,
+	JOIN = gserialized_gist_joinsel_nd	
 );
 
 -- Availability: 2.0.0
@@ -851,16 +938,28 @@ CREATE OR REPLACE FUNCTION ST_Combine_BBox(box2d,geometry)
 -- ESTIMATED_EXTENT( <schema name>, <table name>, <column name> )
 -----------------------------------------------------------------------
 -- Availability: 1.2.2
+-- Deprecation in 2.1.0 
 CREATE OR REPLACE FUNCTION ST_estimated_extent(text,text,text) RETURNS box2d AS
-	'MODULE_PATHNAME', 'geometry_estimated_extent'
+	'MODULE_PATHNAME', 'gserialized_estimated_extent'
+	LANGUAGE 'c' IMMUTABLE STRICT SECURITY DEFINER;
+
+-- Availability: 2.1.0
+CREATE OR REPLACE FUNCTION ST_EstimatedExtent(text,text,text) RETURNS box2d AS
+	'MODULE_PATHNAME', 'gserialized_estimated_extent'
 	LANGUAGE 'c' IMMUTABLE STRICT SECURITY DEFINER;
 
 -----------------------------------------------------------------------
 -- ESTIMATED_EXTENT( <table name>, <column name> )
 -----------------------------------------------------------------------
 -- Availability: 1.2.2
+-- Deprecation in 2.1.0 
 CREATE OR REPLACE FUNCTION ST_estimated_extent(text,text) RETURNS box2d AS
-	'MODULE_PATHNAME', 'geometry_estimated_extent'
+	'MODULE_PATHNAME', 'gserialized_estimated_extent'
+	LANGUAGE 'c' IMMUTABLE STRICT SECURITY DEFINER;
+
+-- Availability: 2.1.0
+CREATE OR REPLACE FUNCTION ST_EstimatedExtent(text,text) RETURNS box2d AS
+	'MODULE_PATHNAME', 'gserialized_estimated_extent'
 	LANGUAGE 'c' IMMUTABLE STRICT SECURITY DEFINER;
 
 -----------------------------------------------------------------------
@@ -1371,7 +1470,6 @@ CREATE OR REPLACE FUNCTION ST_DumpRings(geometry)
 -----------------------------------------------------------------------
 -- _ST_DumpPoints()
 -----------------------------------------------------------------------
--- A helper function for ST_DumpPoints(geom)
 -- Availability: 1.5.0
 CREATE OR REPLACE FUNCTION _ST_DumpPoints(the_geom geometry, cur_path integer[]) RETURNS SETOF geometry_dump AS $$
 DECLARE
@@ -1468,13 +1566,11 @@ $$ LANGUAGE plpgsql;
 -----------------------------------------------------------------------
 -- This function mimicks that of ST_Dump for collections, but this function 
 -- that returns a path and all the points that make up a particular geometry.
--- This current implementation in plpgsql does not scale very well at all.
--- and should be ported to C at some point.
 -- Availability: 1.5.0
-CREATE OR REPLACE FUNCTION ST_DumpPoints(geometry) RETURNS SETOF geometry_dump AS $$
-  SELECT * FROM _ST_DumpPoints($1, NULL);
-$$ LANGUAGE SQL  STRICT;
-
+CREATE OR REPLACE FUNCTION ST_DumpPoints(geometry)
+       	RETURNS SETOF geometry_dump
+	AS 'MODULE_PATHNAME', 'LWGEOM_dumppoints'
+	LANGUAGE 'c' IMMUTABLE STRICT;
 
 
 -------------------------------------------------------------------
@@ -1629,7 +1725,7 @@ BEGIN
 		AND c.oid = tbl_oid
 	LOOP
 
-        RAISE DEBUG 'Processing table %.%.%', gcs.nspname, gcs.relname, gcs.attname;
+        RAISE DEBUG 'Processing column %.%.%', gcs.nspname, gcs.relname, gcs.attname;
     
         gc_is_valid := true;
         -- Find the srid, coord_dimension, and type of current geometry
@@ -1658,8 +1754,8 @@ BEGIN
                         ' TYPE geometry(' || postgis_type_name(gtype, gndims, true) || ', ' || gsrid::text  || ') ';
                     inserted := inserted + 1;
                 EXCEPTION
-                        WHEN invalid_parameter_value THEN
-                        RAISE WARNING 'Could not convert ''%'' in ''%.%'' to use typmod with srid %, type: % ', quote_ident(gcs.attname), quote_ident(gcs.nspname), quote_ident(gcs.relname), gsrid, postgis_type_name(gtype, gndims, true);
+                        WHEN invalid_parameter_value OR feature_not_supported THEN
+                        RAISE WARNING 'Could not convert ''%'' in ''%.%'' to use typmod with srid %, type %: %', quote_ident(gcs.attname), quote_ident(gcs.nspname), quote_ident(gcs.relname), gsrid, postgis_type_name(gtype, gndims, true), SQLERRM;
                             gc_is_valid := false;
                 END;
                 
@@ -5031,6 +5127,11 @@ CREATE OR REPLACE FUNCTION ST_AsX3D(geom geometry, maxdecimaldigits integer DEFA
 	RETURNS TEXT
 	AS $$SELECT _ST_AsX3D(3,$1,$2,$3,'');$$
 	LANGUAGE 'sql' IMMUTABLE;
+
+-- make views and spatial_ref_sys public viewable --
+GRANT SELECT ON TABLE geography_columns TO public;
+GRANT SELECT ON TABLE geometry_columns TO public;
+GRANT SELECT ON TABLE spatial_ref_sys TO public;
 
 -----------------------------------------------------------------------
 -- SFCGAL

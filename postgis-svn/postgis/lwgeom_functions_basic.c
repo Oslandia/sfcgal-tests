@@ -1,5 +1,5 @@
 /**********************************************************************
- * $Id: lwgeom_functions_basic.c 9766 2012-05-21 10:57:13Z pramsey $
+ * $Id: lwgeom_functions_basic.c 10872 2012-12-20 17:20:15Z strk $
  *
  * PostGIS - Spatial Types for PostgreSQL
  * http://postgis.refractions.net
@@ -17,7 +17,6 @@
 #include "utils/geo_decls.h"
 
 #include "liblwgeom_internal.h"
-#include "libtgeom.h"
 #include "lwgeom_pg.h"
 
 #include <math.h>
@@ -1027,22 +1026,24 @@ Datum LWGEOM_inside_circle_point(PG_FUNCTION_ARGS)
 	double cx = PG_GETARG_FLOAT8(1);
 	double cy = PG_GETARG_FLOAT8(2);
 	double rr = PG_GETARG_FLOAT8(3);
-	LWPOINT *point;
-	POINT2D pt;
+	LWPOINT *lwpoint;
+	LWGEOM *lwgeom;
+	int inside;
 
 	geom = (GSERIALIZED *)PG_DETOAST_DATUM(PG_GETARG_DATUM(0));
-	point = lwgeom_as_lwpoint(lwgeom_from_gserialized(geom));
-	if ( point == NULL )
+	lwgeom = lwgeom_from_gserialized(geom);
+	lwpoint = lwgeom_as_lwpoint(lwgeom);
+	if ( lwpoint == NULL || lwgeom_is_empty(lwgeom) )
 	{
 		PG_FREE_IF_COPY(geom, 0);
 		PG_RETURN_NULL(); /* not a point */
 	}
 
-	getPoint2d_p(point->point, 0, &pt);
+	inside = lwpoint_inside_circle(lwpoint, cx, cy, rr);
+	lwpoint_free(lwpoint);
 
 	PG_FREE_IF_COPY(geom, 0);
-
-	PG_RETURN_BOOL(lwgeom_pt_inside_circle(&pt, cx, cy, rr));
+	PG_RETURN_BOOL(inside);
 }
 
 /**
@@ -2504,9 +2505,8 @@ Datum ST_GeoHash(PG_FUNCTION_ARGS)
 
 	GSERIALIZED *geom = NULL;
 	int precision = 0;
-	int len = 0;
 	char *geohash = NULL;
-	char *result = NULL;
+	text *result = NULL;
 
 	if ( PG_ARGISNULL(0) )
 	{
@@ -2525,13 +2525,10 @@ Datum ST_GeoHash(PG_FUNCTION_ARGS)
 	if ( ! geohash )
 		PG_RETURN_NULL();
 
-	len = strlen(geohash) + VARHDRSZ;
-	result = palloc(len);
-	SET_VARSIZE(result, len);
-	memcpy(VARDATA(result), geohash, len-VARHDRSZ);
+	result = cstring2text(geohash);
 	pfree(geohash);
-	PG_RETURN_POINTER(result);
-
+	
+	PG_RETURN_TEXT_P(result);
 }
 
 PG_FUNCTION_INFO_V1(ST_CollectionExtract);

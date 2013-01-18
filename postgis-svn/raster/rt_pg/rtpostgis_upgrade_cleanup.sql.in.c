@@ -107,6 +107,26 @@ BEGIN
 				aligned boolean
 			);
     END IF;
+    
+    -- create unionarg type if it does not exist
+	IF NOT EXISTS(SELECT typname
+		FROM pg_type 
+        	WHERE typname = 'unionarg') THEN
+			CREATE TYPE unionarg AS
+			   (nband integer,
+				uniontype text);
+    END IF;
+
+    -- create rastbandarg type if it does not exist
+	IF NOT EXISTS(SELECT typname
+		FROM pg_type 
+        	WHERE typname = 'rastbandarg') THEN
+			CREATE TYPE rastbandarg AS (
+				rast raster,
+				nband integer
+			);
+    END IF;
+
 END$$;	
 
 -- make geometry cast ASSIGNMENT

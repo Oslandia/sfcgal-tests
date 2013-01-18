@@ -317,8 +317,10 @@ circ_tree_new(const POINTARRAY* pa)
 	}
 	
 	/* Special case: only zero-length edges. Make a point node. */
-	if ( j == 0 )
+	if ( j == 0 ) {
+		lwfree(nodes);
 		return circ_node_leaf_point_new(pa);
+	}
 
 	/* Merge the node list pairwise up into a tree */
 	tree = circ_nodes_merge(nodes, j);
@@ -394,14 +396,17 @@ circ_nodes_merge(CIRC_NODE** nodes, int num_nodes)
 */
 int circ_tree_contains_point(const CIRC_NODE* node, const POINT2D* pt, const POINT2D* pt_outside, int* on_boundary)
 {
-	GEOGRAPHIC_POINT closest, crossing;
+	GEOGRAPHIC_POINT closest;
 	GEOGRAPHIC_EDGE stab_edge, edge;
+	POINT3D S1, S2, E1, E2;
 	double d;
 	int i, c;
 	
 	/* Construct a stabline edge from our "inside" to our known outside point */
 	geographic_point_init(pt->x, pt->y, &(stab_edge.start));
 	geographic_point_init(pt_outside->x, pt_outside->y, &(stab_edge.end));
+	geog2cart(&(stab_edge.start), &S1);
+	geog2cart(&(stab_edge.end), &S2);
 	
 	LWDEBUG(3, "entered");
 	
@@ -409,7 +414,6 @@ int circ_tree_contains_point(const CIRC_NODE* node, const POINT2D* pt, const POI
 	* If the stabline doesn't cross within the radius of a node, there's no 
 	* way it can cross.
 	*/
-//	circ_tree_print(node, 0);
 		
 	LWDEBUGF(3, "working on node %p, edge_num %d, radius %g, center POINT(%g %g)", node, node->edge_num, node->radius, rad2deg(node->center.lon), rad2deg(node->center.lat));
 	d = edge_distance_to_point(&stab_edge, &(node->center), &closest);
@@ -421,18 +425,24 @@ int circ_tree_contains_point(const CIRC_NODE* node, const POINT2D* pt, const POI
 		/* Return the crossing number of this leaf */
 		if ( circ_node_is_leaf(node) )
 		{
+			int inter;
 			LWDEBUGF(3, "leaf node calculation (edge %d)", node->edge_num);
 			geographic_point_init(node->p1->x, node->p1->y, &(edge.start));
 			geographic_point_init(node->p2->x, node->p2->y, &(edge.end));
-			if ( edge_intersection(&stab_edge, &edge, &crossing) )
+			geog2cart(&(edge.start), &E1);
+			geog2cart(&(edge.end), &E2);
+			
+			inter = edge_intersects(&S1, &S2, &E1, &E2);
+			
+			if ( inter & PIR_INTERSECTS )
 			{
 				LWDEBUG(3," got stab line edge_intersection with this edge!");
 				/* To avoid double counting crossings-at-a-vertex, */
 				/* always ignore crossings at "lower" ends of edges*/
-				if ( (FP_EQUALS(crossing.lon, edge.start.lon) && FP_EQUALS(crossing.lat, edge.start.lat) && (edge.start.lat <= edge.end.lat)) ||
-				     (FP_EQUALS(crossing.lon, edge.end.lon) && FP_EQUALS(crossing.lat, edge.end.lat) && (edge.end.lat <= edge.start.lat)) )
+
+				if ( inter & PIR_B_TOUCH_RIGHT || inter & PIR_COLINEAR )
 				{
-					LWDEBUG(3,"  rejecting stab line intersection on 'lower' end point vertex");
+					LWDEBUG(3,"  rejecting stab line grazing by left-side edge");
 					return 0;
 				}
 				else
@@ -571,15 +581,21 @@ circ_tree_distance_tree_internal(const CIRC_NODE* n1, const CIRC_NODE* n2, doubl
 			else
 			{
 				GEOGRAPHIC_EDGE e1, e2;
-				GEOGRAPHIC_POINT g1;
+				GEOGRAPHIC_POINT g;
+				POINT3D A1, A2, B1, B2;
 				geographic_point_init(n1->p1->x, n1->p1->y, &(e1.start));
 				geographic_point_init(n1->p2->x, n1->p2->y, &(e1.end));
 				geographic_point_init(n2->p1->x, n2->p1->y, &(e2.start));
 				geographic_point_init(n2->p2->x, n2->p2->y, &(e2.end));
-				if ( edge_intersection(&e1, &e2, &g1) )
+				geog2cart(&(e1.start), &A1);
+				geog2cart(&(e1.end), &A2);
+				geog2cart(&(e2.start), &B1);
+				geog2cart(&(e2.end), &B2);
+				if ( edge_intersects(&A1, &A2, &B1, &B2) )
 				{
 					d = 0.0;
-					close1 = close2 = g1;
+					edge_intersection(&e1, &e2, &g);
+					close1 = close2 = g;
 				}
 				else
 				{

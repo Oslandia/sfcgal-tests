@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<chapter id="using_raster.xml">
+<chapter id="using_raster_dataman">
   <title>Raster Data Management, Queries, and Applications</title>
   <sect1 id="RT_Loading_Rasters"> 
     <title>Loading and Creating Rasters</title>
@@ -18,9 +18,7 @@
         Please note that the raster2pgsql python script may not work with future versions of PostGIS raster and is no longer supported.
         </para></note>
 
-				<note><para>
-												When creating overviews of a specific factor from a set of rasters that are aligned, it is possible for the overviews to not align.  Visit <ulink url="http://trac.osgeo.org/postgis/ticket/1764">http://trac.osgeo.org/postgis/ticket/1764</ulink> for an example where the overviews do not align.
-</para></note>
+	<note><para>When creating overviews of a specific factor from a set of rasters that are aligned, it is possible for the overviews to not align.  Visit <ulink url="http://trac.osgeo.org/postgis/ticket/1764">http://trac.osgeo.org/postgis/ticket/1764</ulink> for an example where the overviews do not align.</para></note>
         
     <para>EXAMPLE USAGE: 
     	<programlisting>raster2pgsql <varname>raster_options_go_here</varname> <varname>raster_file</varname> <varname>someschema</varname>.<varname>sometable</varname> &gt; out.sql</programlisting>
@@ -114,7 +112,7 @@
 							<term>-r </term>
 							<listitem>
 								<para>
-									Set the regular blocking constraint.  Only applied if -C flag is also used.
+									Set the constraints (spatially unique and coverage tile) for regular blocking.  Only applied if -C flag is also used.
 								</para>
 							</listitem>
 						</varlistentry>
@@ -151,7 +149,7 @@
                     <term>-t TILE_SIZE</term>
                     <listitem>
 			<para>
-                        Cut raster into tiles to be inserted one per table row.  <varname>TILE_SIZE</varname> is expressed as WIDTHxHEIGHT.
+							Cut raster into tiles to be inserted one per table row.  <varname>TILE_SIZE</varname> is expressed as WIDTHxHEIGHT or set to the value "auto" to allow the loader to compute an appropriate tile size using the first raster and applied to all rasters.
 			</para>
                     </listitem>
                 </varlistentry>
@@ -168,7 +166,7 @@
                     <term>-l <varname>OVERVIEW_FACTOR</varname></term>
 										<listitem><para>Create overview of the raster.  For more than
      one factor, separate with comma(,).  Overview table name follows
-     the pattern o_<varname>overview factor</varname>_<varname>table</varname>.  Created overview is
+		 the pattern o_<varname>overview factor</varname>_<varname>table</varname>, where <varname>overview factor</varname> is a placeholder for numerical overview factor and <varname>table</varname> is replaced with the base table name.  Created overview is
      stored in the database and is not affected by -R. Note that your generated sql file will contain both the main table and overview tables.</para>
                     </listitem>
                 </varlistentry>
@@ -473,7 +471,7 @@ Available GDAL raster formats:
 					<para><varname>same_alignment</varname> A boolean that is true if all the raster tiles have the same alignment . Refer to <xref linkend="RT_ST_SameAlignment" /> for more details.</para>
 				</listitem>
 				<listitem>
-					<para><varname>regular_blocking</varname> This is a true/false constraint flag set on the table to denote that the tiles do not overlap, are of the same alignment, pixel size, srid etc. It is not really validated but just taken as a given so should be used for informational.  In the future we plan to properly constrain this so that this inforamtion is guaranteed to be right when it returns <varname>true</varname></para>
+					<para><varname>regular_blocking</varname> If the raster column has the spatially unique and coverage tile constraints, the value with be TRUE.  Otherwise, it will be FALSE.</para>
 				</listitem>
 				<listitem>
 					<para><varname>num_bands</varname> The number of bands in each tile of your raster set.  This is the same information as what is provided by <xref linkend="RT_ST_NumBands" /></para>

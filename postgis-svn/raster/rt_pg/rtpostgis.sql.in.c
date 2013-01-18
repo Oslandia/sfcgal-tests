@@ -77,6 +77,24 @@ CREATE OR REPLACE FUNCTION postgis_gdal_version()
     LANGUAGE 'c' IMMUTABLE;
 
 -----------------------------------------------------------------------
+-- generic composite type of a raster and its band index
+-----------------------------------------------------------------------
+
+CREATE TYPE rastbandarg AS (
+	rast raster,
+	nband integer
+);
+
+-----------------------------------------------------------------------
+-- generic composite type of a geometry and value
+-----------------------------------------------------------------------
+
+CREATE TYPE geomval AS (
+	geom geometry,
+	val double precision
+);
+
+-----------------------------------------------------------------------
 -- Raster Accessors
 -----------------------------------------------------------------------
 
@@ -1953,10 +1971,11 @@ CREATE OR REPLACE FUNCTION st_asraster(
 	LANGUAGE 'sql' STABLE;
 
 -----------------------------------------------------------------------
--- ST_Resample
+-- ST_GDALWarp
+-- has no public functions
 -----------------------------------------------------------------------
 -- cannot be strict as almost all parameters can be NULL
-CREATE OR REPLACE FUNCTION _st_resample(
+CREATE OR REPLACE FUNCTION _st_gdalwarp(
 	rast raster,
 	algorithm text DEFAULT 'NearestNeighbour', maxerr double precision DEFAULT 0.125,
 	srid integer DEFAULT NULL,
@@ -1966,31 +1985,32 @@ CREATE OR REPLACE FUNCTION _st_resample(
 	width integer DEFAULT NULL, height integer DEFAULT NULL
 )
 	RETURNS raster
-	AS 'MODULE_PATHNAME', 'RASTER_resample'
+	AS 'MODULE_PATHNAME', 'RASTER_GDALWarp'
 	LANGUAGE 'c' STABLE;
 
+-----------------------------------------------------------------------
+-- ST_Resample
+-----------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION st_resample(
 	rast raster,
-	srid integer DEFAULT NULL,
 	scalex double precision DEFAULT 0, scaley double precision DEFAULT 0,
 	gridx double precision DEFAULT NULL, gridy double precision DEFAULT NULL,
 	skewx double precision DEFAULT 0, skewy double precision DEFAULT 0,
 	algorithm text DEFAULT 'NearestNeighbour', maxerr double precision DEFAULT 0.125
 )
 	RETURNS raster
-	AS $$ SELECT _st_resample($1, $9,	$10, $2, $3, $4, $5, $6, $7, $8) $$
+	AS $$ SELECT _st_gdalwarp($1, $8,	$9, NULL, $2, $3, $4, $5, $6, $7) $$
 	LANGUAGE 'sql' STABLE;
 
 CREATE OR REPLACE FUNCTION st_resample(
 	rast raster,
 	width integer, height integer,
-	srid integer DEFAULT NULL,
 	gridx double precision DEFAULT NULL, gridy double precision DEFAULT NULL,
 	skewx double precision DEFAULT 0, skewy double precision DEFAULT 0,
 	algorithm text DEFAULT 'NearestNeighbour', maxerr double precision DEFAULT 0.125
 )
 	RETURNS raster
-	AS $$ SELECT _st_resample($1, $9,	$10, $4, NULL, NULL, $5, $6, $7, $8, $2, $3) $$
+	AS $$ SELECT _st_gdalwarp($1, $8,	$9, NULL, NULL, NULL, $4, $5, $6, $7, $2, $3) $$
 	LANGUAGE 'sql' STABLE;
 
 CREATE OR REPLACE FUNCTION st_resample(
@@ -2003,27 +2023,37 @@ CREATE OR REPLACE FUNCTION st_resample(
 	RETURNS raster
 	AS $$
 	DECLARE
-		sr_id int;
-		dim_x int;
-		dim_y int;
-		scale_x double precision;
-		scale_y double precision;
-		grid_x double precision;
-		grid_y double precision;
-		skew_x double precision;
-		skew_y double precision;
-	BEGIN
-		SELECT srid, width, height, scalex, scaley, upperleftx, upperlefty, skewx, skewy INTO sr_id, dim_x, dim_y, scale_x, scale_y, grid_x, grid_y, skew_x, skew_y FROM st_metadata($2);
+		rastsrid int;
 
-		IF usescale IS TRUE THEN
-			dim_x := NULL;
-			dim_y := NULL;
-		ELSE
-			scale_x := NULL;
-			scale_y := NULL;
+		_srid int;
+		_dimx int;
+		_dimy int;
+		_scalex double precision;
+		_scaley double precision;
+		_gridx double precision;
+		_gridy double precision;
+		_skewx double precision;
+		_skewy double precision;
+	BEGIN
+		SELECT srid, width, height, scalex, scaley, upperleftx, upperlefty, skewx, skewy INTO _srid, _dimx, _dimy, _scalex, _scaley, _gridx, _gridy, _skewx, _skewy FROM st_metadata($2);
+
+		rastsrid := ST_SRID($1);
+
+		-- both rasters must have the same SRID
+		IF (rastsrid != _srid) THEN
+			RAISE EXCEPTION 'The raster to be resampled has a different SRID from the reference raster';
+			RETURN NULL;
 		END IF;
 
-		RETURN _st_resample($1, $3, $4, sr_id, scale_x, scale_y, grid_x, grid_y, skew_x, skew_y, dim_x, dim_y);
+		IF usescale IS TRUE THEN
+			_dimx := NULL;
+			_dimy := NULL;
+		ELSE
+			_scalex := NULL;
+			_scaley := NULL;
+		END IF;
+
+		RETURN _st_gdalwarp($1, $3, $4, NULL, _scalex, _scaley, _gridx, _gridy, _skewx, _skewy, _dimx, _dimy);
 	END;
 	$$ LANGUAGE 'plpgsql' STABLE STRICT;
 
@@ -2043,30 +2073,52 @@ CREATE OR REPLACE FUNCTION st_resample(
 -----------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION st_transform(rast raster, srid integer, algorithm text DEFAULT 'NearestNeighbour', maxerr double precision DEFAULT 0.125, scalex double precision DEFAULT 0, scaley double precision DEFAULT 0)
 	RETURNS raster
-	AS $$ SELECT _st_resample($1, $3, $4, $2, $5, $6) $$
+	AS $$ SELECT _st_gdalwarp($1, $3, $4, $2, $5, $6) $$
 	LANGUAGE 'sql' STABLE STRICT;
 
 CREATE OR REPLACE FUNCTION st_transform(rast raster, srid integer, scalex double precision, scaley double precision, algorithm text DEFAULT 'NearestNeighbour', maxerr double precision DEFAULT 0.125)
 	RETURNS raster
-	AS $$ SELECT _st_resample($1, $5, $6, $2, $3, $4) $$
+	AS $$ SELECT _st_gdalwarp($1, $5, $6, $2, $3, $4) $$
 	LANGUAGE 'sql' STABLE STRICT;
 
 CREATE OR REPLACE FUNCTION st_transform(rast raster, srid integer, scalexy double precision, algorithm text DEFAULT 'NearestNeighbour', maxerr double precision DEFAULT 0.125)
 	RETURNS raster
-	AS $$ SELECT _st_resample($1, $4, $5, $2, $3, $3) $$
+	AS $$ SELECT _st_gdalwarp($1, $4, $5, $2, $3, $3) $$
 	LANGUAGE 'sql' STABLE STRICT;
+
+CREATE OR REPLACE FUNCTION st_transform(
+	rast raster, 
+	alignto raster,
+	algorithm text DEFAULT 'NearestNeighbour', maxerr double precision DEFAULT 0.125
+)
+	RETURNS raster
+	AS $$
+	DECLARE
+		_srid integer;
+		_scalex double precision;
+		_scaley double precision;
+		_gridx double precision;
+		_gridy double precision;
+		_skewx double precision;
+		_skewy double precision;
+	BEGIN
+		SELECT srid, scalex, scaley, upperleftx, upperlefty, skewx, skewy INTO _srid, _scalex, _scaley, _gridx, _gridy, _skewx, _skewy FROM st_metadata($2);
+
+		RETURN _st_gdalwarp($1, $3, $4, _srid, _scalex, _scaley, _gridx, _gridy, _skewx, _skewy, NULL, NULL);
+	END;
+	$$ LANGUAGE 'plpgsql' STABLE STRICT;
 
 -----------------------------------------------------------------------
 -- ST_Rescale
 -----------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION st_rescale(rast raster, scalex double precision, scaley double precision, algorithm text DEFAULT 'NearestNeighbour', maxerr double precision DEFAULT 0.125)
 	RETURNS raster
-	AS $$ SELECT _st_resample($1, $4, $5, NULL, $2, $3) $$
+	AS $$ SELECT _st_gdalwarp($1, $4, $5, NULL, $2, $3) $$
 	LANGUAGE 'sql' STABLE STRICT;
 
 CREATE OR REPLACE FUNCTION st_rescale(rast raster, scalexy double precision, algorithm text DEFAULT 'NearestNeighbour', maxerr double precision DEFAULT 0.125)
 	RETURNS raster
-	AS $$ SELECT _st_resample($1, $3, $4, NULL, $2, $2) $$
+	AS $$ SELECT _st_gdalwarp($1, $3, $4, NULL, $2, $2) $$
 	LANGUAGE 'sql' STABLE STRICT;
 
 -----------------------------------------------------------------------
@@ -2074,12 +2126,12 @@ CREATE OR REPLACE FUNCTION st_rescale(rast raster, scalexy double precision, alg
 -----------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION st_reskew(rast raster, skewx double precision, skewy double precision, algorithm text DEFAULT 'NearestNeighbour', maxerr double precision DEFAULT 0.125)
 	RETURNS raster
-	AS $$ SELECT _st_resample($1, $4, $5, NULL, 0, 0, NULL, NULL, $2, $3) $$
+	AS $$ SELECT _st_gdalwarp($1, $4, $5, NULL, 0, 0, NULL, NULL, $2, $3) $$
 	LANGUAGE 'sql' STABLE STRICT;
 
 CREATE OR REPLACE FUNCTION st_reskew(rast raster, skewxy double precision, algorithm text DEFAULT 'NearestNeighbour', maxerr double precision DEFAULT 0.125)
 	RETURNS raster
-	AS $$ SELECT _st_resample($1, $3, $4, NULL, 0, 0, NULL, NULL, $2, $2) $$
+	AS $$ SELECT _st_gdalwarp($1, $3, $4, NULL, 0, 0, NULL, NULL, $2, $2) $$
 	LANGUAGE 'sql' STABLE STRICT;
 
 -----------------------------------------------------------------------
@@ -2092,7 +2144,7 @@ CREATE OR REPLACE FUNCTION st_snaptogrid(
 	scalex double precision DEFAULT 0, scaley double precision DEFAULT 0
 )
 	RETURNS raster
-	AS $$ SELECT _st_resample($1, $4, $5, NULL, $6, $7, $2, $3) $$
+	AS $$ SELECT _st_gdalwarp($1, $4, $5, NULL, $6, $7, $2, $3) $$
 	LANGUAGE 'sql' STABLE STRICT;
 
 CREATE OR REPLACE FUNCTION st_snaptogrid(
@@ -2102,7 +2154,7 @@ CREATE OR REPLACE FUNCTION st_snaptogrid(
 	algorithm text DEFAULT 'NearestNeighbour', maxerr double precision DEFAULT 0.125
 )
 	RETURNS raster
-	AS $$ SELECT _st_resample($1, $6, $7, NULL, $4, $5, $2, $3) $$
+	AS $$ SELECT _st_gdalwarp($1, $6, $7, NULL, $4, $5, $2, $3) $$
 	LANGUAGE 'sql' STABLE STRICT;
 
 CREATE OR REPLACE FUNCTION st_snaptogrid(
@@ -2112,8 +2164,142 @@ CREATE OR REPLACE FUNCTION st_snaptogrid(
 	algorithm text DEFAULT 'NearestNeighbour', maxerr double precision DEFAULT 0.125
 )
 	RETURNS raster
-	AS $$ SELECT _st_resample($1, $5, $6, NULL, $4, $4, $2, $3) $$
+	AS $$ SELECT _st_gdalwarp($1, $5, $6, NULL, $4, $4, $2, $3) $$
 	LANGUAGE 'sql' STABLE STRICT;
+
+-----------------------------------------------------------------------
+-- ST_Resize
+-----------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION st_resize(
+	rast raster,
+	width text, height text,
+	algorithm text DEFAULT 'NearestNeighbour', maxerr double precision DEFAULT 0.125
+)
+	RETURNS raster
+	AS $$
+	DECLARE
+		i integer;
+
+		wh text[2];
+
+		whi integer[2];
+		whd double precision[2];
+
+		_width integer;
+		_height integer;
+	BEGIN
+		wh[1] := trim(both from $2);
+		wh[2] := trim(both from $3);
+
+		-- see if width and height are percentages
+		FOR i IN 1..2 LOOP
+			IF position('%' in wh[i]) > 0 THEN
+				BEGIN
+					wh[i] := (regexp_matches(wh[i], E'^(\\d*.?\\d*)%{1}$'))[1];
+					IF length(wh[i]) < 1 THEN
+						RAISE invalid_parameter_value;
+					END IF;
+
+					whd[i] := wh[i]::double precision * 0.01;
+				EXCEPTION WHEN OTHERS THEN
+					RAISE EXCEPTION 'Invalid percentage value provided for width/height';
+					RETURN NULL;
+				END;
+			ELSE
+				BEGIN
+					whi[i] := abs(wh[i]::integer);
+				EXCEPTION WHEN OTHERS THEN
+					RAISE EXCEPTION 'Non-integer value provided for width/height';
+					RETURN NULL;
+				END;
+			END IF;
+		END LOOP;
+
+		IF whd[1] IS NOT NULL OR whd[2] IS NOT NULL THEN
+			SELECT foo.width, foo.height INTO _width, _height FROM ST_Metadata($1) AS foo;
+
+			IF whd[1] IS NOT NULL THEN
+				whi[1] := round(_width::double precision * whd[1])::integer;
+			END IF;
+
+			IF whd[2] IS NOT NULL THEN
+				whi[2] := round(_height::double precision * whd[2])::integer;
+			END IF;
+
+		END IF;
+
+		-- should NEVER be here
+		IF whi[1] IS NULL OR whi[2] IS NULL THEN
+			RAISE EXCEPTION 'Unable to determine appropriate width or height';
+			RETURN NULL;
+		END IF;
+
+		FOR i IN 1..2 LOOP
+			IF whi[i] < 1 THEN
+				whi[i] = 1;
+			END IF;
+		END LOOP;
+
+		RETURN _st_gdalwarp(
+			$1,
+			$4, $5,
+			NULL,
+			NULL, NULL,
+			NULL, NULL,
+			NULL, NULL,
+			whi[1], whi[2]
+		);
+	END;
+	$$ LANGUAGE 'plpgsql' STABLE STRICT;
+
+CREATE OR REPLACE FUNCTION st_resize(
+	rast raster,
+	width integer, height integer,
+	algorithm text DEFAULT 'NearestNeighbour', maxerr double precision DEFAULT 0.125
+)
+	RETURNS raster
+	AS $$ SELECT _st_gdalwarp($1, $4, $5, NULL, NULL, NULL, NULL, NULL, NULL, NULL, abs($2), abs($3)) $$
+	LANGUAGE 'sql' STABLE STRICT;
+
+CREATE OR REPLACE FUNCTION st_resize(
+	rast raster,
+	percentwidth double precision, percentheight double precision,
+	algorithm text DEFAULT 'NearestNeighbour', maxerr double precision DEFAULT 0.125
+)
+	RETURNS raster
+	AS $$
+	DECLARE
+		_width integer;
+		_height integer;
+	BEGIN
+		-- range check
+		IF $2 <= 0. OR $2 > 1. OR $3 <= 0. OR $3 > 1. THEN
+			RAISE EXCEPTION 'Percentages must be a value greater than zero and less than or equal to one, e.g. 0.5 for 50%';
+		END IF;
+
+		SELECT width, height INTO _width, _height FROM ST_Metadata($1);
+
+		_width := round(_width::double precision * $2)::integer;
+		_height:= round(_height::double precision * $3)::integer;
+
+		IF _width < 1 THEN
+			_width := 1;
+		END IF;
+		IF _height < 1 THEN
+			_height := 1;
+		END IF;
+
+		RETURN _st_gdalwarp(
+			$1,
+			$4, $5,
+			NULL,
+			NULL, NULL,
+			NULL, NULL,
+			NULL, NULL,
+			_width, _height
+		);
+	END;
+	$$ LANGUAGE 'plpgsql' STABLE STRICT;
 
 -----------------------------------------------------------------------
 -- One Raster ST_MapAlgebra
@@ -2256,7 +2442,7 @@ CREATE OR REPLACE FUNCTION st_mapalgebrafctngb(
     LANGUAGE 'c' IMMUTABLE;
 
 -----------------------------------------------------------------------
--- Neighborhood MapAlgebra processing functions.
+-- ST_MapAlgebraFctNgb() Neighborhood MapAlgebra processing functions.
 -----------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION st_max4ma(matrix float[][], nodatamode text, variadic args text[])
     RETURNS float AS
@@ -2405,112 +2591,6 @@ CREATE OR REPLACE FUNCTION st_range4ma(matrix float[][], nodatamode text, variad
     $$
     LANGUAGE 'plpgsql' IMMUTABLE;
 
-CREATE OR REPLACE FUNCTION _st_slope4ma(matrix float[][], nodatamode text, variadic args text[])
-    RETURNS float
-    AS
-    $$
-    DECLARE
-        pwidth float;
-        pheight float;
-        dz_dx float;
-        dz_dy float;
-    BEGIN
-        pwidth := args[1]::float;
-        pheight := args[2]::float;
-        dz_dx := ((matrix[3][1] + 2.0 * matrix[3][2] + matrix[3][3]) - (matrix[1][1] + 2.0 * matrix[1][2] + matrix[1][3])) / (8.0 * pwidth);
-        dz_dy := ((matrix[1][3] + 2.0 * matrix[2][3] + matrix[3][3]) - (matrix[1][1] + 2.0 * matrix[2][1] + matrix[3][1])) / (8.0 * pheight);
-        RETURN atan(sqrt(pow(dz_dx, 2.0) + pow(dz_dy, 2.0)));
-    END;
-    $$
-    LANGUAGE 'plpgsql' IMMUTABLE;
-
-CREATE OR REPLACE FUNCTION st_slope(rast raster, band integer, pixeltype text)
-    RETURNS RASTER
-    AS $$ SELECT st_mapalgebrafctngb($1, $2, $3, 1, 1, '_st_slope4ma(float[][], text, text[])'::regprocedure, 'value', st_pixelwidth($1)::text, st_pixelheight($1)::text) $$
-    LANGUAGE 'sql' STABLE;
-
-CREATE OR REPLACE FUNCTION _st_aspect4ma(matrix float[][], nodatamode text, variadic args text[])
-    RETURNS float
-    AS
-    $$
-    DECLARE
-        pwidth float;
-        pheight float;
-        dz_dx float;
-        dz_dy float;
-        aspect float;
-    BEGIN
-        pwidth := args[1]::float;
-        pheight := args[2]::float;
-        dz_dx := ((matrix[3][1] + 2.0 * matrix[3][2] + matrix[3][3]) - (matrix[1][1] + 2.0 * matrix[1][2] + matrix[1][3])) / (8.0 * pwidth);
-        dz_dy := ((matrix[1][3] + 2.0 * matrix[2][3] + matrix[3][3]) - (matrix[1][1] + 2.0 * matrix[2][1] + matrix[3][1])) / (8.0 * pheight);
-        IF abs(dz_dx) = 0::float AND abs(dz_dy) = 0::float THEN
-            RETURN -1;
-        END IF;
-
-        aspect := atan2(dz_dy, -dz_dx);
-        IF aspect > (pi() / 2.0) THEN
-            RETURN (5.0 * pi() / 2.0) - aspect;
-        ELSE
-            RETURN (pi() / 2.0) - aspect;
-        END IF;
-    END;
-    $$
-    LANGUAGE 'plpgsql' IMMUTABLE;
-
-CREATE OR REPLACE FUNCTION st_aspect(rast raster, band integer, pixeltype text)
-    RETURNS RASTER
-    AS $$ SELECT st_mapalgebrafctngb($1, $2, $3, 1, 1, '_st_aspect4ma(float[][], text, text[])'::regprocedure, 'value', st_pixelwidth($1)::text, st_pixelheight($1)::text) $$
-    LANGUAGE 'sql' STABLE;
-
-
-CREATE OR REPLACE FUNCTION _st_hillshade4ma(matrix float[][], nodatamode text, variadic args text[])
-    RETURNS float
-    AS
-    $$
-    DECLARE
-        pwidth float;
-        pheight float;
-        dz_dx float;
-        dz_dy float;
-        zenith float;
-        azimuth float;
-        slope float;
-        aspect float;
-        max_bright float;
-        elevation_scale float;
-    BEGIN
-        pwidth := args[1]::float;
-        pheight := args[2]::float;
-        azimuth := (5.0 * pi() / 2.0) - args[3]::float;
-        zenith := (pi() / 2.0) - args[4]::float;
-        dz_dx := ((matrix[3][1] + 2.0 * matrix[3][2] + matrix[3][3]) - (matrix[1][1] + 2.0 * matrix[1][2] + matrix[1][3])) / (8.0 * pwidth);
-        dz_dy := ((matrix[1][3] + 2.0 * matrix[2][3] + matrix[3][3]) - (matrix[1][1] + 2.0 * matrix[2][1] + matrix[3][1])) / (8.0 * pheight);
-        elevation_scale := args[6]::float;
-        slope := atan(sqrt(elevation_scale * pow(dz_dx, 2.0) + pow(dz_dy, 2.0)));
-        -- handle special case of 0, 0
-        IF abs(dz_dy) = 0::float AND abs(dz_dy) = 0::float THEN
-            -- set to pi as that is the expected PostgreSQL answer in Linux
-            aspect := pi();
-        ELSE
-            aspect := atan2(dz_dy, -dz_dx);
-        END IF;
-        max_bright := args[5]::float;
-
-        IF aspect < 0 THEN
-            aspect := aspect + (2.0 * pi());
-        END IF;
-
-        RETURN max_bright * ( (cos(zenith)*cos(slope)) + (sin(zenith)*sin(slope)*cos(azimuth - aspect)) );
-    END;
-    $$
-    LANGUAGE 'plpgsql' IMMUTABLE;
-
-CREATE OR REPLACE FUNCTION st_hillshade(rast raster, band integer, pixeltype text, azimuth float, altitude float, max_bright float DEFAULT 255.0, elevation_scale float DEFAULT 1.0)
-    RETURNS RASTER
-    AS $$ SELECT st_mapalgebrafctngb($1, $2, $3, 1, 1, '_st_hillshade4ma(float[][], text, text[])'::regprocedure, 'value', st_pixelwidth($1)::text, st_pixelheight($1)::text, $4::text, $5::text, $6::text, $7::text) $$
-    LANGUAGE 'sql' STABLE;
-
 CREATE OR REPLACE FUNCTION st_distinct4ma(matrix float[][], nodatamode TEXT, VARIADIC args TEXT[])
     RETURNS float AS
     $$ SELECT COUNT(DISTINCT unnest)::float FROM unnest($1) $$
@@ -2521,6 +2601,1450 @@ CREATE OR REPLACE FUNCTION st_stddev4ma(matrix float[][], nodatamode TEXT, VARIA
     $$ SELECT stddev(unnest) FROM unnest($1) $$
     LANGUAGE 'sql' IMMUTABLE;
 
+-----------------------------------------------------------------------
+-- n-Raster ST_MapAlgebra
+-----------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION _st_mapalgebra(
+	rastbandargset rastbandarg[],
+	callbackfunc regprocedure,
+	pixeltype text DEFAULT NULL,
+	distancex integer DEFAULT 0, distancey integer DEFAULT 0,
+	extenttype text DEFAULT 'INTERSECTION', customextent raster DEFAULT NULL,
+	VARIADIC userargs text[] DEFAULT NULL
+)
+	RETURNS raster
+	AS 'MODULE_PATHNAME', 'RASTER_nMapAlgebra'
+	LANGUAGE 'c' STABLE;
+
+CREATE OR REPLACE FUNCTION st_mapalgebra(
+	rastbandargset rastbandarg[],
+	callbackfunc regprocedure,
+	pixeltype text DEFAULT NULL,
+	extenttype text DEFAULT 'INTERSECTION', customextent raster DEFAULT NULL,
+	distancex integer DEFAULT 0, distancey integer DEFAULT 0,
+	VARIADIC userargs text[] DEFAULT NULL
+)
+	RETURNS raster
+	AS $$ SELECT _ST_MapAlgebra($1, $2, $3, $6, $7, $4, $5, VARIADIC $8) $$
+	LANGUAGE 'sql' STABLE;
+
+CREATE OR REPLACE FUNCTION st_mapalgebra(
+	rast raster, nband int[],
+	callbackfunc regprocedure,
+	pixeltype text DEFAULT NULL,
+	extenttype text DEFAULT 'FIRST', customextent raster DEFAULT NULL,
+	distancex integer DEFAULT 0, distancey integer DEFAULT 0,
+	VARIADIC userargs text[] DEFAULT NULL
+)
+	RETURNS raster
+	AS $$
+	DECLARE
+		x int;
+		argset rastbandarg[];
+	BEGIN
+		IF $2 IS NULL OR array_ndims($2) < 1 OR array_length($2, 1) < 1 THEN
+			RAISE EXCEPTION 'Populated 1D array must be provided for nband';
+			RETURN NULL;
+		END IF;
+
+		FOR x IN array_lower($2, 1)..array_upper($2, 1) LOOP
+			IF $2[x] IS NULL THEN
+				CONTINUE;
+			END IF;
+
+			argset := argset || ROW($1, $2[x])::rastbandarg;
+		END LOOP;
+
+		IF array_length(argset, 1) < 1 THEN
+			RAISE EXCEPTION 'Populated 1D array must be provided for nband';
+			RETURN NULL;
+		END IF;
+
+		RETURN _ST_MapAlgebra(argset, $3, $4, $7, $8, $5, $6, VARIADIC $9);
+	END;
+	$$ LANGUAGE 'plpgsql' STABLE;
+
+CREATE OR REPLACE FUNCTION st_mapalgebra(
+	rast raster, nband int,
+	callbackfunc regprocedure,
+	pixeltype text DEFAULT NULL,
+	extenttype text DEFAULT 'FIRST', customextent raster DEFAULT NULL,
+	distancex integer DEFAULT 0, distancey integer DEFAULT 0,
+	VARIADIC userargs text[] DEFAULT NULL
+)
+	RETURNS raster
+	AS $$ SELECT _ST_MapAlgebra(ARRAY[ROW($1, $2)]::rastbandarg[], $3, $4, $7, $8, $5, $6, VARIADIC $9) $$
+	LANGUAGE 'sql' STABLE;
+
+CREATE OR REPLACE FUNCTION st_mapalgebra(
+	rast1 raster, nband1 int,
+	rast2 raster, nband2 int,
+	callbackfunc regprocedure,
+	pixeltype text DEFAULT NULL,
+	extenttype text DEFAULT 'INTERSECTION', customextent raster DEFAULT NULL,
+	distancex integer DEFAULT 0, distancey integer DEFAULT 0,
+	VARIADIC userargs text[] DEFAULT NULL
+)
+	RETURNS raster
+	AS $$ SELECT _ST_MapAlgebra(ARRAY[ROW($1, $2), ROW($3, $4)]::rastbandarg[], $5, $6, $9, $10, $7, $8, VARIADIC $11) $$
+	LANGUAGE 'sql' STABLE;
+
+-----------------------------------------------------------------------
+-- n-Raster ST_MapAlgebra with expressions
+-----------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION st_mapalgebra(
+	rast raster, nband integer,
+	pixeltype text,
+	expression text, nodataval double precision DEFAULT NULL
+)
+	RETURNS raster
+	AS $$
+	DECLARE
+		rtn raster;
+		funcname text;
+		funcbody text;
+		funccmd text;
+		expr text;
+	BEGIN
+		-- set name of callback function
+		funcname := 'pg_temp.callbackfunc' || (round(random() * 1000000))::text;
+
+		-- substitute keywords
+		IF expression IS NOT NULL THEN
+			expr := replace(expression, '[rast]', ''' || value[1][1][1] || ''');
+			expr := replace(expr, '[rast.val]', ''' || value[1][1][1] || ''');
+			expr := replace(expr, '[rast.x]', ''' || pos[1][1] || ''');
+			expr := replace(expr, '[rast.y]', ''' || pos[1][2] || ''');
+		ELSE
+			expr := NULL;
+		END IF;
+
+		-- build callback function body
+		funcbody := ' DECLARE val double precision; BEGIN';
+		--funcbody := funcbody || ' RAISE NOTICE ''value = %'', value;';
+		--funcbody := funcbody || ' RAISE NOTICE ''pos = %'', pos;';
+
+		-- handle NODATA in callback function
+		funcbody := funcbody || ' IF value[1][1][1] IS NULL THEN';
+		IF nodataval IS NOT NULL THEN
+			funcbody := funcbody || ' RETURN ' || nodataval::text || ';';
+		ELSE
+			funcbody := funcbody || ' RETURN NULL;';
+		END IF;
+		funcbody := funcbody || ' END IF;';
+
+		-- handle value processing in callback function
+		IF expr IS NOT NULL THEN
+			funcbody := funcbody || ' EXECUTE ''SELECT (' || expr || ')::double precision'' INTO val;';
+		ELSE
+			funcbody := funcbody || ' val := NULL;';
+		END IF;
+
+		-- handle val is NULL
+		IF nodataval IS NOT NULL THEN
+			funcbody := funcbody || ' IF val IS NULL THEN RETURN ' || nodataval::text || '; END IF;';
+		END IF;
+
+		-- finish callback function
+		funcbody := funcbody || ' RETURN val; END;';
+
+		funccmd := 'CREATE OR REPLACE FUNCTION ' || funcname
+			|| '(value double precision[][][], pos integer[][], VARIADIC userargs text[] DEFAULT NULL)'
+			|| ' RETURNS double precision AS '
+			|| quote_literal(funcbody)
+			|| ' LANGUAGE ''plpgsql'' STABLE;';
+
+		--RAISE NOTICE 'funccmd = %', funccmd;
+
+		-- create callback function
+		EXECUTE funccmd;
+
+		-- call ST_MapAlgebra
+		rtn := ST_MapAlgebra(ARRAY[ROW($1, $2)]::rastbandarg[], (funcname || '(double precision[][][], integer[][], text[])')::regprocedure, $3, 'FIRST');
+
+		-- drop callback function
+		EXECUTE 'DROP FUNCTION IF EXISTS ' || funcname
+			|| '(double precision[][][], integer[][], text[]);';
+
+		RETURN rtn;
+	END;
+	$$ LANGUAGE 'plpgsql' VOLATILE;
+
+CREATE OR REPLACE FUNCTION st_mapalgebra(
+	rast raster,
+	pixeltype text,
+	expression text, nodataval double precision DEFAULT NULL
+)
+	RETURNS raster
+	AS $$ SELECT st_mapalgebra($1, 1, $2, $3, $4) $$
+	LANGUAGE 'sql' VOLATILE;
+
+CREATE OR REPLACE FUNCTION st_mapalgebra(
+	rast1 raster, band1 integer,
+	rast2 raster, band2 integer,
+	expression text,
+	pixeltype text DEFAULT NULL, extenttype text DEFAULT 'INTERSECTION',
+	nodata1expr text DEFAULT NULL, nodata2expr text DEFAULT NULL,
+	nodatanodataval double precision DEFAULT NULL
+)
+	RETURNS raster
+	AS $$
+	DECLARE
+		rtn raster;
+		funcname text;
+		funcbody text;
+		funccmd text;
+		expr text;
+		nd1expr text;
+		nd2expr text;
+	BEGIN
+		-- set name of callback function
+		funcname := 'pg_temp.callbackfunc' || (round(random() * 1000000))::text;
+
+		-- substitute keywords
+		-- expression
+		IF expression IS NOT NULL THEN
+			expr := replace(expression, '[rast1]', ''' || value[1][1][1] || ''');
+			expr := replace(expr, '[rast1.val]', ''' || value[1][1][1] || ''');
+			expr := replace(expr, '[rast1.x]', ''' || pos[1][1] || ''');
+			expr := replace(expr, '[rast1.y]', ''' || pos[1][2] || ''');
+
+			expr := replace(expr, '[rast2]', ''' || value[2][1][1] || ''');
+			expr := replace(expr, '[rast2.val]', ''' || value[2][1][1] || ''');
+			expr := replace(expr, '[rast2.x]', ''' || pos[2][1] || ''');
+			expr := replace(expr, '[rast2.y]', ''' || pos[2][2] || ''');
+		ELSE
+			expr := NULL;
+		END IF;
+
+		-- nodata1expr
+		IF nodata1expr IS NOT NULL THEN
+			nd1expr := replace(nodata1expr, '[rast2]', ''' || value[2][1][1] || ''');
+			nd1expr := replace(nd1expr, '[rast2.val]', ''' || value[2][1][1] || ''');
+			nd1expr := replace(nd1expr, '[rast2.x]', ''' || pos[2][1] || ''');
+			nd1expr := replace(nd1expr, '[rast2.y]', ''' || pos[2][2] || ''');
+		END IF;
+
+		-- nodata2expr
+		IF nodata2expr IS NOT NULL THEN
+			nd2expr := replace(nodata2expr, '[rast1]', ''' || value[1][1][1] || ''');
+			nd2expr := replace(nd2expr, '[rast1.val]', ''' || value[1][1][1] || ''');
+			nd2expr := replace(nd2expr, '[rast1.x]', ''' || pos[1][1] || ''');
+			nd2expr := replace(nd2expr, '[rast1.y]', ''' || pos[1][2] || ''');
+		END IF;
+
+		-- build callback function body
+		funcbody := ' DECLARE val double precision; BEGIN';
+		--funcbody := funcbody || ' RAISE NOTICE ''value = %'', value;';
+		--funcbody := funcbody || ' RAISE NOTICE ''pos = %'', pos;';
+
+		-- handle both NODATA in callback function
+		funcbody := funcbody || ' IF value[1][1][1] IS NULL AND value[2][1][1] IS NULL THEN';
+		IF nodatanodataval IS NOT NULL THEN
+			funcbody := funcbody || ' RETURN ' || nodatanodataval::text || ';';
+		ELSE
+			funcbody := funcbody || ' RETURN NULL;';
+		END IF;
+		funcbody := funcbody || ' END IF;';
+
+		-- handle first NODATA in callback function
+		funcbody := funcbody || ' IF value[1][1][1] IS NULL AND value[2][1][1] IS NOT NULL THEN';
+		IF nodata1expr IS NOT NULL THEN
+			funcbody := funcbody || ' EXECUTE ''SELECT (' || nd1expr || ')::double precision'' INTO val;';
+			funcbody := funcbody || ' RETURN val;';
+		ELSE
+			funcbody := funcbody || ' RETURN NULL;';
+		END IF;
+		funcbody := funcbody || ' END IF;';
+
+		-- handle second NODATA in callback function
+		funcbody := funcbody || ' IF value[1][1][1] IS NOT NULL AND value[2][1][1] IS NULL THEN';
+		IF nodata2expr IS NOT NULL THEN
+			funcbody := funcbody || ' EXECUTE ''SELECT (' || nd2expr || ')::double precision'' INTO val;';
+			funcbody := funcbody || ' RETURN val;';
+		ELSE
+			funcbody := funcbody || ' RETURN NULL;';
+		END IF;
+		funcbody := funcbody || ' END IF;';
+
+		-- handle value processing in callback function
+		IF expr IS NOT NULL THEN
+			funcbody := funcbody || ' EXECUTE ''SELECT (' || expr || ')::double precision'' INTO val;';
+		ELSE
+			funcbody := funcbody || ' val := NULL;';
+		END IF;
+
+		-- finish callback function
+		funcbody := funcbody || ' RETURN val; END;';
+
+		funccmd := 'CREATE OR REPLACE FUNCTION ' || funcname
+			|| '(value double precision[][][], pos integer[][], VARIADIC userargs text[] DEFAULT NULL)'
+			|| ' RETURNS double precision AS '
+			|| quote_literal(funcbody)
+			|| ' LANGUAGE ''plpgsql'' STABLE;';
+
+		--RAISE NOTICE 'funccmd = %', funccmd;
+
+		-- create callback function
+		EXECUTE funccmd;
+
+		-- call ST_MapAlgebra
+		rtn := ST_MapAlgebra(ARRAY[ROW($1, $2), ROW($3, $4)]::rastbandarg[], (funcname || '(double precision[][][], integer[][], text[])')::regprocedure, $6, $7);
+
+		-- drop callback function
+		EXECUTE 'DROP FUNCTION IF EXISTS ' || funcname
+			|| '(double precision[][][], integer[][], text[]);';
+
+		RETURN rtn;
+	END;
+	$$ LANGUAGE 'plpgsql' VOLATILE;
+
+CREATE OR REPLACE FUNCTION st_mapalgebra(
+	rast1 raster,
+	rast2 raster,
+	expression text,
+	pixeltype text DEFAULT NULL, extenttype text DEFAULT 'INTERSECTION',
+	nodata1expr text DEFAULT NULL, nodata2expr text DEFAULT NULL,
+	nodatanodataval double precision DEFAULT NULL
+)
+	RETURNS raster
+	AS $$ SELECT st_mapalgebra($1, 1, $2, 1, $3, $4, $5, $6, $7, $8) $$
+	LANGUAGE 'sql' VOLATILE;
+
+-----------------------------------------------------------------------
+-- ST_MapAlgebra callback functions
+-- Should be called with values for distancex and distancey
+-- These functions are meant for one raster
+-----------------------------------------------------------------------
+
+-- helper function to convert 2D array to 3D array
+CREATE OR REPLACE FUNCTION _st_convertarray4ma(value double precision[][])
+	RETURNS double precision[][][]
+	AS $$
+	DECLARE
+		_value double precision[][][];
+		x int;
+		y int;
+	BEGIN
+		IF array_ndims(value) != 2 THEN
+			RAISE EXCEPTION 'Function parameter must be a 2-dimension array';
+		END IF;
+
+		_value := array_fill(NULL::double precision, ARRAY[1, array_length(value, 1), array_length(value, 2)]::int[], ARRAY[1, array_lower(value, 1), array_lower(value, 2)]::int[]);
+
+		-- row
+		FOR y IN array_lower(value, 1)..array_upper(value, 1) LOOP
+			-- column
+			FOR x IN array_lower(value, 2)..array_upper(value, 2) LOOP
+				_value[1][y][x] = value[y][x];
+			END LOOP;
+		END LOOP;
+
+		RETURN _value;
+	END;
+	$$ LANGUAGE 'plpgsql' IMMUTABLE STRICT;
+
+CREATE OR REPLACE FUNCTION st_max4ma(value double precision[][][], pos integer[][], VARIADIC userargs text[] DEFAULT NULL)
+	RETURNS double precision
+	AS $$
+	DECLARE
+		_value double precision[][][];
+		max double precision;
+		x int;
+		y int;
+		z int;
+		ndims int;
+	BEGIN
+		max := '-Infinity'::double precision;
+
+		ndims := array_ndims(value);
+		-- add a third dimension if 2-dimension
+		IF ndims = 2 THEN
+			_value := _st_convertarray4ma(value);
+		ELSEIF ndims != 3 THEN
+			RAISE EXCEPTION 'First parameter of function must be a 3-dimension array';
+		ELSE
+			_value := value;
+		END IF;
+
+		-- raster
+		FOR z IN array_lower(_value, 1)..array_upper(_value, 1) LOOP
+			-- row
+			FOR y IN array_lower(_value, 2)..array_upper(_value, 2) LOOP
+				-- column
+				FOR x IN array_lower(_value, 3)..array_upper(_value, 3) LOOP
+					IF _value[z][y][x] IS NULL THEN
+						IF array_length(userargs, 1) > 0 THEN
+							_value[z][y][x] = userargs[array_lower(userargs, 1)]::double precision;
+						ELSE
+							CONTINUE;
+						END IF;
+					END IF;
+
+					IF _value[z][y][x] > max THEN
+						max := _value[z][y][x];
+					END IF;
+				END LOOP;
+			END LOOP;
+		END LOOP;
+
+		IF max = '-Infinity'::double precision THEN
+			RETURN NULL;
+		END IF;
+
+		RETURN max;
+	END;
+	$$ LANGUAGE 'plpgsql' IMMUTABLE;
+
+CREATE OR REPLACE FUNCTION st_min4ma(value double precision[][][], pos integer[][], VARIADIC userargs text[] DEFAULT NULL)
+	RETURNS double precision
+	AS $$
+	DECLARE
+		_value double precision[][][];
+		min double precision;
+		x int;
+		y int;
+		z int;
+		ndims int;
+	BEGIN
+		min := 'Infinity'::double precision;
+
+		ndims := array_ndims(value);
+		-- add a third dimension if 2-dimension
+		IF ndims = 2 THEN
+			_value := _st_convertarray4ma(value);
+		ELSEIF ndims != 3 THEN
+			RAISE EXCEPTION 'First parameter of function must be a 3-dimension array';
+		ELSE
+			_value := value;
+		END IF;
+
+		-- raster
+		FOR z IN array_lower(_value, 1)..array_upper(_value, 1) LOOP
+			-- row
+			FOR y IN array_lower(_value, 2)..array_upper(_value, 2) LOOP
+				-- column
+				FOR x IN array_lower(_value, 3)..array_upper(_value, 3) LOOP
+					IF _value[z][y][x] IS NULL THEN
+						IF array_length(userargs, 1) > 0 THEN
+							_value[z][y][x] = userargs[array_lower(userargs, 1)]::double precision;
+						ELSE
+							CONTINUE;
+						END IF;
+					END IF;
+
+					IF _value[z][y][x] < min THEN
+						min := _value[z][y][x];
+					END IF;
+				END LOOP;
+			END LOOP;
+		END LOOP;
+
+		IF min = 'Infinity'::double precision THEN
+			RETURN NULL;
+		END IF;
+
+		RETURN min;
+	END;
+	$$ LANGUAGE 'plpgsql' IMMUTABLE;
+
+CREATE OR REPLACE FUNCTION st_sum4ma(value double precision[][][], pos integer[][], VARIADIC userargs text[] DEFAULT NULL)
+	RETURNS double precision
+	AS $$
+	DECLARE
+		_value double precision[][][];
+		sum double precision;
+		x int;
+		y int;
+		z int;
+		ndims int;
+	BEGIN
+		sum := 0;
+
+		ndims := array_ndims(value);
+		-- add a third dimension if 2-dimension
+		IF ndims = 2 THEN
+			_value := _st_convertarray4ma(value);
+		ELSEIF ndims != 3 THEN
+			RAISE EXCEPTION 'First parameter of function must be a 3-dimension array';
+		ELSE
+			_value := value;
+		END IF;
+
+		-- raster
+		FOR z IN array_lower(_value, 1)..array_upper(_value, 1) LOOP
+			-- row
+			FOR y IN array_lower(_value, 2)..array_upper(_value, 2) LOOP
+				-- column
+				FOR x IN array_lower(_value, 3)..array_upper(_value, 3) LOOP
+					IF _value[z][y][x] IS NULL THEN
+						IF array_length(userargs, 1) > 0 THEN
+							_value[z][y][x] = userargs[array_lower(userargs, 1)]::double precision;
+						ELSE
+							CONTINUE;
+						END IF;
+					END IF;
+
+					sum := sum + _value[z][y][x];
+				END LOOP;
+			END LOOP;
+		END LOOP;
+
+		RETURN sum;
+	END;
+	$$ LANGUAGE 'plpgsql' IMMUTABLE;
+
+CREATE OR REPLACE FUNCTION st_mean4ma(value double precision[][][], pos integer[][], VARIADIC userargs text[] DEFAULT NULL)
+	RETURNS double precision
+	AS $$
+	DECLARE
+		_value double precision[][][];
+		sum double precision;
+		count int;
+		x int;
+		y int;
+		z int;
+		ndims int;
+	BEGIN
+		sum := 0;
+		count := 0;
+
+		ndims := array_ndims(value);
+		-- add a third dimension if 2-dimension
+		IF ndims = 2 THEN
+			_value := _st_convertarray4ma(value);
+		ELSEIF ndims != 3 THEN
+			RAISE EXCEPTION 'First parameter of function must be a 3-dimension array';
+		ELSE
+			_value := value;
+		END IF;
+
+		-- raster
+		FOR z IN array_lower(_value, 1)..array_upper(_value, 1) LOOP
+			-- row
+			FOR y IN array_lower(_value, 2)..array_upper(_value, 2) LOOP
+				-- column
+				FOR x IN array_lower(_value, 3)..array_upper(_value, 3) LOOP
+					IF _value[z][y][x] IS NULL THEN
+						IF array_length(userargs, 1) > 0 THEN
+							_value[z][y][x] = userargs[array_lower(userargs, 1)]::double precision;
+						ELSE
+							CONTINUE;
+						END IF;
+					END IF;
+
+					sum := sum + _value[z][y][x];
+					count := count + 1;
+				END LOOP;
+			END LOOP;
+		END LOOP;
+
+		IF count < 1 THEN
+			RETURN NULL;
+		END IF;
+
+		RETURN sum / count::double precision;
+	END;
+	$$ LANGUAGE 'plpgsql' IMMUTABLE;
+
+CREATE OR REPLACE FUNCTION st_range4ma(value double precision[][][], pos integer[][], VARIADIC userargs text[] DEFAULT NULL)
+	RETURNS double precision
+	AS $$
+	DECLARE
+		_value double precision[][][];
+		min double precision;
+		max double precision;
+		x int;
+		y int;
+		z int;
+		ndims int;
+	BEGIN
+		min := 'Infinity'::double precision;
+		max := '-Infinity'::double precision;
+
+		ndims := array_ndims(value);
+		-- add a third dimension if 2-dimension
+		IF ndims = 2 THEN
+			_value := _st_convertarray4ma(value);
+		ELSEIF ndims != 3 THEN
+			RAISE EXCEPTION 'First parameter of function must be a 3-dimension array';
+		ELSE
+			_value := value;
+		END IF;
+
+		-- raster
+		FOR z IN array_lower(_value, 1)..array_upper(_value, 1) LOOP
+			-- row
+			FOR y IN array_lower(_value, 2)..array_upper(_value, 2) LOOP
+				-- column
+				FOR x IN array_lower(_value, 3)..array_upper(_value, 3) LOOP
+					IF _value[z][y][x] IS NULL THEN
+						IF array_length(userargs, 1) > 0 THEN
+							_value[z][y][x] = userargs[array_lower(userargs, 1)]::double precision;
+						ELSE
+							CONTINUE;
+						END IF;
+					END IF;
+
+					IF _value[z][y][x] < min THEN
+						min := _value[z][y][x];
+					END IF;
+					IF _value[z][y][x] > max THEN
+						max := _value[z][y][x];
+					END IF;
+				END LOOP;
+			END LOOP;
+		END LOOP;
+
+		IF max = '-Infinity'::double precision OR min = 'Infinity'::double precision THEN
+			RETURN NULL;
+		END IF;
+
+		RETURN max - min;
+	END;
+	$$ LANGUAGE 'plpgsql' IMMUTABLE;
+
+CREATE OR REPLACE FUNCTION st_distinct4ma(value double precision[][][], pos integer[][], VARIADIC userargs text[] DEFAULT NULL)
+	RETURNS double precision
+	AS $$ SELECT COUNT(DISTINCT unnest)::double precision FROM unnest($1) $$
+	LANGUAGE 'sql' IMMUTABLE;
+
+CREATE OR REPLACE FUNCTION st_stddev4ma(value double precision[][][], pos integer[][], VARIADIC userargs text[] DEFAULT NULL)
+	RETURNS double precision
+	AS $$ SELECT stddev(unnest) FROM unnest($1) $$
+	LANGUAGE 'sql' IMMUTABLE;
+
+-- Inverse distance weight equation is based upon Equation 3.51 from the book
+-- Spatial Analysis A Guide for Ecologists
+-- by Marie-Josee Fortin and Mark Dale
+-- published by Cambridge University Press
+-- ISBN 0-521-00973-1
+CREATE OR REPLACE FUNCTION st_invdistweight4ma(value double precision[][][], pos integer[][], VARIADIC userargs text[] DEFAULT NULL)
+	RETURNS double precision
+	AS $$
+	DECLARE
+		_value double precision[][][];
+		ndims int;
+
+		k double precision DEFAULT 1.;
+		_k double precision DEFAULT 1.;
+		z double precision[];
+		d double precision[];
+		_d double precision;
+		z0 double precision;
+
+		_z integer;
+		x integer;
+		y integer;
+
+		cx integer;
+		cy integer;
+		cv double precision;
+		cw double precision DEFAULT NULL;
+
+		w integer;
+		h integer;
+		max_dx double precision;
+		max_dy double precision;
+	BEGIN
+--		RAISE NOTICE 'value = %', value;
+--		RAISE NOTICE 'userargs = %', userargs;
+
+		ndims := array_ndims(value);
+		-- add a third dimension if 2-dimension
+		IF ndims = 2 THEN
+			_value := _st_convertarray4ma(value);
+		ELSEIF ndims != 3 THEN
+			RAISE EXCEPTION 'First parameter of function must be a 3-dimension array';
+		ELSE
+			_value := value;
+		END IF;
+
+		-- only use the first raster passed to this function
+		IF array_length(_value, 1) > 1 THEN
+			RAISE NOTICE 'Only using the values from the first raster';
+		END IF;
+		_z := array_lower(_value, 1);
+
+		-- width and height (0-based)
+		h := array_upper(_value, 2) - array_lower(_value, 2);
+		w := array_upper(_value, 3) - array_lower(_value, 3);
+
+		-- max distance from center pixel
+		max_dx := w / 2;
+		max_dy := h / 2;
+--		RAISE NOTICE 'max_dx, max_dy = %, %', max_dx, max_dy;
+
+		-- correct width and height (1-based)
+		w := w + 1;
+		h := h + 1;
+--		RAISE NOTICE 'w, h = %, %', w, h;
+
+		-- width and height should be odd numbers
+		IF w % 2. != 1 THEN
+			RAISE EXCEPTION 'Width of neighborhood array does not permit for a center pixel';
+		END IF;
+		IF h % 2. != 1 THEN
+			RAISE EXCEPTION 'Height of neighborhood array does not permit for a center pixel';
+		END IF;
+
+		-- center pixel's coordinates
+		cy := max_dy + array_lower(_value, 2);
+		cx := max_dx + array_lower(_value, 3);
+--		RAISE NOTICE 'cx, cy = %, %', cx, cy;
+
+		-- if userargs provided, only use the first two args
+		IF userargs IS NOT NULL AND array_ndims(userargs) = 1 THEN
+			-- first arg is power factor
+			k := userargs[array_lower(userargs, 1)]::double precision;
+			IF k IS NULL THEN
+				k := _k;
+			ELSEIF k < 0. THEN
+				RAISE NOTICE 'Power factor (< 0) must be between 0 and 1.  Defaulting to 0';
+				k := 0.;
+			ELSEIF k > 1. THEN
+				RAISE NOTICE 'Power factor (> 1) must be between 0 and 1.  Defaulting to 1';
+				k := 1.;
+			END IF;
+
+			-- second arg is what to do if center pixel has a value
+			-- this will be a weight to apply for the center pixel
+			IF array_length(userargs, 1) > 1 THEN
+				cw := abs(userargs[array_lower(userargs, 1) + 1]::double precision);
+				IF cw IS NOT NULL THEN
+					IF cw < 0. THEN
+						RAISE NOTICE 'Weight (< 0) of center pixel value must be between 0 and 1.  Defaulting to 0';
+						cw := 0.;
+					ELSEIF cw > 1 THEN
+						RAISE NOTICE 'Weight (> 1) of center pixel value must be between 0 and 1.  Defaulting to 1';
+						cw := 1.;
+					END IF;
+				END IF;
+			END IF;
+		END IF;
+--		RAISE NOTICE 'k = %', k;
+		k = abs(k) * -1;
+
+		-- center pixel value
+		cv := _value[_z][cy][cx];
+
+		-- check to see if center pixel has value
+--		RAISE NOTICE 'cw = %', cw;
+		IF cw IS NULL AND cv IS NOT NULL THEN
+			RETURN cv;
+		END IF;
+
+		FOR y IN array_lower(_value, 2)..array_upper(_value, 2) LOOP
+			FOR x IN array_lower(_value, 3)..array_upper(_value, 3) LOOP
+--				RAISE NOTICE 'value[%][%][%] = %', _z, y, x, _value[_z][y][x];
+
+				-- skip NODATA values and center pixel
+				IF _value[_z][y][x] IS NULL OR (x = cx AND y = cy) THEN
+					CONTINUE;
+				END IF;
+
+				z := z || _value[_z][y][x];
+
+				-- use pythagorean theorem
+				_d := sqrt(power(cx - x, 2) + power(cy - y, 2));
+--				RAISE NOTICE 'distance = %', _d;
+
+				d := d || _d;
+			END LOOP;
+		END LOOP;
+--		RAISE NOTICE 'z = %', z;
+--		RAISE NOTICE 'd = %', d;
+
+		-- neighborhood is NODATA
+		IF z IS NULL OR array_length(z, 1) < 1 THEN
+			RETURN NULL;
+		END IF;
+
+		z0 := 0;
+		_d := 0;
+		FOR x IN array_lower(z, 1)..array_upper(z, 1) LOOP
+			d[x] := power(d[x], k);
+			z[x] := z[x] * d[x];
+			_d := _d + d[x];
+			z0 := z0 + z[x];
+		END LOOP;
+		z0 := z0 / _d;
+--		RAISE NOTICE 'z0 = %', z0;
+
+		-- apply weight for center pixel if center pixel has value
+		IF cv IS NOT NULL THEN
+			z0 := (cw * cv) + ((1 - cw) * z0);
+--			RAISE NOTICE '*z0 = %', z0;
+		END IF;
+
+		RETURN z0;
+	END;
+	$$ LANGUAGE 'plpgsql' IMMUTABLE;
+
+CREATE OR REPLACE FUNCTION st_mindist4ma(value double precision[][][], pos integer[][], VARIADIC userargs text[] DEFAULT NULL)
+	RETURNS double precision
+	AS $$
+	DECLARE
+		_value double precision[][][];
+		ndims int;
+
+		d double precision DEFAULT NULL;
+		_d double precision;
+
+		z integer;
+		x integer;
+		y integer;
+
+		cx integer;
+		cy integer;
+		cv double precision;
+
+		w integer;
+		h integer;
+		max_dx double precision;
+		max_dy double precision;
+	BEGIN
+
+		ndims := array_ndims(value);
+		-- add a third dimension if 2-dimension
+		IF ndims = 2 THEN
+			_value := _st_convertarray4ma(value);
+		ELSEIF ndims != 3 THEN
+			RAISE EXCEPTION 'First parameter of function must be a 3-dimension array';
+		ELSE
+			_value := value;
+		END IF;
+
+		-- only use the first raster passed to this function
+		IF array_length(_value, 1) > 1 THEN
+			RAISE NOTICE 'Only using the values from the first raster';
+		END IF;
+		z := array_lower(_value, 1);
+
+		-- width and height (0-based)
+		h := array_upper(_value, 2) - array_lower(_value, 2);
+		w := array_upper(_value, 3) - array_lower(_value, 3);
+
+		-- max distance from center pixel
+		max_dx := w / 2;
+		max_dy := h / 2;
+
+		-- correct width and height (1-based)
+		w := w + 1;
+		h := h + 1;
+
+		-- width and height should be odd numbers
+		IF w % 2. != 1 THEN
+			RAISE EXCEPTION 'Width of neighborhood array does not permit for a center pixel';
+		END IF;
+		IF h % 2. != 1 THEN
+			RAISE EXCEPTION 'Height of neighborhood array does not permit for a center pixel';
+		END IF;
+
+		-- center pixel's coordinates
+		cy := max_dy + array_lower(_value, 2);
+		cx := max_dx + array_lower(_value, 3);
+
+		-- center pixel value
+		cv := _value[z][cy][cx];
+
+		-- check to see if center pixel has value
+		IF cv IS NOT NULL THEN
+			RETURN 0.;
+		END IF;
+
+		FOR y IN array_lower(_value, 2)..array_upper(_value, 2) LOOP
+			FOR x IN array_lower(_value, 3)..array_upper(_value, 3) LOOP
+
+				-- skip NODATA values and center pixel
+				IF _value[z][y][x] IS NULL OR (x = cx AND y = cy) THEN
+					CONTINUE;
+				END IF;
+
+				-- use pythagorean theorem
+				_d := sqrt(power(cx - x, 2) + power(cy - y, 2));
+--				RAISE NOTICE 'distance = %', _d;
+
+				IF d IS NULL OR _d < d THEN
+					d := _d;
+				END IF;
+			END LOOP;
+		END LOOP;
+--		RAISE NOTICE 'd = %', d;
+
+		RETURN d;
+	END;
+	$$ LANGUAGE 'plpgsql' IMMUTABLE;
+
+-----------------------------------------------------------------------
+-- ST_Slope
+-- http://webhelp.esri.com/arcgisdesktop/9.3/index.cfm?TopicName=How%20Hillshade%20works
+-----------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION _st_slope4ma(value double precision[][][], pos integer[][], VARIADIC userargs text[] DEFAULT NULL)
+	RETURNS double precision
+	AS $$
+	DECLARE
+		x integer;
+		y integer;
+		z integer;
+
+		_pixwidth double precision;
+		_pixheight double precision;
+		_width double precision;
+		_height double precision;
+		_units text;
+		_scale double precision;
+
+		dz_dx double precision;
+		dz_dy double precision;
+
+		slope double precision;
+
+		_value double precision[][][];
+		ndims int;
+	BEGIN
+
+		ndims := array_ndims(value);
+		-- add a third dimension if 2-dimension
+		IF ndims = 2 THEN
+			_value := _st_convertarray4ma(value);
+		ELSEIF ndims != 3 THEN
+			RAISE EXCEPTION 'First parameter of function must be a 3-dimension array';
+		ELSE
+			_value := value;
+		END IF;
+
+		-- only use the first raster passed to this function
+		IF array_length(_value, 1) > 1 THEN
+			RAISE NOTICE 'Only using the values from the first raster';
+		END IF;
+		z := array_lower(_value, 1);
+
+		IF (
+			array_lower(_value, 2) != 1 OR array_upper(_value, 2) != 3 OR
+			array_lower(_value, 3) != 1 OR array_upper(_value, 3) != 3
+		) THEN
+			RAISE EXCEPTION 'First parameter of function must be a 1x3x3 array with each of the lower bounds starting from 1';
+		END IF;
+
+		IF array_length(userargs, 1) < 6 THEN
+			RAISE EXCEPTION 'At least six elements must be provided for the third parameter';
+		END IF;
+
+		_pixwidth := userargs[1]::double precision;
+		_pixheight := userargs[2]::double precision;
+		_width := userargs[3]::double precision;
+		_height := userargs[4]::double precision;
+		_units := userargs[5];
+		_scale := userargs[6]::double precision;
+
+		/* ArcGIS returns values for edge pixels
+		-- check that pixel is not edge pixel
+		IF (pos[1][1] = 1 OR pos[1][2] = 1) OR (pos[1][1] = _width OR pos[1][2] = _height) THEN
+			RETURN NULL;
+		ELSEIF _value[z][2][2] IS NULL THEN
+		*/
+		-- check that center pixel isn't NODATA
+		IF _value[z][2][2] IS NULL THEN
+			RETURN NULL;
+		-- substitute center pixel for any neighbor pixels that are NODATA
+		ELSE
+			FOR y IN 1..3 LOOP
+				FOR x IN 1..3 LOOP
+					IF _value[z][y][x] IS NULL THEN
+						_value[z][y][x] = _value[z][2][2];
+					END IF;
+				END LOOP;
+			END LOOP;
+		END IF;
+
+		dz_dy := ((_value[z][3][1] + _value[z][3][2] + _value[z][3][2] + _value[z][3][3]) -
+			(_value[z][1][1] + _value[z][1][2] + _value[z][1][2] + _value[z][1][3])) / _pixheight;
+		dz_dx := ((_value[z][1][3] + _value[z][2][3] + _value[z][2][3] + _value[z][3][3]) -
+			(_value[z][1][1] + _value[z][2][1] + _value[z][2][1] + _value[z][3][1])) / _pixwidth;
+
+		slope := sqrt(dz_dx * dz_dx + dz_dy * dz_dy) / (8 * _scale);
+
+		-- output depends on user preference
+		CASE substring(upper(trim(leading from _units)) for 3)
+			-- percentages
+			WHEN 'PER' THEN
+				slope := 100.0 * slope;
+			-- radians
+			WHEN 'rad' THEN
+				slope := atan(slope);
+			-- degrees (default)
+			ELSE
+				slope := degrees(atan(slope));
+		END CASE;
+
+		RETURN slope;
+	END;
+	$$ LANGUAGE 'plpgsql' IMMUTABLE;
+
+CREATE OR REPLACE FUNCTION st_slope(
+	rast raster, nband integer,
+	customextent raster,
+	pixeltype text DEFAULT '32BF', units text DEFAULT 'DEGREES',
+	scale double precision DEFAULT 1.0,	interpolate_nodata boolean DEFAULT FALSE
+)
+	RETURNS raster
+	AS $$
+	DECLARE
+		_rast raster;
+		_nband integer;
+		_pixtype text;
+		_pixwidth double precision;
+		_pixheight double precision;
+		_width integer;
+		_height integer;
+		_customextent raster;
+		_extenttype text;
+	BEGIN
+		_customextent := customextent;
+		IF _customextent IS NULL THEN
+			_extenttype := 'FIRST';
+		ELSE
+			_extenttype := 'CUSTOM';
+		END IF;
+
+		IF interpolate_nodata IS TRUE THEN
+			_rast := ST_MapAlgebra(
+				ARRAY[ROW(rast, nband)]::rastbandarg[],
+				'st_invdistweight4ma(double precision[][][], integer[][], text[])'::regprocedure,
+				pixeltype,
+				'FIRST', NULL,
+				1, 1
+			);
+			_nband := 1;
+			_pixtype := NULL;
+		ELSE
+			_rast := rast;
+			_nband := nband;
+			_pixtype := pixeltype;
+		END IF;
+
+		-- get properties
+		_pixwidth := ST_PixelWidth(_rast);
+		_pixheight := ST_PixelHeight(_rast);
+		SELECT width, height INTO _width, _height FROM ST_Metadata(_rast);
+
+		RETURN ST_MapAlgebra(
+			ARRAY[ROW(_rast, _nband)]::rastbandarg[],
+			'_st_slope4ma(double precision[][][], integer[][], text[])'::regprocedure,
+			_pixtype,
+			_extenttype, _customextent,
+			1, 1,
+			_pixwidth::text, _pixheight::text,
+			_width::text, _height::text,
+			units::text, scale::text
+		);
+	END;
+	$$ LANGUAGE 'plpgsql' IMMUTABLE;
+
+CREATE OR REPLACE FUNCTION st_slope(
+	rast raster, nband integer DEFAULT 1,
+	pixeltype text DEFAULT '32BF', units text DEFAULT 'DEGREES',
+	scale double precision DEFAULT 1.0,	interpolate_nodata boolean DEFAULT FALSE
+)
+	RETURNS raster
+	AS $$ SELECT st_slope($1, $2, NULL::raster, $3, $4, $5, $6) $$
+	LANGUAGE 'sql' IMMUTABLE;
+
+-----------------------------------------------------------------------
+-- ST_Aspect
+-- http://webhelp.esri.com/arcgisdesktop/9.3/index.cfm?TopicName=How%20Hillshade%20works
+-----------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION _st_aspect4ma(value double precision[][][], pos integer[][], VARIADIC userargs text[] DEFAULT NULL)
+	RETURNS double precision
+	AS $$
+	DECLARE
+		x integer;
+		y integer;
+		z integer;
+
+		_width double precision;
+		_height double precision;
+		_units text;
+
+		dz_dx double precision;
+		dz_dy double precision;
+		aspect double precision;
+		halfpi double precision;
+
+		_value double precision[][][];
+		ndims int;
+	BEGIN
+		ndims := array_ndims(value);
+		-- add a third dimension if 2-dimension
+		IF ndims = 2 THEN
+			_value := _st_convertarray4ma(value);
+		ELSEIF ndims != 3 THEN
+			RAISE EXCEPTION 'First parameter of function must be a 3-dimension array';
+		ELSE
+			_value := value;
+		END IF;
+
+		IF (
+			array_lower(_value, 2) != 1 OR array_upper(_value, 2) != 3 OR
+			array_lower(_value, 3) != 1 OR array_upper(_value, 3) != 3
+		) THEN
+			RAISE EXCEPTION 'First parameter of function must be a 1x3x3 array with each of the lower bounds starting from 1';
+		END IF;
+
+		IF array_length(userargs, 1) < 3 THEN
+			RAISE EXCEPTION 'At least three elements must be provided for the third parameter';
+		END IF;
+
+		-- only use the first raster passed to this function
+		IF array_length(_value, 1) > 1 THEN
+			RAISE NOTICE 'Only using the values from the first raster';
+		END IF;
+		z := array_lower(_value, 1);
+
+		_width := userargs[1]::double precision;
+		_height := userargs[2]::double precision;
+		_units := userargs[3];
+
+		/* ArcGIS returns values for edge pixels
+		-- check that pixel is not edge pixel
+		IF (pos[1][1] = 1 OR pos[1][2] = 1) OR (pos[1][1] = _width OR pos[1][2] = _height) THEN
+			RETURN NULL;
+		ELSEIF _value[z][2][2] IS NULL THEN
+		*/
+		-- check that center pixel isn't NODATA
+		IF _value[z][2][2] IS NULL THEN
+			RETURN NULL;
+		-- substitute center pixel for any neighbor pixels that are NODATA
+		ELSE
+			FOR y IN 1..3 LOOP
+				FOR x IN 1..3 LOOP
+					IF _value[z][y][x] IS NULL THEN
+						_value[z][y][x] = _value[z][2][2];
+					END IF;
+				END LOOP;
+			END LOOP;
+		END IF;
+
+		dz_dy := ((_value[z][3][1] + _value[z][3][2] + _value[z][3][2] + _value[z][3][3]) -
+			(_value[z][1][1] + _value[z][1][2] + _value[z][1][2] + _value[z][1][3]));
+		dz_dx := ((_value[z][1][3] + _value[z][2][3] + _value[z][2][3] + _value[z][3][3]) -
+			(_value[z][1][1] + _value[z][2][1] + _value[z][2][1] + _value[z][3][1]));
+
+		-- aspect is flat
+		IF abs(dz_dx) = 0::double precision AND abs(dz_dy) = 0::double precision THEN
+			RETURN -1;
+		END IF;
+
+		-- aspect is in radians
+		aspect := atan2(dz_dy, -dz_dx);
+
+		-- north = 0, pi/2 = east, 3pi/2 = west
+		halfpi := pi() / 2.0;
+		IF aspect > halfpi THEN
+			aspect := (5.0 * halfpi) - aspect;
+		ELSE
+			aspect := halfpi - aspect;
+		END IF;
+
+		IF aspect = 2 * pi() THEN
+			aspect := 0.;
+		END IF;
+
+		-- output depends on user preference
+		CASE substring(upper(trim(leading from _units)) for 3)
+			-- radians
+			WHEN 'rad' THEN
+				RETURN aspect;
+			-- degrees (default)
+			ELSE
+				RETURN degrees(aspect);
+		END CASE;
+
+	END;
+	$$ LANGUAGE 'plpgsql' IMMUTABLE;
+
+CREATE OR REPLACE FUNCTION st_aspect(
+	rast raster, nband integer,
+	customextent raster,
+	pixeltype text DEFAULT '32BF', units text DEFAULT 'DEGREES',
+	interpolate_nodata boolean DEFAULT FALSE
+)
+	RETURNS raster
+	AS $$
+	DECLARE
+		_rast raster;
+		_nband integer;
+		_pixtype text;
+		_width integer;
+		_height integer;
+		_customextent raster;
+		_extenttype text;
+	BEGIN
+		_customextent := customextent;
+		IF _customextent IS NULL THEN
+			_extenttype := 'FIRST';
+		ELSE
+			_extenttype := 'CUSTOM';
+		END IF;
+
+		IF interpolate_nodata IS TRUE THEN
+			_rast := ST_MapAlgebra(
+				ARRAY[ROW(rast, nband)]::rastbandarg[],
+				'st_invdistweight4ma(double precision[][][], integer[][], text[])'::regprocedure,
+				pixeltype,
+				'FIRST', NULL,
+				1, 1
+			);
+			_nband := 1;
+			_pixtype := NULL;
+		ELSE
+			_rast := rast;
+			_nband := nband;
+			_pixtype := pixeltype;
+		END IF;
+
+		-- get properties
+		SELECT width, height INTO _width, _height FROM ST_Metadata(_rast);
+
+		RETURN ST_MapAlgebra(
+			ARRAY[ROW(_rast, _nband)]::rastbandarg[],
+			'_st_aspect4ma(double precision[][][], integer[][], text[])'::regprocedure,
+			_pixtype,
+			_extenttype, _customextent,
+			1, 1,
+			_width::text, _height::text,
+			units::text
+		);
+	END;
+	$$ LANGUAGE 'plpgsql' IMMUTABLE;
+
+CREATE OR REPLACE FUNCTION st_aspect(
+	rast raster, nband integer DEFAULT 1,
+	pixeltype text DEFAULT '32BF', units text DEFAULT 'DEGREES',
+	interpolate_nodata boolean DEFAULT FALSE
+)
+	RETURNS raster
+	AS $$ SELECT st_aspect($1, $2, NULL::raster, $3, $4, $5) $$
+	LANGUAGE 'sql' IMMUTABLE;
+
+-----------------------------------------------------------------------
+-- ST_HillShade
+-- http://webhelp.esri.com/arcgisdesktop/9.3/index.cfm?TopicName=How%20Hillshade%20works
+-----------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION _st_hillshade4ma(value double precision[][][], pos integer[][], VARIADIC userargs text[] DEFAULT NULL)
+	RETURNS double precision
+	AS $$
+	DECLARE
+		_pixwidth double precision;
+		_pixheight double precision;
+		_width double precision;
+		_height double precision;
+		_azimuth double precision;
+		_altitude double precision;
+		_bright double precision;
+		_scale double precision;
+
+		dz_dx double precision;
+		dz_dy double precision;
+		azimuth double precision;
+		zenith double precision;
+		slope double precision;
+		aspect double precision;
+		shade double precision;
+
+		_value double precision[][][];
+		ndims int;
+		z int;
+	BEGIN
+		ndims := array_ndims(value);
+		-- add a third dimension if 2-dimension
+		IF ndims = 2 THEN
+			_value := _st_convertarray4ma(value);
+		ELSEIF ndims != 3 THEN
+			RAISE EXCEPTION 'First parameter of function must be a 3-dimension array';
+		ELSE
+			_value := value;
+		END IF;
+
+		IF (
+			array_lower(_value, 2) != 1 OR array_upper(_value, 2) != 3 OR
+			array_lower(_value, 3) != 1 OR array_upper(_value, 3) != 3
+		) THEN
+			RAISE EXCEPTION 'First parameter of function must be a 1x3x3 array with each of the lower bounds starting from 1';
+		END IF;
+
+		IF array_length(userargs, 1) < 8 THEN
+			RAISE EXCEPTION 'At least eight elements must be provided for the third parameter';
+		END IF;
+
+		-- only use the first raster passed to this function
+		IF array_length(_value, 1) > 1 THEN
+			RAISE NOTICE 'Only using the values from the first raster';
+		END IF;
+		z := array_lower(_value, 1);
+
+		_pixwidth := userargs[1]::double precision;
+		_pixheight := userargs[2]::double precision;
+		_width := userargs[3]::double precision;
+		_height := userargs[4]::double precision;
+		_azimuth := userargs[5]::double precision;
+		_altitude := userargs[6]::double precision;
+		_bright := userargs[7]::double precision;
+		_scale := userargs[8]::double precision;
+
+		-- check that pixel is not edge pixel
+		IF (pos[1][1] = 1 OR pos[1][2] = 1) OR (pos[1][1] = _width OR pos[1][2] = _height) THEN
+			RETURN NULL;
+		END IF;
+
+		-- clamp azimuth
+		IF _azimuth < 0. THEN
+			RAISE NOTICE 'Clamping provided azimuth value % to 0', _azimuth;
+			_azimuth := 0.;
+		ELSEIF _azimuth >= 360. THEN
+			RAISE NOTICE 'Converting provided azimuth value % to be between 0 and 360', _azimuth;
+			_azimuth := _azimuth - (360. * floor(_azimuth / 360.));
+		END IF;
+		azimuth := 360. - _azimuth + 90.;
+		IF azimuth >= 360. THEN
+			azimuth := azimuth - 360.;
+		END IF;
+		azimuth := radians(azimuth);
+		--RAISE NOTICE 'azimuth = %', azimuth;
+
+		-- clamp altitude
+		IF _altitude < 0. THEN
+			RAISE NOTICE 'Clamping provided altitude value % to 0', _altitude;
+			_altitude := 0.;
+		ELSEIF _altitude > 90. THEN
+			RAISE NOTICE 'Clamping provided altitude value % to 90', _altitude;
+			_altitude := 90.;
+		END IF;
+		zenith := radians(90. - _altitude);
+		--RAISE NOTICE 'zenith = %', zenith;
+
+		-- clamp bright
+		IF _bright < 0. THEN
+			RAISE NOTICE 'Clamping provided bright value % to 0', _bright;
+			_bright := 0.;
+		ELSEIF _bright > 255. THEN
+			RAISE NOTICE 'Clamping provided bright value % to 255', _bright;
+			_bright := 255.;
+		END IF;
+
+		dz_dy := ((_value[z][3][1] + _value[z][3][2] + _value[z][3][2] + _value[z][3][3]) -
+			(_value[z][1][1] + _value[z][1][2] + _value[z][1][2] + _value[z][1][3])) / (8 * _pixheight);
+		dz_dx := ((_value[z][1][3] + _value[z][2][3] + _value[z][2][3] + _value[z][3][3]) -
+			(_value[z][1][1] + _value[z][2][1] + _value[z][2][1] + _value[z][3][1])) / (8 * _pixwidth);
+
+		slope := atan(sqrt(dz_dx * dz_dx + dz_dy * dz_dy) / _scale);
+
+		IF dz_dx != 0. THEN
+			aspect := atan2(dz_dy, -dz_dx);
+
+			IF aspect < 0. THEN
+				aspect := aspect + (2.0 * pi());
+			END IF;
+		ELSE
+			IF dz_dy > 0. THEN
+				aspect := pi() / 2.;
+			ELSEIF dz_dy < 0. THEN
+				aspect := (2. * pi()) - (pi() / 2.);
+			-- set to pi as that is the expected PostgreSQL answer in Linux
+			ELSE
+				aspect := pi();
+			END IF;
+		END IF;
+
+		shade := _bright * ((cos(zenith) * cos(slope)) + (sin(zenith) * sin(slope) * cos(azimuth - aspect)));
+
+		IF shade < 0. THEN
+			shade := 0;
+		END IF;
+
+		RETURN shade;
+	END;
+	$$ LANGUAGE 'plpgsql' IMMUTABLE;
+
+CREATE OR REPLACE FUNCTION st_hillshade(
+	rast raster, nband integer,
+	customextent raster,
+	pixeltype text DEFAULT '32BF',
+	azimuth double precision DEFAULT 315.0, altitude double precision DEFAULT 45.0,
+	max_bright double precision DEFAULT 255.0, scale double precision DEFAULT 1.0,
+	interpolate_nodata boolean DEFAULT FALSE
+)
+	RETURNS RASTER
+	AS $$
+	DECLARE
+		_rast raster;
+		_nband integer;
+		_pixtype text;
+		_pixwidth double precision;
+		_pixheight double precision;
+		_width integer;
+		_height integer;
+		_customextent raster;
+		_extenttype text;
+	BEGIN
+		_customextent := customextent;
+		IF _customextent IS NULL THEN
+			_extenttype := 'FIRST';
+		ELSE
+			_extenttype := 'CUSTOM';
+		END IF;
+
+		IF interpolate_nodata IS TRUE THEN
+			_rast := ST_MapAlgebra(
+				ARRAY[ROW(rast, nband)]::rastbandarg[],
+				'st_invdistweight4ma(double precision[][][], integer[][], text[])'::regprocedure,
+				pixeltype,
+				'FIRST', NULL,
+				1, 1
+			);
+			_nband := 1;
+			_pixtype := NULL;
+		ELSE
+			_rast := rast;
+			_nband := nband;
+			_pixtype := pixeltype;
+		END IF;
+
+		-- get properties
+		_pixwidth := ST_PixelWidth(_rast);
+		_pixheight := ST_PixelHeight(_rast);
+		SELECT width, height, scalex INTO _width, _height FROM ST_Metadata(_rast);
+
+		RETURN ST_MapAlgebra(
+			ARRAY[ROW(_rast, _nband)]::rastbandarg[],
+			'_st_hillshade4ma(double precision[][][], integer[][], text[])'::regprocedure,
+			_pixtype,
+			_extenttype, _customextent,
+			1, 1,
+			_pixwidth::text, _pixheight::text,
+			_width::text, _height::text,
+			$5::text, $6::text,
+			$7::text, $8::text
+		);
+	END;
+	$$ LANGUAGE 'plpgsql' IMMUTABLE;
+
+CREATE OR REPLACE FUNCTION st_hillshade(
+	rast raster, nband integer DEFAULT 1,
+	pixeltype text DEFAULT '32BF',
+	azimuth double precision DEFAULT 315.0, altitude double precision DEFAULT 45.0,
+	max_bright double precision DEFAULT 255.0, scale double precision DEFAULT 1.0,
+	interpolate_nodata boolean DEFAULT FALSE
+)
+	RETURNS RASTER
+	AS $$ SELECT st_hillshade($1, $2, NULL::raster, $3, $4, $5, $6, $7, $8) $$
+	LANGUAGE 'sql' IMMUTABLE;
 
 -----------------------------------------------------------------------
 -- Get information about the raster
@@ -2613,12 +4137,17 @@ CREATE OR REPLACE FUNCTION st_value(rast raster, band integer, pt geometry, excl
         IF ( gtype != 'ST_Point' ) THEN
             RAISE EXCEPTION 'Attempting to get the value of a pixel with a non-point geometry';
         END IF;
+
+				IF ST_SRID(pt) != ST_SRID(rast) THEN
+            RAISE EXCEPTION 'Raster and geometry do not have the same SRID';
+				END IF;
+
         x := st_x(pt);
         y := st_y(pt);
         RETURN st_value(rast,
                         band,
-                        st_world2rastercoordx(rast, x, y),
-                        st_world2rastercoordy(rast, x, y),
+                        st_worldtorastercoordx(rast, x, y),
+                        st_worldtorastercoordy(rast, x, y),
                         exclude_nodata_value);
     END;
     $$
@@ -2830,6 +4359,47 @@ CREATE OR REPLACE FUNCTION st_setgeoreference(rast raster, georef text, format t
     LANGUAGE 'plpgsql' IMMUTABLE STRICT; -- WITH (isstrict);
 
 -----------------------------------------------------------------------
+-- ST_Tile(raster)
+-----------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION _st_tile(
+	rast raster,
+	width integer, height integer,
+	nband integer[] DEFAULT NULL,
+	padwithnodata boolean DEFAULT FALSE, nodataval double precision DEFAULT NULL
+)
+	RETURNS SETOF raster
+	AS 'MODULE_PATHNAME','RASTER_tile'
+	LANGUAGE 'c' IMMUTABLE;
+
+CREATE OR REPLACE FUNCTION st_tile(
+	rast raster, nband integer[],
+	width integer, height integer,
+	padwithnodata boolean DEFAULT FALSE, nodataval double precision DEFAULT NULL
+)
+	RETURNS SETOF raster
+	AS $$ SELECT _st_tile($1, $3, $4, $2, $5, $6) $$
+	LANGUAGE 'sql' IMMUTABLE;
+
+CREATE OR REPLACE FUNCTION st_tile(
+	rast raster, nband integer,
+	width integer, height integer,
+	padwithnodata boolean DEFAULT FALSE, nodataval double precision DEFAULT NULL
+)
+	RETURNS SETOF raster
+	AS $$ SELECT _st_tile($1, $3, $4, ARRAY[$2]::integer[], $5, $6) $$
+	LANGUAGE 'sql' IMMUTABLE;
+
+CREATE OR REPLACE FUNCTION st_tile(
+	rast raster,
+	width integer, height integer,
+	padwithnodata boolean DEFAULT FALSE, nodataval double precision DEFAULT NULL
+)
+	RETURNS SETOF raster
+	AS $$ SELECT _st_tile($1, $2, $3, NULL::integer[], $4, $5) $$
+	LANGUAGE 'sql' IMMUTABLE;
+
+-----------------------------------------------------------------------
 -- Raster Band Editors
 -----------------------------------------------------------------------
 
@@ -2853,52 +4423,6 @@ CREATE OR REPLACE FUNCTION st_setbandisnodata(rast raster, band integer DEFAULT 
 -----------------------------------------------------------------------
 -- Raster Pixel Editors
 -----------------------------------------------------------------------
-
------------------------------------------------------------------------
--- ST_SetValue (set one or more pixels to a single value)
------------------------------------------------------------------------
-
--- This function can not be STRICT, because newvalue can be NULL for nodata
-CREATE OR REPLACE FUNCTION st_setvalue(rast raster, band integer, x integer, y integer, newvalue float8)
-    RETURNS raster
-    AS 'MODULE_PATHNAME','RASTER_setPixelValue'
-    LANGUAGE 'c' IMMUTABLE;
-
--- This function can not be STRICT, because newvalue can be NULL for nodata
-CREATE OR REPLACE FUNCTION st_setvalue(rast raster, x integer, y integer, newvalue float8)
-    RETURNS raster
-    AS $$ SELECT st_setvalue($1, 1, $2, $3, $4) $$
-    LANGUAGE 'sql';
-
--- This function can not be STRICT, because newvalue can be NULL for nodata
-CREATE OR REPLACE FUNCTION st_setvalue(rast raster, band integer, pt geometry, newvalue float8)
-    RETURNS raster AS
-    $$
-    DECLARE
-        x float8;
-        y float8;
-        gtype text;
-    BEGIN
-        gtype := st_geometrytype(pt);
-        IF ( gtype != 'ST_Point' ) THEN
-            RAISE EXCEPTION 'Attempting to get the value of a pixel with a non-point geometry';
-        END IF;
-        x := st_x(pt);
-        y := st_y(pt);
-        RETURN st_setvalue(rast,
-                           band,
-                           st_world2rastercoordx(rast, x, y),
-                           st_world2rastercoordy(rast, x, y),
-                           newvalue);
-    END;
-    $$
-    LANGUAGE 'plpgsql' IMMUTABLE;
-
--- This function can not be STRICT, because newvalue can be NULL for nodata
-CREATE OR REPLACE FUNCTION st_setvalue(rast raster, pt geometry, newvalue float8)
-    RETURNS raster
-    AS $$ SELECT st_setvalue($1, 1, $2, $3) $$
-    LANGUAGE 'sql';
 
 -----------------------------------------------------------------------
 -- ST_SetValues (set one or more pixels to a one or more values)
@@ -2978,14 +4502,53 @@ CREATE OR REPLACE FUNCTION st_setvalues(
 	$$
 	LANGUAGE 'plpgsql' IMMUTABLE;
 
+-- cannot be STRICT as newvalue can be NULL
+CREATE OR REPLACE FUNCTION st_setvalues(
+	rast raster, nband integer,
+	geomvalset geomval[],
+	keepnodata boolean DEFAULT FALSE
+)
+	RETURNS raster
+	AS 'MODULE_PATHNAME', 'RASTER_setPixelValuesGeomval'
+	LANGUAGE 'c' IMMUTABLE;
+
+-----------------------------------------------------------------------
+-- ST_SetValue (set one or more pixels to a single value)
+-----------------------------------------------------------------------
+
+-- This function can not be STRICT, because newvalue can be NULL for nodata
+CREATE OR REPLACE FUNCTION st_setvalue(rast raster, band integer, x integer, y integer, newvalue float8)
+    RETURNS raster
+    AS 'MODULE_PATHNAME','RASTER_setPixelValue'
+    LANGUAGE 'c' IMMUTABLE;
+
+-- This function can not be STRICT, because newvalue can be NULL for nodata
+CREATE OR REPLACE FUNCTION st_setvalue(rast raster, x integer, y integer, newvalue float8)
+    RETURNS raster
+    AS $$ SELECT st_setvalue($1, 1, $2, $3, $4) $$
+    LANGUAGE 'sql';
+
+-- cannot be STRICT as newvalue can be NULL
+CREATE OR REPLACE FUNCTION st_setvalue(
+	rast raster, nband integer,
+	geom geometry, newvalue double precision
+)
+	RETURNS raster
+	AS $$ SELECT st_setvalues($1, $2, ARRAY[ROW($3, $4)]::geomval[], FALSE) $$
+	LANGUAGE 'sql' IMMUTABLE;
+
+-- cannot be STRICT as newvalue can be NULL
+CREATE OR REPLACE FUNCTION st_setvalue(
+	rast raster,
+	geom geometry, newvalue double precision
+)
+	RETURNS raster
+	AS $$ SELECT st_setvalues($1, 1, ARRAY[ROW($2, $3)]::geomval[], FALSE) $$
+	LANGUAGE 'sql' IMMUTABLE;
+
 -----------------------------------------------------------------------
 -- Raster Processing Functions
 -----------------------------------------------------------------------
-
-CREATE TYPE geomval AS (
-	geom geometry,
-	val double precision
-);
 
 -----------------------------------------------------------------------
 -- ST_DumpAsPolygons
@@ -2994,6 +4557,22 @@ CREATE OR REPLACE FUNCTION st_dumpaspolygons(rast raster, band integer DEFAULT 1
 	RETURNS SETOF geomval
 	AS 'MODULE_PATHNAME','RASTER_dumpAsPolygons'
 	LANGUAGE 'c' IMMUTABLE STRICT;
+
+-----------------------------------------------------------------------
+-- ST_DumpValues
+-----------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION st_dumpvalues(
+	rast raster, nband integer[] DEFAULT NULL, exclude_nodata_value boolean DEFAULT TRUE,
+	OUT nband integer, OUT valarray double precision[][]
+)
+	RETURNS SETOF record
+	AS 'MODULE_PATHNAME','RASTER_dumpValues'
+	LANGUAGE 'c' IMMUTABLE;
+
+CREATE OR REPLACE FUNCTION st_dumpvalues(rast raster, nband integer, exclude_nodata_value boolean DEFAULT TRUE)
+	RETURNS double precision[][]
+	AS $$ SELECT valarray FROM st_dumpvalues($1, ARRAY[$2]::integer[], $3) $$
+	LANGUAGE 'sql' IMMUTABLE STRICT;
 
 -----------------------------------------------------------------------
 -- ST_Polygon
@@ -3103,10 +4682,10 @@ CREATE OR REPLACE FUNCTION st_pixelascentroid(rast raster, x integer, y integer)
 -----------------------------------------------------------------------
 
 -----------------------------------------------------------------------
--- ST_World2RasterCoord
+-- ST_WorldToRasterCoord
 -----------------------------------------------------------------------
 
-CREATE OR REPLACE FUNCTION _st_world2rastercoord(
+CREATE OR REPLACE FUNCTION _st_worldtorastercoord(
 	rast raster,
 	longitude double precision DEFAULT NULL, latitude double precision DEFAULT NULL,
 	OUT columnx integer,
@@ -3116,26 +4695,26 @@ CREATE OR REPLACE FUNCTION _st_world2rastercoord(
 	LANGUAGE 'c' IMMUTABLE;
 
 ---------------------------------------------------------------------------------
--- ST_World2RasterCoord(rast raster, longitude float8, latitude float8)
+-- ST_WorldToRasterCoord(rast raster, longitude float8, latitude float8)
 -- Returns the pixel column and row covering the provided X and Y world
 -- coordinates.
 -- This function works even if the world coordinates are outside the raster extent.
 ---------------------------------------------------------------------------------
-CREATE OR REPLACE FUNCTION st_world2rastercoord(
+CREATE OR REPLACE FUNCTION st_worldtorastercoord(
 	rast raster,
 	longitude double precision, latitude double precision,
 	OUT columnx integer,
 	OUT rowy integer
 )
-	AS $$ SELECT columnx, rowy FROM _st_world2rastercoord($1, $2, $3) $$
+	AS $$ SELECT columnx, rowy FROM _st_worldtorastercoord($1, $2, $3) $$
 	LANGUAGE 'sql' IMMUTABLE STRICT;
 
 ---------------------------------------------------------------------------------
--- ST_World2RasterCoordX(rast raster, pt geometry)
+-- ST_WorldToRasterCoordX(rast raster, pt geometry)
 -- Returns the pixel column and row covering the provided point geometry. 
 -- This function works even if the point is outside the raster extent.
 ---------------------------------------------------------------------------------
-CREATE OR REPLACE FUNCTION st_world2rastercoord(
+CREATE OR REPLACE FUNCTION st_worldtorastercoord(
 	rast raster, pt geometry,
 	OUT columnx integer,
 	OUT rowy integer
@@ -3146,45 +4725,49 @@ CREATE OR REPLACE FUNCTION st_world2rastercoord(
 		rx integer;
 		ry integer;
 	BEGIN
-		IF (st_geometrytype(pt) != 'ST_Point') THEN
+		IF st_geometrytype(pt) != 'ST_Point' THEN
 			RAISE EXCEPTION 'Attempting to compute raster coordinate with a non-point geometry';
 		END IF;
-		SELECT rc.columnx AS x, rc.rowy AS y INTO columnx, rowy FROM _st_world2rastercoord($1, st_x(pt), st_y(pt)) AS rc;
+		IF ST_SRID(rast) != ST_SRID(pt) THEN
+			RAISE EXCEPTION 'Raster and geometry do not have the same SRID';
+		END IF;
+
+		SELECT rc.columnx AS x, rc.rowy AS y INTO columnx, rowy FROM _st_worldtorastercoord($1, st_x(pt), st_y(pt)) AS rc;
 		RETURN;
 	END;
 	$$
 	LANGUAGE 'plpgsql' IMMUTABLE STRICT;
 
 ---------------------------------------------------------------------------------
--- ST_World2RasterCoordX(rast raster, xw float8, yw float8)
+-- ST_WorldToRasterCoordX(rast raster, xw float8, yw float8)
 -- Returns the column number of the pixel covering the provided X and Y world
 -- coordinates.
 -- This function works even if the world coordinates are outside the raster extent.
 ---------------------------------------------------------------------------------
-CREATE OR REPLACE FUNCTION st_world2rastercoordx(rast raster, xw float8, yw float8)
+CREATE OR REPLACE FUNCTION st_worldtorastercoordx(rast raster, xw float8, yw float8)
 	RETURNS int
-	AS $$ SELECT columnx FROM _st_world2rastercoord($1, $2, $3) $$
+	AS $$ SELECT columnx FROM _st_worldtorastercoord($1, $2, $3) $$
 	LANGUAGE 'sql' IMMUTABLE STRICT;
 
 ---------------------------------------------------------------------------------
--- ST_World2RasterCoordX(rast raster, xw float8)
+-- ST_WorldToRasterCoordX(rast raster, xw float8)
 -- Returns the column number of the pixels covering the provided world X coordinate
 -- for a non-rotated raster.
 -- This function works even if the world coordinate is outside the raster extent.
 -- This function returns an error if the raster is rotated. In this case you must
 -- also provide a Y.
 ---------------------------------------------------------------------------------
-CREATE OR REPLACE FUNCTION st_world2rastercoordx(rast raster, xw float8)
+CREATE OR REPLACE FUNCTION st_worldtorastercoordx(rast raster, xw float8)
 	RETURNS int
-	AS $$ SELECT columnx FROM _st_world2rastercoord($1, $2, NULL) $$
+	AS $$ SELECT columnx FROM _st_worldtorastercoord($1, $2, NULL) $$
 	LANGUAGE 'sql' IMMUTABLE STRICT;
 
 ---------------------------------------------------------------------------------
--- ST_World2RasterCoordX(rast raster, pt geometry)
+-- ST_WorldToRasterCoordX(rast raster, pt geometry)
 -- Returns the column number of the pixel covering the provided point geometry.
 -- This function works even if the point is outside the raster extent.
 ---------------------------------------------------------------------------------
-CREATE OR REPLACE FUNCTION st_world2rastercoordx(rast raster, pt geometry)
+CREATE OR REPLACE FUNCTION st_worldtorastercoordx(rast raster, pt geometry)
 	RETURNS int AS
 	$$
 	DECLARE
@@ -3193,42 +4776,45 @@ CREATE OR REPLACE FUNCTION st_world2rastercoordx(rast raster, pt geometry)
 		IF ( st_geometrytype(pt) != 'ST_Point' ) THEN
 			RAISE EXCEPTION 'Attempting to compute raster coordinate with a non-point geometry';
 		END IF;
-		SELECT columnx INTO xr FROM _st_world2rastercoord($1, st_x(pt), st_y(pt));
+		IF ST_SRID(rast) != ST_SRID(pt) THEN
+			RAISE EXCEPTION 'Raster and geometry do not have the same SRID';
+		END IF;
+		SELECT columnx INTO xr FROM _st_worldtorastercoord($1, st_x(pt), st_y(pt));
 		RETURN xr;
 	END;
 	$$
 	LANGUAGE 'plpgsql' IMMUTABLE STRICT;
 
 ---------------------------------------------------------------------------------
--- ST_World2RasterCoordY(rast raster, xw float8, yw float8)
+-- ST_WorldToRasterCoordY(rast raster, xw float8, yw float8)
 -- Returns the row number of the pixel covering the provided X and Y world
 -- coordinates.
 -- This function works even if the world coordinates are outside the raster extent.
 ---------------------------------------------------------------------------------
-CREATE OR REPLACE FUNCTION st_world2rastercoordy(rast raster, xw float8, yw float8)
+CREATE OR REPLACE FUNCTION st_worldtorastercoordy(rast raster, xw float8, yw float8)
 	RETURNS int
-	AS $$ SELECT rowy FROM _st_world2rastercoord($1, $2, $3) $$
+	AS $$ SELECT rowy FROM _st_worldtorastercoord($1, $2, $3) $$
 	LANGUAGE 'sql' IMMUTABLE STRICT;
 
 ---------------------------------------------------------------------------------
--- ST_World2RasterCoordY(rast raster, yw float8)
+-- ST_WorldToRasterCoordY(rast raster, yw float8)
 -- Returns the row number of the pixels covering the provided world Y coordinate
 -- for a non-rotated raster.
 -- This function works even if the world coordinate is outside the raster extent.
 -- This function returns an error if the raster is rotated. In this case you must
 -- also provide an X.
 ---------------------------------------------------------------------------------
-CREATE OR REPLACE FUNCTION st_world2rastercoordy(rast raster, yw float8)
+CREATE OR REPLACE FUNCTION st_worldtorastercoordy(rast raster, yw float8)
 	RETURNS int
-	AS $$ SELECT rowy FROM _st_world2rastercoord($1, NULL, $2) $$
+	AS $$ SELECT rowy FROM _st_worldtorastercoord($1, NULL, $2) $$
 	LANGUAGE 'sql' IMMUTABLE STRICT;
 
 ---------------------------------------------------------------------------------
--- ST_World2RasterCoordY(rast raster, pt geometry)
+-- ST_WorldToRasterCoordY(rast raster, pt geometry)
 -- Returns the row number of the pixel covering the provided point geometry.
 -- This function works even if the point is outside the raster extent.
 ---------------------------------------------------------------------------------
-CREATE OR REPLACE FUNCTION st_world2rastercoordy(rast raster, pt geometry)
+CREATE OR REPLACE FUNCTION st_worldtorastercoordy(rast raster, pt geometry)
 	RETURNS int AS
 	$$
 	DECLARE
@@ -3237,17 +4823,20 @@ CREATE OR REPLACE FUNCTION st_world2rastercoordy(rast raster, pt geometry)
 		IF ( st_geometrytype(pt) != 'ST_Point' ) THEN
 			RAISE EXCEPTION 'Attempting to compute raster coordinate with a non-point geometry';
 		END IF;
-		SELECT rowy INTO yr FROM _st_world2rastercoord($1, st_x(pt), st_y(pt));
+		IF ST_SRID(rast) != ST_SRID(pt) THEN
+			RAISE EXCEPTION 'Raster and geometry do not have the same SRID';
+		END IF;
+		SELECT rowy INTO yr FROM _st_worldtorastercoord($1, st_x(pt), st_y(pt));
 		RETURN yr;
 	END;
 	$$
 	LANGUAGE 'plpgsql' IMMUTABLE STRICT;
 
 ---------------------------------------------------------------------------------
--- ST_Raster2WorldCoord
+-- ST_RasterToWorldCoord
 ---------------------------------------------------------------------------------
 
-CREATE OR REPLACE FUNCTION _st_raster2worldcoord(
+CREATE OR REPLACE FUNCTION _st_rastertoworldcoord(
 	rast raster,
 	columnx integer DEFAULT NULL, rowy integer DEFAULT NULL,
 	OUT longitude double precision,
@@ -3257,35 +4846,35 @@ CREATE OR REPLACE FUNCTION _st_raster2worldcoord(
 	LANGUAGE 'c' IMMUTABLE;
 
 ---------------------------------------------------------------------------------
--- ST_Raster2WorldCoordX(rast raster, xr int, yr int)
+-- ST_RasterToWorldCoordX(rast raster, xr int, yr int)
 -- Returns the longitude and latitude of the upper left corner of the pixel
 -- located at the provided pixel column and row.
 -- This function works even if the provided raster column and row are beyond or
 -- below the raster width and height.
 ---------------------------------------------------------------------------------
-CREATE OR REPLACE FUNCTION st_raster2worldcoord(
+CREATE OR REPLACE FUNCTION st_rastertoworldcoord(
 	rast raster,
 	columnx integer, rowy integer,
 	OUT longitude double precision,
 	OUT latitude double precision
 )
-	AS $$ SELECT longitude, latitude FROM _st_raster2worldcoord($1, $2, $3) $$
+	AS $$ SELECT longitude, latitude FROM _st_rastertoworldcoord($1, $2, $3) $$
 	LANGUAGE 'sql' IMMUTABLE STRICT;
 
 ---------------------------------------------------------------------------------
--- ST_Raster2WorldCoordX(rast raster, xr int, yr int)
+-- ST_RasterToWorldCoordX(rast raster, xr int, yr int)
 -- Returns the X world coordinate of the upper left corner of the pixel located at
 -- the provided column and row numbers.
 -- This function works even if the provided raster column and row are beyond or
 -- below the raster width and height.
 ---------------------------------------------------------------------------------
-CREATE OR REPLACE FUNCTION st_raster2worldcoordx(rast raster, xr int, yr int)
+CREATE OR REPLACE FUNCTION st_rastertoworldcoordx(rast raster, xr int, yr int)
 	RETURNS float8
-	AS $$ SELECT longitude FROM _st_raster2worldcoord($1, $2, $3) $$
+	AS $$ SELECT longitude FROM _st_rastertoworldcoord($1, $2, $3) $$
 	LANGUAGE 'sql' IMMUTABLE STRICT;
 
 ---------------------------------------------------------------------------------
--- ST_Raster2WorldCoordX(rast raster, xr int)
+-- ST_RasterToWorldCoordX(rast raster, xr int)
 -- Returns the X world coordinate of the upper left corner of the pixel located at
 -- the provided column number for a non-rotated raster.
 -- This function works even if the provided raster column is beyond or below the
@@ -3293,25 +4882,25 @@ CREATE OR REPLACE FUNCTION st_raster2worldcoordx(rast raster, xr int, yr int)
 -- This function returns an error if the raster is rotated. In this case you must
 -- also provide a Y.
 ---------------------------------------------------------------------------------
-CREATE OR REPLACE FUNCTION st_raster2worldcoordx(rast raster, xr int)
+CREATE OR REPLACE FUNCTION st_rastertoworldcoordx(rast raster, xr int)
 	RETURNS float8
-	AS $$ SELECT longitude FROM _st_raster2worldcoord($1, $2, NULL) $$
+	AS $$ SELECT longitude FROM _st_rastertoworldcoord($1, $2, NULL) $$
 	LANGUAGE 'sql' IMMUTABLE STRICT;
 
 ---------------------------------------------------------------------------------
--- ST_Raster2WorldCoordY(rast raster, xr int, yr int)
+-- ST_RasterToWorldCoordY(rast raster, xr int, yr int)
 -- Returns the Y world coordinate of the upper left corner of the pixel located at
 -- the provided column and row numbers.
 -- This function works even if the provided raster column and row are beyond or
 -- below the raster width and height.
 ---------------------------------------------------------------------------------
-CREATE OR REPLACE FUNCTION st_raster2worldcoordy(rast raster, xr int, yr int)
+CREATE OR REPLACE FUNCTION st_rastertoworldcoordy(rast raster, xr int, yr int)
 	RETURNS float8
-	AS $$ SELECT latitude FROM _st_raster2worldcoord($1, $2, $3) $$
+	AS $$ SELECT latitude FROM _st_rastertoworldcoord($1, $2, $3) $$
 	LANGUAGE 'sql' IMMUTABLE STRICT;
 
 ---------------------------------------------------------------------------------
--- ST_Raster2WorldCoordY(rast raster, yr int)
+-- ST_RasterToWorldCoordY(rast raster, yr int)
 -- Returns the Y world coordinate of the upper left corner of the pixel located at
 -- the provided row number for a non-rotated raster.
 -- This function works even if the provided raster row is beyond or below the
@@ -3319,9 +4908,9 @@ CREATE OR REPLACE FUNCTION st_raster2worldcoordy(rast raster, xr int, yr int)
 -- This function returns an error if the raster is rotated. In this case you must
 -- also provide an X.
 ---------------------------------------------------------------------------------
-CREATE OR REPLACE FUNCTION st_raster2worldcoordy(rast raster, yr int)
+CREATE OR REPLACE FUNCTION st_rastertoworldcoordy(rast raster, yr int)
 	RETURNS float8
-	AS $$ SELECT latitude FROM _st_raster2worldcoord($1, NULL, $2) $$
+	AS $$ SELECT latitude FROM _st_rastertoworldcoord($1, NULL, $2) $$
 	LANGUAGE 'sql' IMMUTABLE STRICT;
 
 -----------------------------------------------------------------------
@@ -3362,6 +4951,33 @@ CREATE CAST (raster AS geometry)
 
 CREATE CAST (raster AS bytea)
     WITH FUNCTION bytea(raster) AS ASSIGNMENT;
+
+-------------------------------------------------------------------
+-- HASH operators
+-------------------------------------------------------------------
+
+-- call PostgreSQL's hashvarlena() function
+CREATE OR REPLACE FUNCTION raster_hash(raster)
+	RETURNS integer
+	AS 'hashvarlena'
+	LANGUAGE 'internal' IMMUTABLE STRICT;
+
+-- use raster_hash() to compare
+CREATE OR REPLACE FUNCTION raster_eq(raster, raster)
+	RETURNS bool
+	AS $$ SELECT raster_hash($1) = raster_hash($2) $$
+	LANGUAGE 'sql' IMMUTABLE STRICT;
+
+CREATE OPERATOR = (
+	LEFTARG = raster, RIGHTARG = raster, PROCEDURE = raster_eq,
+	COMMUTATOR = '=',
+	RESTRICT = eqsel, JOIN = eqjoinsel
+);
+
+CREATE OPERATOR CLASS hash_raster_ops
+	DEFAULT FOR TYPE raster USING hash AS
+	OPERATOR	1	= ,
+	FUNCTION	1	raster_hash (raster);
 
 ------------------------------------------------------------------------------
 --  GiST index OPERATOR support functions
@@ -3616,6 +5232,126 @@ CREATE AGGREGATE st_samealignment(raster) (
 );
 
 -----------------------------------------------------------------------
+-- ST_NotSameAlignmentReason
+-----------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION st_notsamealignmentreason(rast1 raster, rast2 raster)
+	RETURNS text
+	AS 'MODULE_PATHNAME', 'RASTER_notSameAlignmentReason'
+	LANGUAGE 'c' IMMUTABLE STRICT;
+
+-----------------------------------------------------------------------
+-- ST_IsCoverageTile
+-----------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION st_iscoveragetile(rast raster, coverage raster, tilewidth integer, tileheight integer)
+	RETURNS boolean
+	AS $$
+	DECLARE
+		_rastmeta record;
+		_covmeta record;
+		cr record;
+		max integer[];
+		tile integer[];
+		edge integer[];
+	BEGIN
+		IF NOT ST_SameAlignment(rast, coverage) THEN
+			RAISE NOTICE 'Raster and coverage are not aligned';
+			RETURN FALSE;
+		END IF;
+
+		_rastmeta := ST_Metadata(rast);
+		_covmeta := ST_Metadata(coverage);
+
+		-- get coverage grid coordinates of upper-left of rast
+		cr := ST_WorldToRasterCoord(coverage, _rastmeta.upperleftx, _rastmeta.upperlefty);
+
+		-- rast is not part of coverage
+		IF
+			(cr.columnx < 1 OR cr.columnx > _covmeta.width) OR
+			(cr.rowy < 1 OR cr.rowy > _covmeta.height)
+		THEN
+			RAISE NOTICE 'Raster is not in the coverage';
+			RETURN FALSE;
+		END IF;
+
+		-- rast isn't on the coverage's grid
+		IF
+			((cr.columnx - 1) % tilewidth != 0) OR
+			((cr.rowy - 1) % tileheight != 0)
+		THEN
+			RAISE NOTICE 'Raster is not aligned to tile grid of coverage';
+			RETURN FALSE;
+		END IF;
+
+		-- max # of tiles on X and Y for coverage
+		max[0] := ceil(_covmeta.width::double precision / tilewidth::double precision)::integer;
+		max[1] := ceil(_covmeta.height::double precision / tileheight::double precision)::integer;
+
+		-- tile # of rast in coverge
+		tile[0] := (cr.columnx / tilewidth) + 1;
+		tile[1] := (cr.rowy / tileheight) + 1;
+
+		-- inner tile
+		IF tile[0] < max[0] AND tile[1] < max[1] THEN
+			IF
+				(_rastmeta.width != tilewidth) OR
+				(_rastmeta.height != tileheight)
+			THEN
+				RAISE NOTICE 'Raster width/height is invalid for interior tile of coverage';
+				RETURN FALSE;
+			ELSE
+				RETURN TRUE;
+			END IF;
+		END IF;
+
+		-- edge tile
+
+		-- edge tile may have same size as inner tile
+		IF 
+			(_rastmeta.width = tilewidth) AND
+			(_rastmeta.height = tileheight)
+		THEN
+			RETURN TRUE;
+		END IF;
+
+		-- get edge tile width and height
+		edge[0] := _covmeta.width - ((max[0] - 1) * tilewidth);
+		edge[1] := _covmeta.height - ((max[1] - 1) * tileheight);
+
+		-- edge tile not of expected tile size
+		-- right and bottom
+		IF tile[0] = max[0] AND tile[1] = max[1] THEN
+			IF
+				_rastmeta.width != edge[0] OR
+				_rastmeta.height != edge[1]
+			THEN
+				RAISE NOTICE 'Raster width/height is invalid for right-most AND bottom-most tile of coverage';
+				RETURN FALSE;
+			END IF;
+		ELSEIF tile[0] = max[0] THEN
+			IF
+				_rastmeta.width != edge[0] OR
+				_rastmeta.height != tileheight
+			THEN
+				RAISE NOTICE 'Raster width/height is invalid for right-most tile of coverage';
+				RETURN FALSE;
+			END IF;
+		ELSE
+			IF
+				_rastmeta.width != tilewidth OR
+				_rastmeta.height != edge[1]
+			THEN
+				RAISE NOTICE 'Raster width/height is invalid for bottom-most tile of coverage';
+				RETURN FALSE;
+			END IF;
+		END IF;
+
+		RETURN TRUE;
+	END;
+	$$ LANGUAGE 'plpgsql' IMMUTABLE STRICT;
+
+-----------------------------------------------------------------------
 -- ST_Intersects(raster, raster)
 -----------------------------------------------------------------------
 
@@ -3672,6 +5408,10 @@ CREATE OR REPLACE FUNCTION _st_intersects(geom geometry, rast raster, nband inte
 		w int;
 		h int;
 	BEGIN
+		IF ST_SRID(rast) != ST_SRID(geom) THEN
+			RAISE EXCEPTION 'Raster and geometry do not have the same SRID';
+		END IF;
+
 		convexhull := ST_ConvexHull(rast);
 		IF nband IS NOT NULL THEN
 			SELECT CASE WHEN bmd.nodatavalue IS NULL THEN FALSE ELSE NULL END INTO hasnodata FROM ST_BandMetaData(rast, nband) AS bmd;
@@ -3713,14 +5453,14 @@ CREATE OR REPLACE FUNCTION _st_intersects(geom geometry, rast raster, nband inte
 --RAISE NOTICE 'x1w=%, y1w=%, x2w=%, y2w=%', x1w, y1w, x2w, y2w;
 
 		-- Convert world coordinates to raster coordinates
-		x1 := st_world2rastercoordx(rast, x1w, y1w);
-		y1 := st_world2rastercoordy(rast, x1w, y1w);
-		x2 := st_world2rastercoordx(rast, x2w, y1w);
-		y2 := st_world2rastercoordy(rast, x2w, y1w);
-		x3 := st_world2rastercoordx(rast, x1w, y2w);
-		y3 := st_world2rastercoordy(rast, x1w, y2w);
-		x4 := st_world2rastercoordx(rast, x2w, y2w);
-		y4 := st_world2rastercoordy(rast, x2w, y2w);
+		x1 := st_worldtorastercoordx(rast, x1w, y1w);
+		y1 := st_worldtorastercoordy(rast, x1w, y1w);
+		x2 := st_worldtorastercoordx(rast, x2w, y1w);
+		y2 := st_worldtorastercoordy(rast, x2w, y1w);
+		x3 := st_worldtorastercoordx(rast, x1w, y2w);
+		y3 := st_worldtorastercoordy(rast, x1w, y2w);
+		x4 := st_worldtorastercoordx(rast, x2w, y2w);
+		y4 := st_worldtorastercoordy(rast, x2w, y2w);
 
 --RAISE NOTICE 'x1=%, y1=%, x2=%, y2=%, x3=%, y3=%, x4=%, y4=%', x1, y1, x2, y2, x3, y3, x4, y4;
 
@@ -4073,6 +5813,10 @@ CREATE OR REPLACE FUNCTION st_intersection(
 		newnodata1 float8;
 		newnodata2 float8;
 	BEGIN
+		IF ST_SRID(rast1) != ST_SRID(rast2) THEN
+			RAISE EXCEPTION 'The two rasters do not have the same SRID';
+		END IF;
+
 		newnodata1 := coalesce(nodataval[1], ST_BandNodataValue(rast1, band1), ST_MinPossibleValue(ST_BandPixelType(rast1, band1)));
 		newnodata2 := coalesce(nodataval[2], ST_BandNodataValue(rast2, band2), ST_MinPossibleValue(ST_BandPixelType(rast2, band2)));
 		
@@ -4168,233 +5912,131 @@ CREATE OR REPLACE FUNCTION st_intersection(
 	LANGUAGE 'sql' STABLE;
 
 -----------------------------------------------------------------------
--- st_union aggregate
+-- ST_Union aggregate
 -----------------------------------------------------------------------
--- Main state function
-CREATE OR REPLACE FUNCTION _ST_MapAlgebra4UnionState(rast1 raster,  rast2 raster, p_expression text, p_nodata1expr text, p_nodata2expr text, p_nodatanodataval double precision,t_expression text,t_nodata1expr text, t_nodata2expr text,t_nodatanodataval double precision)
-    RETURNS raster AS
-    $$
-    DECLARE
-        t_raster raster;
-        p_raster raster;
-    BEGIN
-        -- With the new ST_MapAlgebraExpr we must split the main expression in three expressions: expression, nodata1expr, nodata2expr and a nodatanodataval
-        -- ST_MapAlgebraExpr(rast1 raster, band1 integer, rast2 raster, band2 integer, expression text, pixeltype text, extentexpr text, nodata1expr text, nodata2expr text, nodatanodatadaval double precision)
-        -- We must make sure that when NULL is passed as the first raster to ST_MapAlgebraExpr, ST_MapAlgebraExpr resolve the nodata1expr
-        -- Note: rast2 is always a single band raster since it is the accumulated raster thus far
-        -- 		There we always set that to band 1 regardless of what band num is requested
-        IF upper(p_expression) = 'LAST' THEN
-            --RAISE NOTICE 'last asked for ';
-            RETURN ST_MapAlgebraExpr(rast1, 1, rast2, 1, '[rast2.val]'::text, NULL::text, 'UNION'::text, '[rast2.val]'::text, '[rast1.val]'::text, NULL::double precision);
-        ELSIF upper(p_expression) = 'FIRST' THEN
-            RETURN ST_MapAlgebraExpr(rast1, 1, rast2, 1, '[rast1.val]'::text, NULL::text, 'UNION'::text, '[rast2.val]'::text, '[rast1.val]'::text, NULL::double precision);
-        ELSIF upper(p_expression) = 'MIN' THEN
-            RETURN ST_MapAlgebraExpr(rast1, 1, rast2, 1, 'LEAST([rast1.val], [rast2.val])'::text, NULL::text, 'UNION'::text, '[rast2.val]'::text, '[rast1.val]'::text, NULL::double precision);
-        ELSIF upper(p_expression) = 'MAX' THEN
-            RETURN ST_MapAlgebraExpr(rast1, 1, rast2, 1, 'GREATEST([rast1.val], [rast2.val])'::text, NULL::text, 'UNION'::text, '[rast2.val]'::text, '[rast1.val]'::text, NULL::double precision);
-        ELSIF upper(p_expression) = 'COUNT' THEN
-            RETURN ST_MapAlgebraExpr(rast1, 1, rast2, 1, '[rast1.val] + 1'::text, NULL::text, 'UNION'::text, '1'::text, '[rast1.val]'::text, 0::double precision);
-        ELSIF upper(p_expression) = 'SUM' THEN
-            RETURN ST_MapAlgebraExpr(rast1, 1, rast2, 1, '[rast1.val] + [rast2.val]'::text, NULL::text, 'UNION'::text, '[rast2.val]'::text, '[rast1.val]'::text, NULL::double precision);
-        ELSIF upper(p_expression) = 'RANGE' THEN
-        -- have no idea what this is 
-            t_raster = ST_MapAlgebraExpr(rast1, 2, rast2, 1, 'LEAST([rast1.val], [rast2.val])'::text, NULL::text, 'UNION'::text, '[rast2.val]'::text, '[rast1.val]'::text, NULL::double precision);
-            p_raster := _ST_MapAlgebra4UnionState(rast1, rast2, 'MAX'::text, NULL::text, NULL::text, NULL::double precision, NULL::text, NULL::text, NULL::text, NULL::double precision);
-            RETURN ST_AddBand(p_raster, t_raster, 1, 2);
-        ELSIF upper(p_expression) = 'MEAN' THEN
-        -- looks like t_raster is used to keep track of accumulated count
-        -- and p_raster is there to keep track of accumulated sum and final state function
-        -- would then do a final map to divide them.  This one is currently broken because 
-        	-- have not reworked it so it can do without a final function
-            t_raster = ST_MapAlgebraExpr(rast1, 2, rast2, 1, '[rast1.val] + 1'::text, NULL::text, 'UNION'::text, '1'::text, '[rast1.val]'::text, 0::double precision);
-            p_raster := _ST_MapAlgebra4UnionState(rast1, rast2, 'SUM'::text, NULL::text, NULL::text, NULL::double precision, NULL::text, NULL::text, NULL::text, NULL::double precision);
-            RETURN ST_AddBand(p_raster, t_raster, 1, 2);
-        ELSE
-            IF t_expression NOTNULL AND t_expression != '' THEN
-                t_raster = ST_MapAlgebraExpr(rast1, 2, rast2, 1, t_expression, NULL::text, 'UNION'::text, t_nodata1expr, t_nodata2expr, t_nodatanodataval::double precision);
-                p_raster = ST_MapAlgebraExpr(rast1, 1, rast2, 1, p_expression, NULL::text, 'UNION'::text, p_nodata1expr, p_nodata2expr, p_nodatanodataval::double precision);
-                RETURN ST_AddBand(p_raster, t_raster, 1, 2);
-            END IF;
-            RETURN ST_MapAlgebraExpr(rast1, 1, rast2, 1, p_expression, NULL, 'UNION'::text, NULL::text, NULL::text, NULL::double precision);
-        END IF;
-    END;
-    $$
-    LANGUAGE 'plpgsql';
 
--- State function when there is a primary expression, band number and no alternative nodata expressions
-CREATE OR REPLACE FUNCTION _ST_MapAlgebra4UnionState(rast1 raster,rast2 raster,bandnum integer, p_expression text)
-    RETURNS raster
-    AS $$
-        SELECT _ST_MapAlgebra4UnionState($1, ST_Band($2,$3), $4, NULL, NULL, NULL, NULL, NULL, NULL, NULL)
-    $$ LANGUAGE 'sql';
-
--- State function when there is no expressions but allows specifying band
-CREATE OR REPLACE FUNCTION _ST_MapAlgebra4UnionState(rast1 raster,rast2 raster, bandnum integer)
-    RETURNS raster
-    AS $$
-        SELECT _ST_MapAlgebra4UnionState($1,ST_Band($2,$3), 'LAST', NULL, NULL, NULL, NULL, NULL, NULL, NULL)
-    $$ LANGUAGE 'sql';
-    
--- State function when there is no expressions and assumes band 1
-CREATE OR REPLACE FUNCTION _ST_MapAlgebra4UnionState(rast1 raster,rast2 raster)
-    RETURNS raster
-    AS $$
-        SELECT _ST_MapAlgebra4UnionState($1,$2, 'LAST', NULL, NULL, NULL, NULL, NULL, NULL, NULL)
-    $$ LANGUAGE 'sql';
-    
--- State function when there isan expressions and assumes band 1
-CREATE OR REPLACE FUNCTION _ST_MapAlgebra4UnionState(rast1 raster,rast2 raster, p_expression text)
-    RETURNS raster
-    AS $$
-        SELECT _ST_MapAlgebra4UnionState($1,$2, $3, NULL, NULL, NULL, NULL, NULL, NULL, NULL)
-    $$ LANGUAGE 'sql';
-    
--- Final function with only the primary expression
-CREATE OR REPLACE FUNCTION _ST_MapAlgebra4UnionFinal1(rast raster)
-    RETURNS raster AS
-    $$
-    DECLARE
-    BEGIN
-    	-- NOTE: I have to sacrifice RANGE.  Sorry RANGE.  Any 2 banded raster is going to be treated
-    	-- as a MEAN
-        IF ST_NumBands(rast) = 2 THEN
-            RETURN ST_MapAlgebraExpr(rast, 1, rast, 2, 'CASE WHEN [rast2.val] > 0 THEN [rast1.val] / [rast2.val]::float8 ELSE NULL END'::text, NULL::text, 'UNION'::text, NULL::text, NULL::text, NULL::double precision);
-        ELSE
-            RETURN rast;
-        END IF;
-    END;
-    $$
-    LANGUAGE 'plpgsql';
-    
--- Variant with primary expression defaulting to 'LAST' and working on first band
-CREATE AGGREGATE ST_Union(raster) (
-    SFUNC = _ST_MapAlgebra4UnionState,
-    STYPE = raster,
-    FINALFUNC = _ST_MapAlgebra4UnionFinal1
+CREATE TYPE unionarg AS (
+	nband int,
+	uniontype text
 );
 
--- Variant with primary expression defaulting to 'LAST' and working on specified band
-CREATE AGGREGATE ST_Union(raster, integer) (
-    SFUNC = _ST_MapAlgebra4UnionState,
-    STYPE = raster,
-    FINALFUNC = _ST_MapAlgebra4UnionFinal1
+CREATE OR REPLACE FUNCTION _st_union_finalfn(internal)
+	RETURNS raster
+	AS 'MODULE_PATHNAME', 'RASTER_union_finalfn'
+	LANGUAGE 'c' IMMUTABLE;
+
+CREATE OR REPLACE FUNCTION _st_union_transfn(internal, raster, unionarg[])
+	RETURNS internal
+	AS 'MODULE_PATHNAME', 'RASTER_union_transfn'
+	LANGUAGE 'c' IMMUTABLE;
+
+CREATE AGGREGATE st_union(raster, unionarg[]) (
+	SFUNC = _st_union_transfn,
+	STYPE = internal,
+	FINALFUNC = _st_union_finalfn
 );
 
--- Variant with simple primary expressions but without alternative nodata, temporary and final expressions
--- and working on first band
--- supports LAST, MIN,MAX,MEAN,FIRST,SUM
-CREATE AGGREGATE ST_Union(raster, text) (
-    SFUNC = _ST_MapAlgebra4UnionState,
-    STYPE = raster,
-    FINALFUNC = _ST_MapAlgebra4UnionFinal1
+CREATE OR REPLACE FUNCTION _st_union_transfn(internal, raster, integer, text)
+	RETURNS internal
+	AS 'MODULE_PATHNAME', 'RASTER_union_transfn'
+	LANGUAGE 'c' IMMUTABLE;
+
+CREATE AGGREGATE st_union(raster, integer, text) (
+	SFUNC = _st_union_transfn,
+	STYPE = internal,
+	FINALFUNC = _st_union_finalfn
 );
 
-CREATE AGGREGATE ST_Union(raster, integer, text) (
-    SFUNC = _ST_MapAlgebra4UnionState,
-    STYPE = raster,
-    FINALFUNC = _ST_MapAlgebra4UnionFinal1
+CREATE OR REPLACE FUNCTION _st_union_transfn(internal, raster, integer)
+	RETURNS internal
+	AS 'MODULE_PATHNAME', 'RASTER_union_transfn'
+	LANGUAGE 'c' IMMUTABLE;
+
+CREATE AGGREGATE st_union(raster, integer) (
+	SFUNC = _st_union_transfn,
+	STYPE = internal,
+	FINALFUNC = _st_union_finalfn
 );
 
--------------------------------------------------------------------
--- ST_Clip(rast raster, band int, geom geometry, nodata float8 DEFAULT null, crop boolean DEFAULT true)
--- Clip the values of a raster to the shape of a polygon.
---
--- rast   - raster to be clipped
--- band   - limit the result to only one band
--- geom   - geometry defining the shape to clip the raster
--- nodata - define (if there is none defined) or replace the raster nodata value with this value
--- crop   - limit the extent of the result to the extent of the geometry
+CREATE OR REPLACE FUNCTION _st_union_transfn(internal, raster)
+	RETURNS internal
+	AS 'MODULE_PATHNAME', 'RASTER_union_transfn'
+	LANGUAGE 'c' IMMUTABLE;
+
+CREATE AGGREGATE st_union(raster) (
+	SFUNC = _st_union_transfn,
+	STYPE = internal,
+	FINALFUNC = _st_union_finalfn
+);
+
+CREATE OR REPLACE FUNCTION _st_union_transfn(internal, raster, text)
+	RETURNS internal
+	AS 'MODULE_PATHNAME', 'RASTER_union_transfn'
+	LANGUAGE 'c' IMMUTABLE;
+
+CREATE AGGREGATE st_union(raster, text) (
+	SFUNC = _st_union_transfn,
+	STYPE = internal,
+	FINALFUNC = _st_union_finalfn
+);
+
 -----------------------------------------------------------------------
 -- ST_Clip
 -----------------------------------------------------------------------
--- nodataval as array series
 
--- Major variant
-CREATE OR REPLACE FUNCTION st_clip(rast raster, band int, geom geometry, nodataval double precision[] DEFAULT NULL, crop boolean DEFAULT TRUE)
+CREATE OR REPLACE FUNCTION st_clip(
+	rast raster, nband integer[],
+	geom geometry,
+	nodataval double precision[] DEFAULT NULL, crop boolean DEFAULT TRUE
+)
 	RETURNS raster
-	AS $$
-	DECLARE
-		newrast raster;
-		geomrast raster;
-		numband int;
-		bandstart int;
-		bandend int;
-		newextent text;
-		newnodataval double precision;
-		newpixtype text;
-		bandi int;
-	BEGIN
-		IF rast IS NULL THEN
-			RETURN NULL;
-		END IF;
-		IF geom IS NULL THEN
-			RETURN rast;
-		END IF;
-		numband := ST_Numbands(rast);
-		IF band IS NULL THEN
-			bandstart := 1;
-			bandend := numband;
-		ELSEIF ST_HasNoBand(rast, band) THEN
-			RAISE NOTICE 'Raster do not have band %. Returning null', band;
-			RETURN NULL;
-		ELSE
-			bandstart := band;
-			bandend := band;
-		END IF;
+	AS 'MODULE_PATHNAME', 'RASTER_clip'
+	LANGUAGE 'c' IMMUTABLE;
 
-		newpixtype := ST_BandPixelType(rast, bandstart);
-		newnodataval := coalesce(nodataval[1], ST_BandNodataValue(rast, bandstart), ST_MinPossibleValue(newpixtype));
-		newextent := CASE WHEN crop THEN 'INTERSECTION' ELSE 'FIRST' END;
-
-		-- Convert the geometry to a raster
-		geomrast := ST_AsRaster(geom, rast, ST_BandPixelType(rast, band), 1, newnodataval);
-
-		-- Compute the first raster band
-		newrast := ST_MapAlgebraExpr(rast, bandstart, geomrast, 1, '[rast1.val]', newpixtype, newextent, newnodataval::text, newnodataval::text, newnodataval);
-		-- Set the newnodataval
-		newrast := ST_SetBandNodataValue(newrast, bandstart, newnodataval);
-
-		FOR bandi IN bandstart+1..bandend LOOP
-			-- for each band we must determine the nodata value
-			newpixtype := ST_BandPixelType(rast, bandi);
-			newnodataval := coalesce(nodataval[bandi], nodataval[array_upper(nodataval, 1)], ST_BandNodataValue(rast, bandi), ST_MinPossibleValue(newpixtype));
-			newrast := ST_AddBand(newrast, ST_MapAlgebraExpr(rast, bandi, geomrast, 1, '[rast1.val]', newpixtype, newextent, newnodataval::text, newnodataval::text, newnodataval));
-			newrast := ST_SetBandNodataValue(newrast, bandi, newnodataval);
-		END LOOP;
-
-		RETURN newrast;
-	END;
-	$$ LANGUAGE 'plpgsql' STABLE;
-
--- Nodata values as integer series
-CREATE OR REPLACE FUNCTION st_clip(rast raster, band int, geom geometry, nodataval double precision, crop boolean DEFAULT TRUE)
+CREATE OR REPLACE FUNCTION st_clip(
+	rast raster, nband integer,
+	geom geometry,
+	nodataval double precision, crop boolean DEFAULT TRUE
+)
 	RETURNS raster AS
-	$$ SELECT ST_Clip($1, $2, $3, ARRAY[$4], $5) $$
-	LANGUAGE 'sql' STABLE;
+	$$ SELECT ST_Clip($1, ARRAY[$2]::integer[], $3, ARRAY[$4]::double precision[], $5) $$
+	LANGUAGE 'sql' IMMUTABLE;
 
--- Variant defaulting nodataval to the one of the raster or the min possible value
-CREATE OR REPLACE FUNCTION st_clip(rast raster, band int, geom geometry, crop boolean)
+CREATE OR REPLACE FUNCTION st_clip(
+	rast raster, nband integer,
+	geom geometry,
+	crop boolean
+)
 	RETURNS raster AS
-	$$ SELECT ST_Clip($1, $2, $3, null::float8[], $4) $$
-	LANGUAGE 'sql' STABLE;
+	$$ SELECT ST_Clip($1, ARRAY[$2]::integer[], $3, null::double precision[], $4) $$
+	LANGUAGE 'sql' IMMUTABLE;
 
--- Variant defaulting to all bands
-CREATE OR REPLACE FUNCTION st_clip(rast raster, geom geometry, nodataval double precision[] DEFAULT NULL, crop boolean DEFAULT TRUE)
+CREATE OR REPLACE FUNCTION st_clip(
+	rast raster,
+	geom geometry,
+	nodataval double precision[] DEFAULT NULL, crop boolean DEFAULT TRUE
+)
 	RETURNS raster AS
 	$$ SELECT ST_Clip($1, NULL, $2, $3, $4) $$
-	LANGUAGE 'sql' STABLE;
+	LANGUAGE 'sql' IMMUTABLE;
 
--- Variant defaulting to all bands
-CREATE OR REPLACE FUNCTION st_clip(rast raster, geom geometry, nodataval double precision, crop boolean DEFAULT TRUE)
+CREATE OR REPLACE FUNCTION st_clip(
+	rast raster,
+	geom geometry,
+	nodataval double precision, crop boolean DEFAULT TRUE
+)
 	RETURNS raster AS
-	$$ SELECT ST_Clip($1, NULL, $2, ARRAY[$3], $4) $$
-	LANGUAGE 'sql' STABLE;
+	$$ SELECT ST_Clip($1, NULL, $2, ARRAY[$3]::double precision[], $4) $$
+	LANGUAGE 'sql' IMMUTABLE;
 
--- Variant defaulting nodataval to the one of the raster or the min possible value and returning all bands
-CREATE OR REPLACE FUNCTION st_clip(rast raster, geom geometry, crop boolean)
+CREATE OR REPLACE FUNCTION st_clip(
+	rast raster,
+	geom geometry,
+	crop boolean
+)
 	RETURNS raster AS
-	$$ SELECT ST_Clip($1, NULL, $2, null::float8[], $3) $$
-	LANGUAGE 'sql' STABLE;
+	$$ SELECT ST_Clip($1, NULL, $2, null::double precision[], $3) $$
+	LANGUAGE 'sql' IMMUTABLE;
 
 -----------------------------------------------------------------------
 -- ST_NearestValue
@@ -4424,7 +6066,7 @@ CREATE OR REPLACE FUNCTION st_nearestvalue(
 	exclude_nodata_value boolean DEFAULT TRUE
 )
 	RETURNS double precision
-	AS $$ SELECT st_nearestvalue($1, $2, st_setsrid(st_makepoint(st_raster2worldcoordx($1, $3, $4), st_raster2worldcoordy($1, $3, $4)), st_srid($1)), $5) $$
+	AS $$ SELECT st_nearestvalue($1, $2, st_setsrid(st_makepoint(st_rastertoworldcoordx($1, $3, $4), st_rastertoworldcoordy($1, $3, $4)), st_srid($1)), $5) $$
 	LANGUAGE 'sql' IMMUTABLE STRICT;
 
 CREATE OR REPLACE FUNCTION st_nearestvalue(
@@ -4433,17 +6075,17 @@ CREATE OR REPLACE FUNCTION st_nearestvalue(
 	exclude_nodata_value boolean DEFAULT TRUE
 )
 	RETURNS double precision
-	AS $$ SELECT st_nearestvalue($1, 1, st_setsrid(st_makepoint(st_raster2worldcoordx($1, $2, $3), st_raster2worldcoordy($1, $2, $3)), st_srid($1)), $4) $$
+	AS $$ SELECT st_nearestvalue($1, 1, st_setsrid(st_makepoint(st_rastertoworldcoordx($1, $2, $3), st_rastertoworldcoordy($1, $2, $3)), st_srid($1)), $4) $$
 	LANGUAGE 'sql' IMMUTABLE STRICT;
 
 -----------------------------------------------------------------------
 -- ST_Neighborhood
 -----------------------------------------------------------------------
 
-CREATE OR REPLACE FUNCTION st_neighborhood(
+CREATE OR REPLACE FUNCTION _st_neighborhood(
 	rast raster, band integer,
 	columnx integer, rowy integer,
-	distance integer,
+	distancex integer, distancey integer,
 	exclude_nodata_value boolean DEFAULT TRUE
 )
 	RETURNS double precision[][]
@@ -4451,19 +6093,29 @@ CREATE OR REPLACE FUNCTION st_neighborhood(
 	LANGUAGE 'c' IMMUTABLE STRICT;
 
 CREATE OR REPLACE FUNCTION st_neighborhood(
-	rast raster,
+	rast raster, band integer,
 	columnx integer, rowy integer,
-	distance integer,
+	distancex integer, distancey integer,
 	exclude_nodata_value boolean DEFAULT TRUE
 )
 	RETURNS double precision[][]
-	AS $$ SELECT st_neighborhood($1, 1, $2, $3, $4, $5) $$
+	AS $$ SELECT _st_neighborhood($1, $2, $3, $4, $5, $6, $7) $$
+	LANGUAGE 'sql' IMMUTABLE STRICT;
+
+CREATE OR REPLACE FUNCTION st_neighborhood(
+	rast raster,
+	columnx integer, rowy integer,
+	distancex integer, distancey integer,
+	exclude_nodata_value boolean DEFAULT TRUE
+)
+	RETURNS double precision[][]
+	AS $$ SELECT _st_neighborhood($1, 1, $2, $3, $4, $5, $6) $$
 	LANGUAGE 'sql' IMMUTABLE STRICT;
 
 CREATE OR REPLACE FUNCTION st_neighborhood(
 	rast raster, band integer,
 	pt geometry,
-	distance integer,
+	distancex integer, distancey integer,
 	exclude_nodata_value boolean DEFAULT TRUE
 )
 	RETURNS double precision[][]
@@ -4476,15 +6128,20 @@ CREATE OR REPLACE FUNCTION st_neighborhood(
 		IF (st_geometrytype($3) != 'ST_Point') THEN
 			RAISE EXCEPTION 'Attempting to get the neighbor of a pixel with a non-point geometry';
 		END IF;
+
+		IF ST_SRID(rast) != ST_SRID(pt) THEN
+			RAISE EXCEPTION 'Raster and geometry do not have the same SRID';
+		END IF;
+
 		wx := st_x($3);
 		wy := st_y($3);
 
-		SELECT st_neighborhood(
+		SELECT _st_neighborhood(
 			$1, $2,
-			st_world2rastercoordx(rast, wx, wy),
-			st_world2rastercoordy(rast, wx, wy),
-			$4,
-			$5
+			st_worldtorastercoordx(rast, wx, wy),
+			st_worldtorastercoordy(rast, wx, wy),
+			$4, $5,
+			$6
 		) INTO rtn;
 		RETURN rtn;
 	END;
@@ -4493,11 +6150,11 @@ CREATE OR REPLACE FUNCTION st_neighborhood(
 CREATE OR REPLACE FUNCTION st_neighborhood(
 	rast raster,
 	pt geometry,
-	distance integer,
+	distancex integer, distancey integer,
 	exclude_nodata_value boolean DEFAULT TRUE
 )
 	RETURNS double precision[][]
-	AS $$ SELECT st_neighborhood($1, 1, $2, $3, $4) $$
+	AS $$ SELECT st_neighborhood($1, 1, $2, $3, $4, $5) $$
 	LANGUAGE 'sql' IMMUTABLE STRICT;
 
 ------------------------------------------------------------------------------
@@ -4513,7 +6170,9 @@ CREATE OR REPLACE FUNCTION _add_raster_constraint(cn name, sql text)
 			WHEN duplicate_object THEN
 				RAISE NOTICE 'The constraint "%" already exists.  To replace the existing constraint, delete the constraint and call ApplyRasterConstraints again', cn;
 			WHEN OTHERS THEN
-				RAISE NOTICE 'Unable to add constraint "%"', cn;
+				RAISE NOTICE 'Unable to add constraint: %', cn;
+				RAISE NOTICE 'SQL used for failed constraint: %', sql;
+				RAISE NOTICE 'Returned error message: %', SQLERRM;
 				RETURN FALSE;
 		END;
 
@@ -4687,7 +6346,12 @@ CREATE OR REPLACE FUNCTION _drop_raster_constraint_scale(rastschema name, rastta
 CREATE OR REPLACE FUNCTION _raster_constraint_info_blocksize(rastschema name, rasttable name, rastcolumn name, axis text)
 	RETURNS integer AS $$
 	SELECT
-		replace(replace(split_part(s.consrc, ' = ', 2), ')', ''), '(', '')::integer
+		CASE
+			WHEN strpos(s.consrc, 'ANY (ARRAY[') > 0 THEN
+				split_part((regexp_matches(s.consrc, E'ARRAY\\[(.*?){1}\\]'))[1], ',', 1)::integer
+			ELSE
+				replace(replace(split_part(s.consrc, '= ', 2), ')', ''), '(', '')::integer
+			END
 	FROM pg_class c, pg_namespace n, pg_attribute a, pg_constraint s
 	WHERE n.nspname = $1
 		AND c.relname = $2
@@ -4696,7 +6360,7 @@ CREATE OR REPLACE FUNCTION _raster_constraint_info_blocksize(rastschema name, ra
 		AND s.connamespace = n.oid
 		AND s.conrelid = c.oid
 		AND a.attnum = ANY (s.conkey)
-		AND s.consrc LIKE '%st_' || $4 || '(% = %';
+		AND s.consrc LIKE '%st_' || $4 || '(%= %';
 	$$ LANGUAGE sql STABLE STRICT
   COST 100;
 
@@ -4706,7 +6370,8 @@ CREATE OR REPLACE FUNCTION _add_raster_constraint_blocksize(rastschema name, ras
 		fqtn text;
 		cn name;
 		sql text;
-		attr int;
+		attrset integer[];
+		attr integer;
 	BEGIN
 		IF lower($4) != 'width' AND lower($4) != 'height' THEN
 			RAISE EXCEPTION 'axis must be either "width" or "height"';
@@ -4724,9 +6389,12 @@ CREATE OR REPLACE FUNCTION _add_raster_constraint_blocksize(rastschema name, ras
 		sql := 'SELECT st_' || $4 || '('
 			|| quote_ident($3)
 			|| ') FROM ' || fqtn
-			|| ' LIMIT 1';
+			|| ' GROUP BY 1 ORDER BY count(*) DESC';
 		BEGIN
-			EXECUTE sql INTO attr;
+			attrset := ARRAY[]::integer[];
+			FOR attr IN EXECUTE sql LOOP
+				attrset := attrset || attr;
+			END LOOP;
 		EXCEPTION WHEN OTHERS THEN
 			RAISE NOTICE 'Unable to get the % of a sample raster', $4;
 			RETURN FALSE;
@@ -4736,7 +6404,7 @@ CREATE OR REPLACE FUNCTION _add_raster_constraint_blocksize(rastschema name, ras
 			|| ' ADD CONSTRAINT ' || quote_ident(cn)
 			|| ' CHECK (st_' || $4 || '('
 			|| quote_ident($3)
-			|| ') = ' || attr || ')';
+			|| ') IN (' || array_to_string(attrset, ',') || '))';
 		RETURN _add_raster_constraint(cn, sql);
 	END;
 	$$ LANGUAGE 'plpgsql' VOLATILE STRICT
@@ -4787,15 +6455,25 @@ CREATE OR REPLACE FUNCTION _add_raster_constraint_extent(rastschema name, rastta
 
 		cn := 'enforce_max_extent_' || $3;
 
-		sql := 'SELECT st_ashexewkb(st_convexhull(st_collect(st_convexhull('
+		sql := 'SELECT st_ashexewkb(st_union(st_convexhull('
 			|| quote_ident($3)
-			|| ')))) FROM '
+			|| '))) FROM '
 			|| fqtn;
 		BEGIN
 			EXECUTE sql INTO attr;
 		EXCEPTION WHEN OTHERS THEN
-			RAISE NOTICE 'Unable to get the extent of a sample raster';
-			RETURN FALSE;
+			RAISE NOTICE 'Unable to get the extent of the raster column. Attempting memory efficient (slower) approach';
+
+			sql := 'SELECT st_ashexewkb(st_memunion(st_convexhull('
+				|| quote_ident($3)
+				|| '))) FROM '
+				|| fqtn;
+			BEGIN
+				EXECUTE sql INTO attr;
+			EXCEPTION WHEN OTHERS THEN
+				RAISE NOTICE 'Still unable to get the extent of the raster column. Cannot add extent constraint';
+				RETURN FALSE;
+			END;
 		END;
 
 		sql := 'ALTER TABLE ' || fqtn
@@ -4870,52 +6548,153 @@ CREATE OR REPLACE FUNCTION _drop_raster_constraint_alignment(rastschema name, ra
 	LANGUAGE 'sql' VOLATILE STRICT
 	COST 100;
 
-CREATE OR REPLACE FUNCTION _raster_constraint_info_regular_blocking(rastschema name, rasttable name, rastcolumn name)
-	RETURNS boolean
-	AS $$
-	DECLARE
-		cn text;
-		sql text;
-		rtn boolean;
-	BEGIN
-		cn := 'enforce_regular_blocking_' || $3;
-
-		sql := 'SELECT TRUE FROM pg_class c, pg_namespace n, pg_constraint s'
-			|| ' WHERE n.nspname = ' || quote_literal($1)
-			|| ' AND c.relname = ' || quote_literal($2)
-			|| ' AND s.connamespace = n.oid AND s.conrelid = c.oid'
-			|| ' AND s.conname = ' || quote_literal(cn);
-		EXECUTE sql INTO rtn;
-		RETURN rtn;
-	END;
-	$$ LANGUAGE 'plpgsql' STABLE STRICT
+CREATE OR REPLACE FUNCTION _raster_constraint_info_spatially_unique(rastschema name, rasttable name, rastcolumn name)
+	RETURNS boolean AS $$
+	SELECT
+		TRUE
+	FROM pg_class c, pg_namespace n, pg_attribute a, pg_constraint s, pg_index idx, pg_operator op
+	WHERE n.nspname = $1
+		AND c.relname = $2
+		AND a.attname = $3
+		AND a.attrelid = c.oid
+		AND s.connamespace = n.oid
+		AND s.conrelid = c.oid
+		AND s.contype = 'x'
+		AND 0::smallint = ANY (s.conkey)
+		AND idx.indexrelid = s.conindid
+		AND pg_get_indexdef(idx.indexrelid, 1, true) LIKE '(' || quote_ident($3) || '::geometry)'
+		AND s.conexclop[1] = op.oid
+		AND op.oprname = '=';
+	$$ LANGUAGE sql STABLE STRICT
   COST 100;
 
-CREATE OR REPLACE FUNCTION _add_raster_constraint_regular_blocking(rastschema name, rasttable name, rastcolumn name)
+CREATE OR REPLACE FUNCTION _add_raster_constraint_spatially_unique(rastschema name, rasttable name, rastcolumn name)
 	RETURNS boolean AS $$
 	DECLARE
 		fqtn text;
 		cn name;
 		sql text;
+		attr text;
+		meta record;
 	BEGIN
-
-		RAISE INFO 'The regular_blocking constraint is just a flag indicating that the column "%" is regularly blocked.  It is up to the end-user to ensure that the column is truely regularly blocked.', quote_ident($3);
-
 		fqtn := '';
 		IF length($1) > 0 THEN
 			fqtn := quote_ident($1) || '.';
 		END IF;
 		fqtn := fqtn || quote_ident($2);
 
-		cn := 'enforce_regular_blocking_' || $3;
+		cn := 'enforce_spatially_unique_' || $3;
 
-		sql := 'ALTER TABLE ' || fqtn
-			|| ' ADD CONSTRAINT ' || quote_ident(cn)
-			|| ' CHECK (TRUE)';
+		sql := 'ALTER TABLE ' || fqtn ||
+			' ADD CONSTRAINT ' || quote_ident(cn) ||
+			' EXCLUDE ((' || quote_ident($3) || '::geometry) WITH =)';
 		RETURN _add_raster_constraint(cn, sql);
 	END;
 	$$ LANGUAGE 'plpgsql' VOLATILE STRICT
 	COST 100;
+
+CREATE OR REPLACE FUNCTION _drop_raster_constraint_spatially_unique(rastschema name, rasttable name, rastcolumn name)
+	RETURNS boolean AS
+	$$ SELECT _drop_raster_constraint($1, $2, 'enforce_spatially_unique_' || $3) $$
+	LANGUAGE 'sql' VOLATILE STRICT
+	COST 100;
+
+CREATE OR REPLACE FUNCTION _raster_constraint_info_coverage_tile(rastschema name, rasttable name, rastcolumn name)
+	RETURNS boolean AS $$
+	SELECT
+		TRUE
+	FROM pg_class c, pg_namespace n, pg_attribute a, pg_constraint s
+	WHERE n.nspname = $1
+		AND c.relname = $2
+		AND a.attname = $3
+		AND a.attrelid = c.oid
+		AND s.connamespace = n.oid
+		AND s.conrelid = c.oid
+		AND a.attnum = ANY (s.conkey)
+		AND s.consrc LIKE '%st_iscoveragetile(%';
+	$$ LANGUAGE sql STABLE STRICT
+  COST 100;
+
+CREATE OR REPLACE FUNCTION _add_raster_constraint_coverage_tile(rastschema name, rasttable name, rastcolumn name)
+	RETURNS boolean AS $$
+	DECLARE
+		fqtn text;
+		cn name;
+		sql text;
+
+		_scalex double precision;
+		_scaley double precision;
+		_skewx double precision;
+		_skewy double precision;
+		_tilewidth integer;
+		_tileheight integer;
+		_alignment boolean;
+
+		_covextent geometry;
+		_covrast raster;
+	BEGIN
+		fqtn := '';
+		IF length($1) > 0 THEN
+			fqtn := quote_ident($1) || '.';
+		END IF;
+		fqtn := fqtn || quote_ident($2);
+
+		cn := 'enforce_coverage_tile_' || $3;
+
+		-- metadata
+		BEGIN
+			sql := 'WITH foo AS (SELECT ST_Metadata(' || quote_ident($3) || ') AS meta, ST_ConvexHull(' || quote_ident($3) || ') AS hull FROM ' || fqtn || ') SELECT max((meta).scalex), max((meta).scaley), max((meta).skewx), max((meta).skewy), max((meta).width), max((meta).height), ST_Union(hull) FROM foo';
+			EXECUTE sql INTO _scalex, _scaley, _skewx, _skewy, _tilewidth, _tileheight, _covextent;
+		EXCEPTION WHEN OTHERS THEN
+		END;
+
+		-- rasterize extent
+		BEGIN
+			_covrast := ST_AsRaster(_covextent, _scalex, _scaley, '8BUI', 1, 0, NULL, NULL, _skewx, _skewy);
+			IF _covrast IS NULL THEN
+				RAISE NOTICE 'Unable to create coverage raster. Cannot add coverage tile constraint';
+				RETURN FALSE;
+			END IF;
+
+			-- remove band
+			_covrast := ST_MakeEmptyRaster(_covrast);
+		EXCEPTION WHEN OTHERS THEN
+			RAISE NOTICE 'Unable to create coverage raster. Cannot add coverage tile constraint';
+			RETURN FALSE;
+		END;
+
+		sql := 'ALTER TABLE ' || fqtn ||
+			' ADD CONSTRAINT ' || quote_ident(cn) ||
+			' CHECK (st_iscoveragetile(' || quote_ident($3) || ', ''' || _covrast || '''::raster, ' || _tilewidth || ', ' || _tileheight || '))';
+		RETURN _add_raster_constraint(cn, sql);
+	END;
+	$$ LANGUAGE 'plpgsql' VOLATILE STRICT
+	COST 100;
+
+CREATE OR REPLACE FUNCTION _drop_raster_constraint_coverage_tile(rastschema name, rasttable name, rastcolumn name)
+	RETURNS boolean AS
+	$$ SELECT _drop_raster_constraint($1, $2, 'enforce_coverage_tile_' || $3) $$
+	LANGUAGE 'sql' VOLATILE STRICT
+	COST 100;
+
+CREATE OR REPLACE FUNCTION _raster_constraint_info_regular_blocking(rastschema name, rasttable name, rastcolumn name)
+	RETURNS boolean
+	AS $$
+	DECLARE
+		covtile boolean;
+		spunique boolean;
+	BEGIN
+		-- check existance of constraints
+		-- coverage tile constraint
+		covtile := COALESCE(_raster_constraint_info_coverage_tile($1, $2, $3), FALSE);
+
+		-- spatially unique constraint
+		spunique := COALESCE(_raster_constraint_info_spatially_unique($1, $2, $3), FALSE);
+
+		RETURN (covtile AND spunique);
+	END;
+	$$ LANGUAGE 'plpgsql' STABLE STRICT
+  COST 100;
 
 CREATE OR REPLACE FUNCTION _drop_raster_constraint_regular_blocking(rastschema name, rasttable name, rastcolumn name)
 	RETURNS boolean AS
@@ -5311,8 +7090,12 @@ CREATE OR REPLACE FUNCTION AddRasterConstraints (
 						RAISE NOTICE 'Adding alignment constraint';
 						rtn := _add_raster_constraint_alignment(schema, $2, $3);
 					WHEN kw IN ('regular_blocking', 'regularblocking') THEN
-						RAISE NOTICE 'Adding regular blocking constraint';
-						rtn := _add_raster_constraint_regular_blocking(schema, $2, $3);
+						RAISE NOTICE 'Adding coverage tile constraint required for regular blocking';
+						rtn := _add_raster_constraint_coverage_tile(schema, $2, $3);
+						IF rtn IS NOT FALSE THEN
+							RAISE NOTICE 'Adding spatially unique constraint required for regular blocking';
+							rtn := _add_raster_constraint_spatially_unique(schema, $2, $3);
+						END IF;
 					WHEN kw IN ('num_bands', 'numbands') THEN
 						RAISE NOTICE 'Adding number of bands constraint';
 						rtn := _add_raster_constraint_num_bands(schema, $2, $3);
@@ -5371,7 +7154,7 @@ CREATE OR REPLACE FUNCTION AddRasterConstraints (
 	blocksize_x boolean DEFAULT TRUE,
 	blocksize_y boolean DEFAULT TRUE,
 	same_alignment boolean DEFAULT TRUE,
-	regular_blocking boolean DEFAULT FALSE, -- false as regular_blocking is not a usable constraint
+	regular_blocking boolean DEFAULT FALSE, -- false as regular_blocking is an enhancement
 	num_bands boolean DEFAULT TRUE,
 	pixel_types boolean DEFAULT TRUE,
 	nodata_values boolean DEFAULT TRUE,
@@ -5445,7 +7228,7 @@ CREATE OR REPLACE FUNCTION AddRasterConstraints (
 	blocksize_x boolean DEFAULT TRUE,
 	blocksize_y boolean DEFAULT TRUE,
 	same_alignment boolean DEFAULT TRUE,
-	regular_blocking boolean DEFAULT FALSE, -- false as regular_blocking is not a usable constraint
+	regular_blocking boolean DEFAULT FALSE, -- false as regular_blocking is an enhancement
 	num_bands boolean DEFAULT TRUE,
 	pixel_types boolean DEFAULT TRUE,
 	nodata_values boolean DEFAULT TRUE,
@@ -5551,8 +7334,15 @@ CREATE OR REPLACE FUNCTION DropRasterConstraints (
 						RAISE NOTICE 'Dropping alignment constraint';
 						rtn := _drop_raster_constraint_alignment(schema, $2, $3);
 					WHEN kw IN ('regular_blocking', 'regularblocking') THEN
-						RAISE NOTICE 'Dropping regular blocking constraint';
 						rtn := _drop_raster_constraint_regular_blocking(schema, $2, $3);
+
+						RAISE NOTICE 'Dropping coverage tile constraint required for regular blocking';
+						rtn := _drop_raster_constraint_coverage_tile(schema, $2, $3);
+
+						IF rtn IS NOT FALSE THEN
+							RAISE NOTICE 'Dropping spatially unique constraint required for regular blocking';
+							rtn := _drop_raster_constraint_spatially_unique(schema, $2, $3);
+						END IF;
 					WHEN kw IN ('num_bands', 'numbands') THEN
 						RAISE NOTICE 'Dropping number of bands constraint';
 						rtn := _drop_raster_constraint_num_bands(schema, $2, $3);
@@ -5996,8 +7786,118 @@ CREATE OR REPLACE FUNCTION DropOverviewConstraints (
 	LANGUAGE 'sql' VOLATILE STRICT
 	COST 100;
 
+------------------------------------------------------------------------------
+-- UpdateRasterSRID
+------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION _UpdateRasterSRID(
+	schema_name name, table_name name, column_name name,
+	new_srid integer
+)
+	RETURNS boolean
+	AS $$
+	DECLARE
+		fqtn text;
+		schema name;
+		sql text;
+		srid integer;
+		ct boolean;
+	BEGIN
+		-- validate schema
+		schema := NULL;
+		IF length($1) > 0 THEN
+			sql := 'SELECT nspname FROM pg_namespace '
+				|| 'WHERE nspname = ' || quote_literal($1)
+				|| 'LIMIT 1';
+			EXECUTE sql INTO schema;
+
+			IF schema IS NULL THEN
+				RAISE EXCEPTION 'The value provided for schema is invalid';
+				RETURN FALSE;
+			END IF;
+		END IF;
+
+		IF schema IS NULL THEN
+			sql := 'SELECT n.nspname AS schemaname '
+				|| 'FROM pg_catalog.pg_class c '
+				|| 'JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace '
+				|| 'WHERE c.relkind = ' || quote_literal('r')
+				|| ' AND n.nspname NOT IN (' || quote_literal('pg_catalog')
+				|| ', ' || quote_literal('pg_toast')
+				|| ') AND pg_catalog.pg_table_is_visible(c.oid)'
+				|| ' AND c.relname = ' || quote_literal($2);
+			EXECUTE sql INTO schema;
+
+			IF schema IS NULL THEN
+				RAISE EXCEPTION 'The table % does not occur in the search_path', quote_literal($2);
+				RETURN FALSE;
+			END IF;
+		END IF;
+
+		-- clamp SRID
+		IF new_srid < 0 THEN
+			srid := ST_SRID('POINT EMPTY'::geometry);
+			RAISE NOTICE 'SRID % converted to the officially unknown SRID %', new_srid, srid;
+		ELSE
+			srid := new_srid;
+		END IF;
+
+		-- drop coverage tile constraint
+		-- done separately just in case constraint doesn't exist
+		ct := _raster_constraint_info_coverage_tile(schema, $2, $3);
+		IF ct IS TRUE THEN
+			PERFORM _drop_raster_constraint_coverage_tile(schema, $2, $3);
+		END IF;
+
+		-- drop SRID, extent, alignment constraints
+		PERFORM DropRasterConstraints(schema, $2, $3, 'extent', 'alignment', 'srid');
+
+		fqtn := '';
+		IF length($1) > 0 THEN
+			fqtn := quote_ident($1) || '.';
+		END IF;
+		fqtn := fqtn || quote_ident($2);
+
+		-- update SRID
+		sql := 'UPDATE ' || fqtn ||
+			' SET ' || quote_ident($3) ||
+			' = ST_SetSRID(' || quote_ident($3) ||
+			'::raster, ' || srid || ')';
+		RAISE NOTICE 'sql = %', sql;
+		EXECUTE sql;
+
+		-- add SRID constraint
+		PERFORM AddRasterConstraints(schema, $2, $3, 'srid', 'extent', 'alignment');
+
+		-- add coverage tile constraint if needed
+		IF ct IS TRUE THEN
+			PERFORM _add_raster_constraint_coverage_tile(schema, $2, $3);
+		END IF;
+
+		RETURN TRUE;
+	END;
+	$$ LANGUAGE 'plpgsql' VOLATILE;
+
+CREATE OR REPLACE FUNCTION UpdateRasterSRID(
+	schema_name name, table_name name, column_name name,
+	new_srid integer
+)
+	RETURNS boolean
+	AS $$ SELECT _UpdateRasterSRID($1, $2, $3, $4) $$
+	LANGUAGE 'sql' VOLATILE STRICT;
+
+CREATE OR REPLACE FUNCTION UpdateRasterSRID(
+	table_name name, column_name name,
+	new_srid integer
+)
+	RETURNS boolean
+	AS $$ SELECT _UpdateRasterSRID('', $1, $2, $3) $$
+	LANGUAGE 'sql' VOLATILE STRICT;
+
 -------------------------------------------------------------------
 --  END
 -------------------------------------------------------------------
-
+-- make views public viewable --
+GRANT SELECT ON TABLE raster_columns TO public;
+GRANT SELECT ON TABLE raster_overviews TO public;
 COMMIT;

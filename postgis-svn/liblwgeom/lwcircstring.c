@@ -255,14 +255,14 @@ int
 lwcircstring_is_closed(const LWCIRCSTRING *curve)
 {
 	if (FLAGS_GET_Z(curve->flags))
-		return ptarray_isclosed3d(curve->points);
+		return ptarray_is_closed_3d(curve->points);
 
-	return ptarray_isclosed2d(curve->points);
+	return ptarray_is_closed_2d(curve->points);
 }
 
 int lwcircstring_is_empty(const LWCIRCSTRING *circ)
 {
-	if ( !circ->points || circ->points->npoints == 0 )
+	if ( !circ->points || circ->points->npoints < 1 )
 		return LW_TRUE;
 	return LW_FALSE;
 }

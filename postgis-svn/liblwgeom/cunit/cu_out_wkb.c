@@ -1,5 +1,5 @@
 /**********************************************************************
- * $Id: cu_out_wkb.c 9324 2012-02-27 22:08:12Z pramsey $
+ * $Id: cu_out_wkb.c 10630 2012-11-02 21:14:44Z pramsey $
  *
  * PostGIS - Spatial Types for PostgreSQL
  * http://postgis.refractions.net
@@ -107,7 +107,7 @@ static void test_wkb_out_polygon(void)
 	*  See http://http://trac.osgeo.org/postgis/ticket/937
 	*/
 	cu_wkb_from_hexwkb("01030000000100000000000000");
-	CU_ASSERT_STRING_EQUAL(s,"00000000030000000100000000");
+	CU_ASSERT_STRING_EQUAL(s,"000000000300000000");
 }
 
 static void test_wkb_out_multipoint(void) 

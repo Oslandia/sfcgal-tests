@@ -52,7 +52,7 @@ POINTARRAY *
 ptarray_from_GEOSCoordSeq(const GEOSCoordSequence *cs, char want3d)
 {
 	uint32_t dims=2;
-	uint32_t size, i, ptsize;
+	uint32_t size, i;
 	POINTARRAY *pa;
 	POINT4D point;
 
@@ -75,8 +75,6 @@ ptarray_from_GEOSCoordSeq(const GEOSCoordSequence *cs, char want3d)
 	}
 
 	LWDEBUGF(4, " output dimensions: %d", dims);
-
-	ptsize = sizeof(double)*dims;
 
 	pa = ptarray_construct((dims==3), 0, size);
 
@@ -839,9 +837,10 @@ findFaceHoles(Face** faces, int nfaces)
       const GEOSGeometry *hole = GEOSGetInteriorRingN(f->geom, h);
       LWDEBUGF(2, "Looking for hole %d/%d of face %d among %d other faces", h+1, nholes, i, nfaces-i-1);
       for (j=i+1; j<nfaces; ++j) {
+		const GEOSGeometry *f2er;
         Face* f2 = faces[j];
         if ( f2->parent ) continue; /* hole already assigned */
-        const GEOSGeometry *f2er = GEOSGetExteriorRing(f2->geom); 
+        f2er = GEOSGetExteriorRing(f2->geom); 
         /* TODO: can be optimized as the ring would have the
          *       same vertices, possibly in different order.
          *       maybe comparing number of points could already be
@@ -1278,7 +1277,6 @@ lwgeom_offsetcurve(const LWLINE *lwline, double size, int quadsegs, int joinStyl
 
 	if (g3 == NULL)
 	{
-		GEOSGeom_destroy(g1);
 		lwerror("GEOSOffsetCurve: %s", lwgeom_geos_errmsg);
 		return NULL;
 	}
@@ -1305,6 +1303,7 @@ lwgeom_delaunay_triangulation(const LWGEOM *lwgeom_in, double tolerance, int edg
 {
 #if POSTGIS_GEOS_VERSION < 34
 	lwerror("lwgeom_delaunay_triangulation: GEOS 3.4 or higher required");
+	return NULL;
 #else
 	GEOSGeometry *g1, *g3;
 	LWGEOM *lwgeom_result;

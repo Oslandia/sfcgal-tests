@@ -29,12 +29,6 @@
 
 #define PARANOIA_LEVEL 1
 
-/*
- * For win32, this can not be in a separate libary
- * See ticket #1158
- */
-/* PG_MODULE_MAGIC; */
-
 /**
 * Utility to convert cstrings to textp pointers 
 */
@@ -187,14 +181,10 @@ pg_notice(const char *fmt, va_list ap)
 }
 
 void
-lwgeom_init_allocators(void)
+pg_install_lwgeom_handlers(void)
 {
-	/* liblwgeom callback - install PostgreSQL handlers */
-	lwalloc_var = pg_alloc;
-	lwrealloc_var = pg_realloc;
-	lwfree_var = pg_free;
-	lwerror_var = pg_error;
-	lwnotice_var = pg_notice;
+	/* install PostgreSQL handlers */
+	lwgeom_set_handlers(pg_alloc, pg_realloc, pg_free, pg_error, pg_notice);
 }
 
 /**

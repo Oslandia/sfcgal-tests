@@ -1,5 +1,5 @@
 /*
- * $Id: rt_api.h 10173 2012-08-09 00:18:11Z dustymugs $
+ * $Id: rt_api.h 10866 2012-12-19 23:26:33Z dustymugs $
  *
  * WKTRaster - Raster Types for PostGIS
  * http://www.postgis.org/support/wiki/index.php?WKTRasterHomePage
@@ -142,6 +142,9 @@ typedef struct rt_valuecount_t* rt_valuecount;
 typedef struct rt_gdaldriver_t* rt_gdaldriver;
 typedef struct rt_reclassexpr_t* rt_reclassexpr;
 
+typedef struct rt_iterator_t* rt_iterator;
+typedef struct rt_iterator_arg_t* rt_iterator_arg;
+
 /* envelope information */
 typedef struct {
 	double MinX;
@@ -156,6 +159,13 @@ typedef struct {
 /**
  * Enum definitions
  */
+
+/* function return error states */
+typedef enum {
+	ES_NONE = 0, /* no error */
+	ES_ERROR = 1 /* generic error */
+} rt_errorstate;
+
 /* Pixel types */
 typedef enum {
     PT_1BB=0,     /* 1-bit boolean            */
@@ -176,7 +186,9 @@ typedef enum {
 	ET_INTERSECTION = 0,
 	ET_UNION,
 	ET_FIRST,
-	ET_SECOND
+	ET_SECOND,
+	ET_LAST,
+	ET_CUSTOM
 } rt_extenttype;
 
 /**
@@ -300,6 +312,10 @@ void rt_set_handlers(rt_allocator allocator, rt_reallocator reallocator,
 
 /**
  * Return size in bytes of a value in the given pixtype
+ *
+ * @param pixtype : the pixel type to get byte size for
+ *
+ * @return the pixel type's byte size
  */
 int rt_pixtype_size(rt_pixtype pixtype);
 
@@ -307,6 +323,10 @@ int rt_pixtype_size(rt_pixtype pixtype);
  * Return alignment requirements for data in the given pixel type.
  * Fast access to pixel values of this type must be aligned to as
  * many bytes as returned by this function.
+ *
+ * @param pixtype : the pixel type to get alignment requirements for
+ *
+ * @return the alignment requirements
  */
 int rt_pixtype_alignment(rt_pixtype pixtype);
 
@@ -319,44 +339,57 @@ rt_pixtype rt_pixtype_index_from_name(const char* pixname);
 /**
  * Return minimum value possible for pixel type
  *
- * @param pixtype: the pixel type to get minimum possible value for
+ * @param pixtype : the pixel type to get minimum possible value for
  *
  * @return the minimum possible value for the pixel type.
  */
 double rt_pixtype_get_min_value(rt_pixtype pixtype);
 
 /**
- * Returns 1 if clamped values are equal, 0 if not equal, -1 if error
+ * Test to see if two values are equal when clamped
  *
- * @param pixtype: the pixel type to clamp the provided values
- * @param val: value to compare to reference value
- * @param refval: reference value to be compared with
+ * @param pixtype : the pixel type to clamp the provided values
+ * @param val : value to compare to reference value
+ * @param refval : reference value to be compared with
+ * @param isequal : non-zero if clamped values are equal, 0 otherwise
  *
- * @return 1 if clamped values are equal, 0 if not equal, -1 if error
+ * @return ES_NONE on success, ES_ERROR on error
  */
-int rt_pixtype_compare_clamped_values(rt_pixtype pixtype, double val, double refval);
+rt_errorstate rt_pixtype_compare_clamped_values(
+	rt_pixtype pixtype,
+	double val, double refval,
+	int *isequal
+);
 
 /*- rt_pixel ----------------------------------------------------------*/
 
 /*
- * Convert an array of rt_pixel objects to two 2D arrays of value and NODATA
+ * Convert an array of rt_pixel objects to two 2D arrays of value and NODATA.
+ * The dimensions of the returned 2D array are [Y][X], going by row Y and
+ * then column X.
  *
- * @param npixel: array of rt_pixel objects
- * @param count: number of elements in npixel
- * @param x: the column of the center pixel (0-based)
- * @param y: the line of the center pixel (0-based)
- * @param distance: the number of pixels around the center pixel
- * @param value: pointer to pointer for 2D value array
- * @param nodata: pointer to pointer for 2D NODATA array
+ * @param npixel : array of rt_pixel objects
+ * @param count : number of elements in npixel
+ * @param x : the column of the center pixel (0-based)
+ * @param y : the line of the center pixel (0-based)
+ * @param distancex : the number of pixels around the specified pixel
+ * along the X axis
+ * @param distancey : the number of pixels around the specified pixel
+ * along the Y axis
+ * @param value : pointer to pointer for 2D value array
+ * @param nodata : pointer to pointer for 2D NODATA array
+ * @param dimx : size of value and nodata along the X axis
+ * @param dimy : size of value and nodata along the Y axis
  *
- * @return 0 on error, otherwise the X/Y axis length of value and NODATA 
+ * @return ES_NONE on success, ES_ERROR on error
  */
-int rt_pixel_set_to_array(
+rt_errorstate rt_pixel_set_to_array(
 	rt_pixel npixel, int count,
 	int x, int y,
-	uint16_t distance,
+	uint16_t distancex, uint16_t distancey,
 	double ***value,
-	int ***nodata
+	int ***nodata,
+	int *dimx, int *dimy
 );
 
 /*- rt_band ----------------------------------------------------------*/
@@ -379,7 +412,7 @@ int rt_pixel_set_to_array(
  *                    allocated for the whole lifetime of the returned
  *                    rt_band.
  *
- * @return an rt_band, or 0 on failure
+ * @return an rt_band or NULL on failure
  */
 rt_band rt_band_new_inline(
 	uint16_t width, uint16_t height,
@@ -405,7 +438,7 @@ rt_band rt_band_new_inline(
  *                    responsible to keep it allocated for the whole
  *                    lifetime of the returned rt_band.
  *
- * @return an rt_band, or 0 on failure
+ * @return an rt_band or NULL on failure
  */
 rt_band rt_band_new_offline(
 	uint16_t width, uint16_t height,
@@ -438,32 +471,73 @@ rt_band rt_band_duplicate(rt_band band);
 int rt_band_is_offline(rt_band band);
 
 /**
- * Return bands' external path (only valid when rt_band_is_offline
+ * Return band's external path (only valid when rt_band_is_offline
  * returns non-zero).
+ *
+ * @param band : the band
+ *
+ * @return string or NULL if band is not offline
  */
 const char* rt_band_get_ext_path(rt_band band);
 
 /**
  * Return bands' external band number (only valid when
  * rt_band_is_offline returns non-zero).
+ *
+ * @param band : the band
+ * @param bandnum : external band number (0-based)
+ *
+ * @return ES_NONE or ES_ERROR if band is NOT out-db
  */
-uint8_t rt_band_get_ext_band_num(rt_band band);
+rt_errorstate rt_band_get_ext_band_num(rt_band band, uint8_t *bandnum);
 
-/* Get pixeltype of this band */
+/**
+ * Return pixeltype of this band
+ *
+ * @param band : the band
+ *
+ * @return band's pixeltype
+ */
 rt_pixtype rt_band_get_pixtype(rt_band band);
 
-/* Get width of this band */
+/**
+ * Return width of this band
+ *
+ * @param band : the band
+ *
+ * @return band's width
+ */
 uint16_t rt_band_get_width(rt_band band);
 
-/* Get height of this band */
+/**
+ * Return height of this band
+ *
+ * @param band : the band
+ *
+ * @return band's height
+ */
 uint16_t rt_band_get_height(rt_band band);
+
+/**
+ * Return 0 (FALSE) or non-zero (TRUE) indicating if rt_band is responsible
+ * for managing the memory for band data
+ *
+ * @param band : the band
+ *
+ * @return non-zero indicates that rt_band manages the memory
+ * allocated for band data
+ */
+int rt_band_get_ownsdata_flag(rt_band band);
+
+/* set ownsdata flag */
+void rt_band_set_ownsdata_flag(rt_band band, int flag);
 
 /**
 	* Get pointer to raster band data
 	*
 	* @param band : the band who's data to get
 	*
-	* @return void pointer to band data
+	* @return pointer to band data or NULL if error
 	*/
 void* rt_band_get_data(rt_band band);
 
@@ -474,9 +548,9 @@ void* rt_band_get_data(rt_band band);
 	*
 	* @param band : the band who's data to get
 	*
-	* @return 0 if success, non-zero if failure
+	* @return ES_NONE if success, ES_ERROR if failure
 	*/
-int rt_band_load_offline_data(rt_band band);
+rt_errorstate rt_band_load_offline_data(rt_band band);
 
 /**
  * Destroy a raster band
@@ -506,12 +580,16 @@ void rt_band_set_hasnodata_flag(rt_band band, int flag);
  *
  * @param band : the band on which to set the isnodata flag
  * @param flag : the new isnodata flag value. Must be 1 or 0
+ *
+ * @return ES_NONE or ES_ERROR
  */
-void rt_band_set_isnodata_flag(rt_band band, int flag);
+rt_errorstate rt_band_set_isnodata_flag(rt_band band, int flag);
 
 /**
- * Get hasnodata flag value
+ * Get isnodata flag value
+ *
  * @param band : the band on which to check the isnodata flag
+ *
  * @return the hasnodata flag.
  */
 int rt_band_get_isnodata_flag(rt_band band);
@@ -521,20 +599,22 @@ int rt_band_get_isnodata_flag(rt_band band);
  *
  * @param band : the band to set nodata value to
  * @param val : the nodata value
+ * @param converted : (optional) if non-zero, value was
+ * truncated/clamped/converted
  *
- * @return 0 on success, -1 on error (invalid pixel type),
- *   1 on truncation/clamping/converting.
+ * @return ES_NONE or ES_ERROR
  */
-int rt_band_set_nodata(rt_band band, double val);
+rt_errorstate rt_band_set_nodata(rt_band band, double val, int *converted);
 
 /**
- * Get nodata value
+ * Get NODATA value
  *
- * @param band : the band to set nodata value to
+ * @param band: the band whose NODATA value will be returned
+ * @param nodata: the band's NODATA value
  *
- * @return nodata value
+ * @return ES_NONE or ES_ERROR
  */
-double rt_band_get_nodata(rt_band band);
+rt_errorstate rt_band_get_nodata(rt_band band, double *nodata);
 
 /**
  * Set values of multiple pixels.  Unlike rt_band_set_pixel,
@@ -548,14 +628,14 @@ double rt_band_get_nodata(rt_band band);
  * So, setting a number of values may cross multiple pixel "rows".
  *
  * @param band : the band to set value to
- * @param x : X coordinate (0-based)
- * @param y : Y coordinate (0-based)
+ * @param x : pixel column (0-based)
+ * @param y : pixel row (0-based)
  * @param vals : the pixel values to apply
  * @param len : # of elements in vals
  *
- * @return 1 on success, 0 on error
+ * @return ES_NONE on success, ES_ERROR on error
  */
-int rt_band_set_pixel_line(
+rt_errorstate rt_band_set_pixel_line(
 	rt_band band,
 	int x, int y,
 	void *vals, uint16_t len
@@ -565,45 +645,79 @@ int rt_band_set_pixel_line(
  * Set single pixel's value
  *
  * @param band : the band to set value to
- * @param x : x ordinate (0-based)
- * @param y : y ordinate (0-based)
+ * @param x : pixel column (0-based)
+ * @param y : pixel row (0-based)
  * @param val : the pixel value
+ * @param converted : (optional) non-zero if value truncated/clamped/converted
  *
- * @return 0 on success, -1 on error (value out of valid range),
- *   1 on truncation/clamping/converting.
+ * @return ES_NONE on success, ES_ERROR on error
  */
-int rt_band_set_pixel(
+rt_errorstate rt_band_set_pixel(
 	rt_band band,
 	int x, int y,
-	double val
+	double val,
+	int *converted
 );
 
 /**
- * Get pixel value
+ * Get values of multiple pixels.  Unlike rt_band_get_pixel,
+ * values in vals are of the band's pixel type so cannot be
+ * assumed to be double.  Function uses memcpy.
+ *
+ * It is important to be careful when using this function as
+ * the number of values being fetched may exceed a pixel "row".
+ * Remember that the band values are stored in a stream (1-D array)
+ * regardless of what the raster's width and height might be.
+ * So, getting a number of values may cross multiple pixel "rows".
  *
  * @param band : the band to get pixel value from
- * @param x : x ordinate (0-based)
- * @param y : x ordinate (0-based)
- * @param *result: result if there is a value
+ * @param x : pixel column (0-based)
+ * @param y : pixel row (0-based)
+ * @param len : the number of pixels to get
+ * @param **vals : the pixel values
+ * @param *nvals : the number of pixel values being returned
  *
- * @return 0 on success, -1 on error (value out of valid range).
+ * @return ES_NONE on success, ES_ERROR on error
  */
-int rt_band_get_pixel(
+rt_errorstate rt_band_get_pixel_line(
 	rt_band band,
 	int x, int y,
-	double *result
+	uint16_t len,
+	void **vals, uint16_t *nvals
+);
+
+/**
+ * Get pixel value. If band's isnodata flag is TRUE, value returned 
+ * will be the band's NODATA value
+ *
+ * @param band : the band to get pixel value from
+ * @param x : pixel column (0-based)
+ * @param y : pixel row (0-based)
+ * @param *value : pixel value
+ * @param *nodata : 0 if pixel is not NODATA
+ *
+ * @return ES_NONE on success, ES_ERROR on error
+ */
+rt_errorstate rt_band_get_pixel(
+	rt_band band,
+	int x, int y,
+	double *value,
+	int *nodata
 );
 
 /**
  * Get nearest pixel(s) with value (not NODATA) to specified pixel
  *
- * @param band: the band to get nearest pixel(s) from
- * @param x: the column of the pixel (0-based)
- * @param y: the line of the pixel (0-based)
- * @param distance: the number of pixels around the specified pixel
- * @param exclude_nodata_value: if non-zero, ignore nodata values
+ * @param band : the band to get nearest pixel(s) from
+ * @param x : pixel column (0-based)
+ * @param y : pixel row (0-based)
+ * @param distancex : the number of pixels around the specified pixel
+ * along the X axis
+ * @param distancey : the number of pixels around the specified pixel
+ * along the Y axis
+ * @param exclude_nodata_value : if non-zero, ignore nodata values
  * to check for pixels with value
- * @param npixels: return set of rt_pixel object or NULL
+ * @param npixels : return set of rt_pixel object or NULL
  *
  * @return -1 on error, otherwise the number of rt_pixel objects
  * in npixels
@@ -611,7 +725,7 @@ int rt_band_get_pixel(
 int rt_band_get_nearest_pixel(
 	rt_band band,
 	int x, int y,
-	uint16_t distance,
+	uint16_t distancex, uint16_t distancey,
 	int exclude_nodata_value,
 	rt_pixel *npixels
 );
@@ -619,11 +733,11 @@ int rt_band_get_nearest_pixel(
 /**
  * Search band for pixel(s) with search values
  *
- * @param band: the band to query for minimum and maximum pixel values
- * @param exclude_nodata_value: if non-zero, ignore nodata values
- * @param searchset: array of values to count
- * @param searchcount: the number of search values
- * @param pixels: pixels with the search value
+ * @param band : the band to query for minimum and maximum pixel values
+ * @param exclude_nodata_value : if non-zero, ignore nodata values
+ * @param searchset : array of values to count
+ * @param searchcount : the number of search values
+ * @param pixels : pixels with the search value
  *
  * @return -1 on error, otherwise number of pixels
  */
@@ -635,14 +749,18 @@ int rt_band_get_pixel_of_value(
 
 /**
  * Returns the minimal possible value for the band according to the pixel type.
- * @param band: the band to get info from
+ *
+ * @param band : the band to get info from
+ *
  * @return the minimal possible value for the band.
  */
 double rt_band_get_min_value(rt_band band);
 
 /**
  * Returns TRUE if the band is only nodata values
- * @param band: the band to get info from
+ *
+ * @param band : the band to get info from
+ *
  * @return TRUE if the band is only nodata values, FALSE otherwise
  */
 int rt_band_check_is_nodata(rt_band band);
@@ -650,12 +768,12 @@ int rt_band_check_is_nodata(rt_band band);
 /**
  * Compare clamped value to band's clamped NODATA value
  *
- * @param band: the band whose NODATA value will be used for comparison
- * @param val: the value to compare to the NODATA value
+ * @param band : the band whose NODATA value will be used for comparison
+ * @param val : the value to compare to the NODATA value
  *
- * @return 1 if clamped value is clamped NODATA
- *         0 if clamped value is NOT clamped NODATA
- *         -1 if error
+ * @return 2 if unclamped value is unclamped NODATA
+ *         1 if clamped value is clamped NODATA
+ *         0 if clamped values is NOT clamped NODATA
  */
 int rt_band_clamped_value_is_nodata(rt_band band, double val);
 
@@ -664,70 +782,83 @@ int rt_band_clamped_value_is_nodata(rt_band band, double val);
  * Correction does NOT occur if unclamped value is exactly unclamped
  * NODATA value.
  * 
- * @param band: the band whose NODATA value will be used for comparison
- * @param val: the value to compare to the NODATA value and correct
- * @param newval: pointer to corrected value
+ * @param band : the band whose NODATA value will be used for comparison
+ * @param val : the value to compare to the NODATA value and correct
+ * @param *newval : pointer to corrected value
+ * @param *corrected : (optional) non-zero if val was corrected
  *
- * @return 0 on error, 1 if corrected, -1 otherwise
+ * @return ES_NONE if success, ES_ERROR if error
  */
-int
-rt_band_corrected_clamped_value(rt_band band, double val, double *newval);
+rt_errorstate
+rt_band_corrected_clamped_value(
+	rt_band band,
+	double val,
+	double *newval, int *corrected
+);
 
 /**
  * Compute summary statistics for a band
  *
- * @param band: the band to query for summary stats 
- * @param exclude_nodata_value: if non-zero, ignore nodata values
- * @param sample: percentage of pixels to sample
- * @param inc_vals: flag to include values in return struct
- * @param cK: number of pixels counted thus far in coverage
- * @param cM: M component of 1-pass stddev for coverage
- * @param cQ: Q component of 1-pass stddev for coverage
+ * @param band : the band to query for summary stats 
+ * @param exclude_nodata_value : if non-zero, ignore nodata values
+ * @param sample : percentage of pixels to sample
+ * @param inc_vals : flag to include values in return struct
+ * @param cK : number of pixels counted thus far in coverage
+ * @param cM : M component of 1-pass stddev for coverage
+ * @param cQ : Q component of 1-pass stddev for coverage
  *
- * @return the summary statistics for a band
+ * @return the summary statistics for a band or NULL
  */
-rt_bandstats rt_band_get_summary_stats(rt_band band, int exclude_nodata_value,
-	double sample, int inc_vals, uint64_t *cK, double *cM, double *cQ);
+rt_bandstats rt_band_get_summary_stats(
+	rt_band band,
+	int exclude_nodata_value, double sample, int inc_vals,
+	uint64_t *cK, double *cM, double *cQ
+);
 	
 /**
  * Count the distribution of data
  *
- * @param stats: a populated stats struct for processing
- * @param bin_count: the number of bins to group the data by
- * @param bin_width: the width of each bin as an array
- * @param bin_width_count: number of values in bin_width
- * @param right: evaluate bins by (a,b] rather than default [a,b)
- * @param min: user-defined minimum value of the histogram
+ * @param stats : a populated stats struct for processing
+ * @param bin_count : the number of bins to group the data by
+ * @param bin_width : the width of each bin as an array
+ * @param bin_width_count : number of values in bin_width
+ * @param right : evaluate bins by (a,b] rather than default [a,b)
+ * @param min : user-defined minimum value of the histogram
  *   a value less than the minimum value is not counted in any bins
  *   if min = max, min and max are not used
- * @param max: user-defined maximum value of the histogram
+ * @param max : user-defined maximum value of the histogram
  *   a value greater than the max value is not counted in any bins
  *   if min = max, min and max are not used
- * @param rtn_count: set to the number of bins being returned
+ * @param rtn_count : set to the number of bins being returned
  *
- * @return the histogram of the data
+ * @return the histogram of the data or NULL
  */
-rt_histogram rt_band_get_histogram(rt_bandstats stats,
+rt_histogram rt_band_get_histogram(
+	rt_bandstats stats,
 	int bin_count, double *bin_widths, int bin_widths_count,
-	int right, double min, double max, uint32_t *rtn_count);
+	int right, double min, double max,
+	uint32_t *rtn_count
+);
 
 /**
  * Compute the default set of or requested quantiles for a set of data
  * the quantile formula used is same as Excel and R default method
  *
- * @param stats: a populated stats struct for processing
- * @param quantiles: the quantiles to be computed
- * @param quantiles_count: the number of quantiles to be computed
- * @param rtn_count: the number of quantiles being returned
+ * @param stats : a populated stats struct for processing
+ * @param quantiles : the quantiles to be computed
+ * @param quantiles_count : the number of quantiles to be computed
+ * @param rtn_count : the number of quantiles being returned
  *
- * @return the default set of or requested quantiles for a band
+ * @return the default set of or requested quantiles for a band or NULL
  */
 rt_quantile rt_band_get_quantiles(rt_bandstats stats,
 	double *quantiles, int quantiles_count, uint32_t *rtn_count);
 
 struct quantile_llist;
-int quantile_llist_destroy(struct quantile_llist **list,
-	uint32_t list_count);
+int quantile_llist_destroy(
+	struct quantile_llist **list,
+	uint32_t list_count
+);
 
 /**
  * Compute the default set of or requested quantiles for a coverage
@@ -743,43 +874,47 @@ int quantile_llist_destroy(struct quantile_llist **list,
  * In the future, it may be worth exploring algorithms that don't
  *   require the size of the coverage
  *
- * @param band: the band to include in the quantile search
- * @param exclude_nodata_value: if non-zero, ignore nodata values
- * @param sample: percentage of pixels to sample
- * @param cov_count: number of values in coverage
- * @param qlls: set of quantile_llist structures
- * @param qlls_count: the number of quantile_llist structures
- * @param quantiles: the quantiles to be computed
+ * @param band : the band to include in the quantile search
+ * @param exclude_nodata_value : if non-zero, ignore nodata values
+ * @param sample : percentage of pixels to sample
+ * @param cov_count : number of values in coverage
+ * @param qlls : set of quantile_llist structures
+ * @param qlls_count : the number of quantile_llist structures
+ * @param quantiles : the quantiles to be computed
  *   if bot qlls and quantiles provided, qlls is used
- * @param quantiles_count: the number of quantiles to be computed
- * @param rtn_count: the number of quantiles being returned
+ * @param quantiles_count : the number of quantiles to be computed
+ * @param rtn_count : the number of quantiles being returned
  *
- * @return the default set of or requested quantiles for a band
+ * @return the default set of or requested quantiles for a band or NULL
  */
-rt_quantile rt_band_get_quantiles_stream(rt_band band,
+rt_quantile rt_band_get_quantiles_stream(
+	rt_band band,
 	int exclude_nodata_value, double sample,
 	uint64_t cov_count,
 	struct quantile_llist **qlls, uint32_t *qlls_count,
 	double *quantiles, int quantiles_count,
-	uint32_t *rtn_count);
+	uint32_t *rtn_count
+);
 
 /**
  * Count the number of times provided value(s) occur in
  * the band
  *
- * @param band: the band to query for minimum and maximum pixel values
- * @param exclude_nodata_value: if non-zero, ignore nodata values
- * @param search_values: array of values to count
- * @param search_values_count: the number of search values
- * @param roundto: the decimal place to round the values to
- * @param rtn_total: the number of pixels examined in the band
- * @param rtn_count: the number of value counts being returned
+ * @param band : the band to query for minimum and maximum pixel values
+ * @param exclude_nodata_value : if non-zero, ignore nodata values
+ * @param search_values : array of values to count
+ * @param search_values_count : the number of search values
+ * @param roundto : the decimal place to round the values to
+ * @param rtn_total : the number of pixels examined in the band
+ * @param rtn_count : the number of value counts being returned
  *
- * @return the number of times the provide value(s) occur
+ * @return the number of times the provide value(s) occur or NULL
  */
-rt_valuecount rt_band_get_value_count(rt_band band, int exclude_nodata_value,
-	double *search_values, uint32_t search_values_count,
-	double roundto, uint32_t *rtn_total, uint32_t *rtn_count);
+rt_valuecount rt_band_get_value_count(
+	rt_band band, int exclude_nodata_value,
+	double *search_values, uint32_t search_values_count, double roundto,
+	uint32_t *rtn_total, uint32_t *rtn_count
+);
 
 /**
  * Returns new band with values reclassified
@@ -791,11 +926,13 @@ rt_valuecount rt_band_get_value_count(rt_band band, int exclude_nodata_value,
  * @param exprset : array of rt_reclassexpr structs
  * @param exprcount : number of elements in expr
  *
- * @return a new rt_band or 0 on error
+ * @return a new rt_band or NULL on error
  */
-rt_band rt_band_reclass(rt_band srcband, rt_pixtype pixtype,
+rt_band rt_band_reclass(
+	rt_band srcband, rt_pixtype pixtype,
 	uint32_t hasnodata, double nodataval,
-	rt_reclassexpr *exprset, int exprcount);
+	rt_reclassexpr *exprset, int exprcount
+);
 
 /*- rt_raster --------------------------------------------------------*/
 
@@ -808,7 +945,7 @@ rt_band rt_band_reclass(rt_band srcband, rt_pixtype pixtype,
  * @param width : number of pixel columns
  * @param height : number of pixel rows
  *
- * @return an rt_raster or 0 if out of memory
+ * @return an rt_raster or NULL if out of memory
  */
 rt_raster rt_raster_new(uint32_t width, uint32_t height);
 
@@ -818,7 +955,7 @@ rt_raster rt_raster_new(uint32_t width, uint32_t height);
  * @param wkb : an octet stream
  * @param wkbsize : size (in bytes) of the wkb octet stream
  *
- * @return an rt_raster or 0 on error (out of memory or
+ * @return an rt_raster or NULL on error (out of memory or
  *         malformed WKB).
  *
  */
@@ -831,7 +968,7 @@ rt_raster rt_raster_from_wkb(const uint8_t* wkb,
  * @param hexwkb : an hex-encoded stream
  * @param hexwkbsize : size (in bytes) of the hexwkb stream
  *
- * @return an rt_raster or 0 on error (out of memory or
+ * @return an rt_raster or NULL on error (out of memory or
  *         malformed WKB).
  *
  */
@@ -843,6 +980,8 @@ rt_raster rt_raster_from_hexwkb(const char* hexwkb,
  *
  * @param raster : the raster
  * @param wkbsize : will be set to the size of returned wkb form
+ *
+ * @return WKB of raster or NULL on error
  */
 uint8_t *rt_raster_to_wkb(rt_raster raster,
                                     uint32_t *wkbsize);
@@ -853,6 +992,8 @@ uint8_t *rt_raster_to_wkb(rt_raster raster,
  * @param raster : the raster
  * @param hexwkbsize : will be set to the size of returned wkb form,
  *                     not including the null termination
+ *
+ * @return HEXWKB of raster or NULL on error
  */
 char *rt_raster_to_hexwkb(rt_raster raster,
                                     uint32_t *hexwkbsize);
@@ -865,7 +1006,6 @@ char *rt_raster_to_hexwkb(rt_raster raster,
  * the one associated with the pointers pointing
  * at them).
  *
-
  * @param raster : the raster to destroy
  */
 void rt_raster_destroy(rt_raster raster);
@@ -873,7 +1013,14 @@ void rt_raster_destroy(rt_raster raster);
 /* Get number of bands */
 int rt_raster_get_num_bands(rt_raster raster);
 
-/* Return Nth band, or 0 if unavailable */
+/**
+ * Return Nth band, or NULL if unavailable
+ *
+ * @param raster : the raster
+ * @param bandNum : 0-based index of the band to return
+ *
+ * Return band at specified index or NULL if error
+ */
 rt_band rt_raster_get_band(rt_raster raster, int bandNum);
 
 /* Get number of rows */
@@ -892,22 +1039,27 @@ uint16_t rt_raster_get_height(rt_raster raster);
  *
  * @return identifier (position) for the just-added raster, or -1 on error
  */
-int32_t rt_raster_add_band(rt_raster raster, rt_band band, int index);
+int rt_raster_add_band(rt_raster raster, rt_band band, int index);
 
 /**
  * Generate a new inline band and add it to a raster.
  *
  * @param raster : the raster to add a band to
- * @param pixtype: the pixel type for the new band
- * @param initialvalue: initial value for pixels
- * @param hasnodata: indicates if the band has a nodata value
- * @param nodatavalue: nodata value for the new band
- * @param index: position to add the new band in the raster
+ * @param pixtype : the pixel type for the new band
+ * @param initialvalue : initial value for pixels
+ * @param hasnodata : indicates if the band has a nodata value
+ * @param nodatavalue : nodata value for the new band
+ * @param index : position to add the new band in the raster
  *
  * @return identifier (position) for the just-added raster, or -1 on error
  */
-int32_t rt_raster_generate_new_band(rt_raster raster, rt_pixtype pixtype,
-        double initialvalue, uint32_t hasnodata, double nodatavalue, int index);
+int rt_raster_generate_new_band(
+	rt_raster raster,
+	rt_pixtype pixtype,
+	double initialvalue,
+	uint32_t hasnodata, double nodatavalue,
+	int index
+);
 
 /**
  * Set scale in projection units
@@ -1088,11 +1240,24 @@ void rt_raster_set_srid(rt_raster raster, int32_t srid);
 int32_t rt_raster_get_srid(rt_raster raster);
 
 /**
+ * Get 6-element array of raster inverse geotransform matrix
+ *
+ * @param raster : the raster to get matrix of
+ * @param gt : optional input parameter, 6-element geotransform matrix
+ * @param igt : output parameter, 6-element inverse geotransform matrix
+ *
+ * @return ES_NONE if success, ES_ERROR if error
+ */
+rt_errorstate rt_raster_get_inverse_geotransform_matrix(
+	rt_raster raster,
+	double *gt, double *igt
+);
+
+/**
  * Get 6-element array of raster geotransform matrix
  *
  * @param raster : the raster to get matrix of
  * @param gt : output parameter, 6-element geotransform matrix
- *
  */
 void rt_raster_get_geotransform_matrix(rt_raster raster,
 	double *gt);
@@ -1117,12 +1282,14 @@ void rt_raster_set_geotransform_matrix(rt_raster raster,
  * @param yw : output parameter, Y ordinate of the geographical point
  * @param gt : input/output parameter, 3x2 geotransform matrix
  *
- * @return if zero, error occurred in function
+ * @return ES_NONE if success, ES_ERROR if error
  */
-int rt_raster_cell_to_geopoint(rt_raster raster,
+rt_errorstate rt_raster_cell_to_geopoint(
+	rt_raster raster,
 	double xr, double yr,
 	double* xw, double* yw,
-	double *gt);
+	double *gt
+);
 
 /**
  * Convert an xw, yw map point to a xr, yr raster point
@@ -1134,38 +1301,40 @@ int rt_raster_cell_to_geopoint(rt_raster raster,
  * @param yr : output parameter, the pixel's row
  * @param igt : input/output parameter, inverse geotransform matrix
  *
- * @return if zero, error occurred in function
+ * @return ES_NONE if success, ES_ERROR if error
  */
-int rt_raster_geopoint_to_cell(rt_raster raster,
+rt_errorstate rt_raster_geopoint_to_cell(
+	rt_raster raster,
 	double xw, double yw,
 	double *xr, double *yr,
-	double *igt);
+	double *igt
+);
 
 /**
- * Get raster's polygon convex hull.
+ * Get raster's convex hull.
  *
- * The convex hull is a 4 vertices (5 to be closed) single
- * ring polygon bearing the raster's rotation
- * and using projection coordinates
+ * The convex hull is typically a 4 vertices (5 to be closed)
+ * single ring polygon bearing the raster's rotation and using
+ * projection coordinates.
  *
  * @param raster : the raster to get info from
+ * @param **hull : pointer to convex hull
  *
- * @return the convex hull, or NULL on error.
- *
+ * @return ES_NONE if success, ES_ERROR if error
  */
-LWPOLY* rt_raster_get_convex_hull(rt_raster raster);
+rt_errorstate rt_raster_get_convex_hull(rt_raster raster, LWGEOM **hull);
 
 /**
  * Get raster's envelope.
  *
  * The envelope is the minimum bounding rectangle of the raster
  *
- * @param raster: the raster to get envelope of
- * @param env: pointer to rt_envelope
+ * @param raster : the raster to get envelope of
+ * @param env : pointer to rt_envelope
  *
- * @return 0 on error, 1 on success
+ * @return ES_NONE if success, ES_ERROR if error
  */
-int rt_raster_get_envelope(
+rt_errorstate rt_raster_get_envelope(
 	rt_raster raster,
 	rt_envelope *env
 );
@@ -1173,13 +1342,12 @@ int rt_raster_get_envelope(
 /*
  * Compute skewed extent that covers unskewed extent.
  *
- * @param envelope: unskewed extent of type rt_envelope
- * @param skew: pointer to 2-element array (x, y) of skew
- * @param scale: pointer to 2-element array (x, y) of scale
- * @param tolerance: value between 0 and 1 where the smaller the tolerance
- *                   results in an extent approaching the "minimum" skewed
- *                   extent.  If value <= 0, tolerance = 0.1.
- *                   If value > 1, tolerance = 1.
+ * @param envelope : unskewed extent of type rt_envelope
+ * @param skew : pointer to 2-element array (x, y) of skew
+ * @param scale : pointer to 2-element array (x, y) of scale
+ * @param tolerance : value between 0 and 1 where the smaller the tolerance
+ * results in an extent approaching the "minimum" skewed extent.
+ * If value <= 0, tolerance = 0.1.  If value > 1, tolerance = 1.
  *
  * @return skewed raster who's extent covers unskewed extent, NULL on error
  */
@@ -1212,14 +1380,15 @@ LWPOLY* rt_raster_pixel_as_polygon(rt_raster raster, int x, int y);
  * those pixels with value (not NODATA) contribute to the area
  * of the output multipolygon.
  *
- * @param raster: the raster to convert to a multipolygon
- * @param nband: the 0-based band of raster rast to use
+ * @param raster : the raster to convert to a multipolygon
+ * @param nband : the 0-based band of raster rast to use
  *   if value is less than zero, bands are ignored.
- * @param err: if 0, error occurred
+ * @param **surface : raster as a surface (multipolygon).
+ *   if all pixels are NODATA, NULL is set
  *
- * @return the raster surface or NULL
+ * @return ES_NONE on success, ES_ERROR on error
  */
-LWMPOLY* rt_raster_surface(rt_raster raster, int nband, int *err);
+rt_errorstate rt_raster_surface(rt_raster raster, int nband, LWMPOLY **surface);
 
 /**
  * Returns a set of "geomval" value, one for each group of pixel
@@ -1229,9 +1398,9 @@ LWMPOLY* rt_raster_surface(rt_raster raster, int nband, int *err);
  * in LWPOLY representation (one for each group of pixel sharing
  * the same value) and the value associated with this geometry.
  *
- * @param raster: the raster to get info from.
- * @param nband: the band to polygonize. 0-based
- * @param exclude_nodata_value: if non-zero, ignore nodata values
+ * @param raster : the raster to get info from.
+ * @param nband : the band to polygonize. 0-based
+ * @param exclude_nodata_value : if non-zero, ignore nodata values
  * to check for pixels with value
  *
  * @return A set of "geomval" values, one for each group of pixels
@@ -1247,9 +1416,9 @@ rt_raster_gdal_polygonize(
 
 /**
  * Return this raster in serialized form.
+ * Memory (band data included) is copied from rt_raster.
  *
  * Serialized form is documented in doc/RFC1-SerializedFormat.
- *
  */
 void* rt_raster_serialize(rt_raster raster);
 
@@ -1259,29 +1428,28 @@ void* rt_raster_serialize(rt_raster raster);
  * Serialized form is documented in doc/RFC1-SerializedFormat.
  *
  * NOTE: the raster will contain pointer to the serialized
- *       form, which must be kept alive.
+ * form (including band data), which must be kept alive.
  */
 rt_raster rt_raster_deserialize(void* serialized, int header_only);
-
 
 /**
  * Return TRUE if the raster is empty. i.e. is NULL, width = 0 or height = 0
  *
- * @param raster: the raster to get info from
+ * @param raster : the raster to get info from
  *
  * @return TRUE if the raster is empty, FALSE otherwise
  */
 int rt_raster_is_empty(rt_raster raster);
 
 /**
- * Return TRUE if the raster do not have a band of this number.
+ * Return TRUE if the raster has a band of this number.
  *
- * @param raster: the raster to get info from
- * @param nband: the band number. 0-based
+ * @param raster : the raster to get info from
+ * @param nband : the band number. 0-based
  *
- * @return TRUE if the raster do not have a band of this number, FALSE otherwise
+ * @return TRUE if the raster has a band of this number, FALSE otherwise
  */
-int rt_raster_has_no_band(rt_raster raster, int nband);
+int rt_raster_has_band(rt_raster raster, int nband);
 
 /**
  * Copy one band from one raster to another.  Bands are duplicated from
@@ -1289,14 +1457,15 @@ int rt_raster_has_no_band(rt_raster raster, int nband);
  * to ensure that the copied band's data or path remains allocated
  * for the lifetime of the copied bands.
  *
- * @param torast: raster to copy band to
- * @param fromrast: raster to copy band from
- * @param fromindex: index of band in source raster, 0-based
- * @param toindex: index of new band in destination raster, 0-based
+ * @param torast : raster to copy band to
+ * @param fromrast : raster to copy band from
+ * @param fromindex : index of band in source raster, 0-based
+ * @param toindex : index of new band in destination raster, 0-based
  *
  * @return The band index of the second raster where the new band is copied.
+ *   -1 if error
  */
-int32_t rt_raster_copy_band(
+int rt_raster_copy_band(
 	rt_raster torast, rt_raster fromrast,
 	int fromindex, int toindex
 );
@@ -1310,7 +1479,7 @@ int32_t rt_raster_copy_band(
  *                   and add to the new raster (0 based)
  * @param count : number of elements in bandNums
  *
- * @return a new rt_raster or 0 on error
+ * @return a new rt_raster or NULL on error
  */
 rt_raster rt_raster_from_band(rt_raster raster, uint32_t *bandNums,
 	int count);
@@ -1322,10 +1491,20 @@ rt_raster rt_raster_from_band(rt_raster raster, uint32_t *bandNums,
  * @param band : new band to add to raster
  * @param index : index of band to replace (0-based)
  *
- * @return 0 on error or replaced band
+ * @return NULL on error or replaced band
  */
 rt_band rt_raster_replace_band(rt_raster raster, rt_band band,
 	int index);
+
+/**
+ * Clone an existing raster
+ *
+ * @param raster : raster to clone
+ * @param deep : flag indicating if bands should be cloned
+ *
+ * @return a new rt_raster or NULL on error
+ */
+rt_raster rt_raster_clone(rt_raster raster, uint8_t deep);
 
 /**
  * Return formatted GDAL raster from raster
@@ -1360,7 +1539,7 @@ rt_gdaldriver rt_raster_gdal_drivers(uint32_t *drv_count, uint8_t cancc);
  * @param srs : the raster's coordinate system in OGC WKT
  * @param bandNums : array of band numbers to extract from raster
  *   and include in the GDAL dataset (0 based)
- * @param excludeNodataValues: array of zero, nonzero where if non-zero,
+ * @param excludeNodataValues : array of zero, nonzero where if non-zero,
  *   ignore nodata values for the band
  * to check for pixels with value
  * @param count : number of elements in bandNums and exclude_nodata_values
@@ -1382,7 +1561,7 @@ GDALDatasetH rt_raster_to_gdal_mem(
  *
  * @param ds : the GDAL dataset to convert to a raster
  *
- * @return raster
+ * @return raster or NULL
  */
 rt_raster rt_raster_from_gdal_dataset(GDALDatasetH ds);
 
@@ -1414,10 +1593,11 @@ rt_raster rt_raster_from_gdal_dataset(GDALDatasetH ds);
  * @param max_err : maximum error measured in input pixels permitted
  *   (0.0 for exact calculations)
  *
- * @return the warped raster
+ * @return the warped raster or NULL
  */
-rt_raster rt_raster_gdal_warp(rt_raster raster, const char *src_srs,
-	const char *dst_srs,
+rt_raster rt_raster_gdal_warp(
+	rt_raster raster,
+	const char *src_srs, const char *dst_srs,
 	double *scale_x, double *scale_y,
 	int *width, int *height,
 	double *ul_xw, double *ul_yw,
@@ -1431,12 +1611,12 @@ rt_raster rt_raster_gdal_warp(rt_raster raster, const char *src_srs,
  * @param wkb : WKB representation of the geometry to convert
  * @param wkb_len : length of the WKB representation of the geometry
  * @param srs : the geometry's coordinate system in OGC WKT
- * @param num_bands: number of bands in the output raster
- * @param pixtype: data type of each band
- * @param init: array of values to initialize each band with
- * @param value: array of values for pixels of geometry
- * @param nodata: array of nodata values for each band
- * @param hasnodata: array flagging the presence of nodata for each band
+ * @param num_bands : number of bands in the output raster
+ * @param pixtype : data type of each band
+ * @param init : array of values to initialize each band with
+ * @param value : array of values for pixels of geometry
+ * @param nodata : array of nodata values for each band
+ * @param hasnodata : array flagging the presence of nodata for each band
  * @param width : the number of columns of the raster
  * @param height : the number of rows of the raster
  * @param scale_x : the pixel width of the raster
@@ -1449,7 +1629,7 @@ rt_raster rt_raster_gdal_warp(rt_raster raster, const char *src_srs,
  * @param skew_y : the Y skew of the raster
  * @param options : array of options.  only option is "ALL_TOUCHED"
  *
- * @return the raster of the provided geometry
+ * @return the raster of the provided geometry or NULL
  */
 rt_raster rt_raster_gdal_rasterize(const unsigned char *wkb,
 	uint32_t wkb_len, const char *srs,
@@ -1465,7 +1645,7 @@ rt_raster rt_raster_gdal_rasterize(const unsigned char *wkb,
 );
 
 /**
- * Return zero if error occurred in function.
+ * Return ES_ERROR if error occurred in function.
  * Parameter intersects returns non-zero if two rasters intersect
  *
  * @param rast1 : the first raster whose band will be tested
@@ -1478,16 +1658,16 @@ rt_raster rt_raster_gdal_rasterize(const unsigned char *wkb,
  *   if nband2 gte zero, nband1 must be gte zero
  * @param intersects : non-zero value if the two rasters' bands intersects
  *
- * @return if zero, an error occurred in function
+ * @return ES_NONE if success, ES_ERROR if error
  */
-int rt_raster_intersects(
+rt_errorstate rt_raster_intersects(
 	rt_raster rast1, int nband1,
 	rt_raster rast2, int nband2,
 	int *intersects
 );
 
 /**
- * Return zero if error occurred in function.
+ * Return ES_ERROR if error occurred in function.
  * Parameter overlaps returns non-zero if two rasters overlap
  *
  * @param rast1 : the first raster whose band will be tested
@@ -1500,16 +1680,16 @@ int rt_raster_intersects(
  *   if nband2 gte zero, nband1 must be gte zero
  * @param overlaps : non-zero value if the two rasters' bands overlaps
  *
- * @return if zero, an error occurred in function
+ * @return ES_NONE if success, ES_ERROR if error
  */
-int rt_raster_overlaps(
+rt_errorstate rt_raster_overlaps(
 	rt_raster rast1, int nband1,
 	rt_raster rast2, int nband2,
 	int *overlaps
 );
 
 /**
- * Return zero if error occurred in function.
+ * Return ES_ERROR if error occurred in function.
  * Parameter contains returns non-zero if rast1 contains rast2
  *
  * @param rast1 : the first raster whose band will be tested
@@ -1522,16 +1702,16 @@ int rt_raster_overlaps(
  *   if nband2 gte zero, nband1 must be gte zero
  * @param contains : non-zero value if rast1 contains rast2
  *
- * @return if zero, an error occurred in function
+ * @return ES_NONE if success, ES_ERROR if error
  */
-int rt_raster_contains(
+rt_errorstate rt_raster_contains(
 	rt_raster rast1, int nband1,
 	rt_raster rast2, int nband2,
 	int *contains
 );
 
 /**
- * Return zero if error occurred in function.
+ * Return ES_ERROR if error occurred in function.
  * Parameter contains returns non-zero if rast1 contains properly rast2
  *
  * @param rast1 : the first raster whose band will be tested
@@ -1544,16 +1724,16 @@ int rt_raster_contains(
  *   if nband2 gte zero, nband1 must be gte zero
  * @param contains : non-zero value if rast1 contains properly rast2
  *
- * @return if zero, an error occurred in function
+ * @return ES_NONE if success, ES_ERROR if error
  */
-int rt_raster_contains_properly(
+rt_errorstate rt_raster_contains_properly(
 	rt_raster rast1, int nband1,
 	rt_raster rast2, int nband2,
 	int *contains
 );
 
 /**
- * Return zero if error occurred in function.
+ * Return ES_ERROR if error occurred in function.
  * Parameter touches returns non-zero if two rasters touch
  *
  * @param rast1 : the first raster whose band will be tested
@@ -1566,17 +1746,17 @@ int rt_raster_contains_properly(
  *   if nband2 gte zero, nband1 must be gte zero
  * @param touches : non-zero value if the two rasters' bands touch
  *
- * @return if zero, an error occurred in function
+ * @return ES_NONE if success, ES_ERROR if error
  */
-int rt_raster_touches(
+rt_errorstate rt_raster_touches(
 	rt_raster rast1, int nband1,
 	rt_raster rast2, int nband2,
 	int *touches
 );
 
 /**
- * Return zero if error occurred in function.
- * Parameter contains returns non-zero if rast1 covers rast2
+ * Return ES_ERROR if error occurred in function.
+ * Parameter covers returns non-zero if rast1 covers rast2
  *
  * @param rast1 : the first raster whose band will be tested
  * @param nband1 : the 0-based band of raster rast1 to use
@@ -1588,17 +1768,17 @@ int rt_raster_touches(
  *   if nband2 gte zero, nband1 must be gte zero
  * @param covers : non-zero value if rast1 covers rast2
  *
- * @return if zero, an error occurred in function
+ * @return ES_NONE if success, ES_ERROR if error
  */
-int rt_raster_covers(
+rt_errorstate rt_raster_covers(
 	rt_raster rast1, int nband1,
 	rt_raster rast2, int nband2,
 	int *covers
 );
 
 /**
- * Return zero if error occurred in function.
- * Parameter contains returns non-zero if rast1 is covered by rast2
+ * Return ES_ERROR if error occurred in function.
+ * Parameter coveredby returns non-zero if rast1 is covered by rast2
  *
  * @param rast1 : the first raster whose band will be tested
  * @param nband1 : the 0-based band of raster rast1 to use
@@ -1610,17 +1790,17 @@ int rt_raster_covers(
  *   if nband2 gte zero, nband1 must be gte zero
  * @param coveredby : non-zero value if rast1 is covered by rast2
  *
- * @return if zero, an error occurred in function
+ * @return ES_NONE if success, ES_ERROR if error
  */
-int rt_raster_coveredby(
+rt_errorstate rt_raster_coveredby(
 	rt_raster rast1, int nband1,
 	rt_raster rast2, int nband2,
 	int *coveredby
 );
 
 /**
- * Return zero if error occurred in function.
- * Parameter contains returns non-zero if rast1 is within the specified
+ * Return ES_ERROR if error occurred in function.
+ * Parameter dwithin returns non-zero if rast1 is within the specified
  *   distance of rast2
  *
  * @param rast1 : the first raster whose band will be tested
@@ -1634,9 +1814,9 @@ int rt_raster_coveredby(
  * @param dwithin : non-zero value if rast1 is within the specified distance
  *   of rast2
  *
- * @return if zero, an error occurred in function
+ * @return ES_NONE if success, ES_ERROR if error
  */
-int rt_raster_within_distance(
+rt_errorstate rt_raster_within_distance(
 	rt_raster rast1, int nband1,
 	rt_raster rast2, int nband2,
 	double distance,
@@ -1644,8 +1824,8 @@ int rt_raster_within_distance(
 );
 
 /**
- * Return zero if error occurred in function.
- * Parameter contains returns non-zero if rast1 is fully within the specified
+ * Return ES_ERROR if error occurred in function.
+ * Parameter dfwithin returns non-zero if rast1 is fully within the specified
  *   distance of rast2
  *
  * @param rast1 : the first raster whose band will be tested
@@ -1659,9 +1839,9 @@ int rt_raster_within_distance(
  * @param dfwithin : non-zero value if rast1 is fully within the specified
  *   distance of rast2
  *
- * @return if zero, an error occurred in function
+ * @return ES_NONE if success, ES_ERROR if error
  */
-int rt_raster_fully_within_distance(
+rt_errorstate rt_raster_fully_within_distance(
 	rt_raster rast1, int nband1,
 	rt_raster rast2, int nband2,
 	double distance,
@@ -1669,19 +1849,20 @@ int rt_raster_fully_within_distance(
 );
 
 /*
- * Return zero if error occurred in function.
+ * Return ES_ERROR if error occurred in function.
  * Paramter aligned returns non-zero if two rasters are aligned
  *
  * @param rast1 : the first raster for alignment test
  * @param rast2 : the second raster for alignment test
- * @param aligned : non-zero value if the two rasters are aligned
+ * @param *aligned : non-zero value if the two rasters are aligned
+ * @param *reason : reason why rasters are not aligned
  *
- * @return if zero, an error occurred in function
+ * @return ES_NONE if success, ES_ERROR if error
  */
-int rt_raster_same_alignment(
+rt_errorstate rt_raster_same_alignment(
 	rt_raster rast1,
 	rt_raster rast2,
-	int *aligned
+	int *aligned, char **reason
 );
 
 /*
@@ -1692,17 +1873,70 @@ int rt_raster_same_alignment(
  * @param rast1 : the first raster
  * @param rast2 : the second raster
  * @param extenttype : type of extent for the output raster
- * @param err : if 0, error occurred
- * @param offset : 4-element array indicating the X,Y offsets
+ * @param *rtnraster : raster of computed extent
+ * @param *offset : 4-element array indicating the X,Y offsets
  * for each raster. 0,1 for rast1 X,Y. 2,3 for rast2 X,Y.
  *
- * @return raster object if success, NULL otherwise
+ * @return ES_NONE if success, ES_ERROR if error
  */
-rt_raster
+rt_errorstate
 rt_raster_from_two_rasters(
 	rt_raster rast1, rt_raster rast2,
 	rt_extenttype extenttype,
-	int *err, double *offset
+	rt_raster *rtnraster, double *offset
+);
+
+/**
+ * n-raster iterator.  Returns a raster with one band.
+ * The raster returned should be freed by the caller
+ *
+ * @param itrset : set of rt_iterator objects.
+ * @param itrcount : number of objects in itrset.
+ * @param extenttype : type of extent for the output raster.
+ * @param customextent : raster specifying custom extent.
+ * is only used if extenttype is ET_CUSTOM.
+ * @param pixtype : the desired pixel type of the output raster's band.
+ * @param hasnodata : indicates if the band has nodata value
+ * @param nodataval : the nodata value, will be appropriately
+ * truncated to fit the pixtype size.
+ * @param distancex : the number of pixels around the specified pixel
+ * along the X axis
+ * @param distancey : the number of pixels around the specified pixel
+ * along the Y axis
+ * @param *userarg : pointer to any argument that is passed as-is to callback.
+ * @param *callback : callback function for actual processing of pixel values.
+ * @param *rtnraster : return one band raster from iterator process
+ *
+ * The callback function _must_ have the following signature.
+ *
+ *    int FNAME(rt_iterator_arg arg, void *userarg, double *value, int *nodata)
+ *
+ * The callback function _must_ return zero (error) or non-zero (success)
+ * indicating whether the function ran successfully.
+ * The parameters passed to the callback function are as follows.
+ *
+ * - rt_iterator_arg arg : struct containing pixel values, NODATA flags and metadata
+ * - void *userarg : NULL or calling function provides to rt_raster_iterator() for use by callback function
+ * - double *value : value of pixel to be burned by rt_raster_iterator()
+ * - int *nodata : flag (0 or 1) indicating that pixel to be burned is NODATA
+ *
+ * @return ES_NONE on success, ES_ERROR on error
+ */
+rt_errorstate
+rt_raster_iterator(
+	rt_iterator itrset, uint16_t itrcount,
+	rt_extenttype extenttype, rt_raster customextent,
+	rt_pixtype pixtype,
+	uint8_t hasnodata, double nodataval,
+	uint16_t distancex, uint16_t distancey,
+	void *userarg,
+	int (*callback)(
+		rt_iterator_arg arg,
+		void *userarg,
+		double *value,
+		int *nodata
+	),
+	rt_raster *rtnraster
 );
 
 /*- utilities -------------------------------------------------------*/
@@ -1768,7 +2002,7 @@ rt_util_dbl_trunc_warning(
 /**
  * Convert cstring name to GDAL Resample Algorithm
  *
- * @param algname: cstring name to convert
+ * @param algname : cstring name to convert
  *
  * @return valid GDAL resampling algorithm
  */
@@ -1778,7 +2012,7 @@ rt_util_gdal_resample_alg(const char *algname);
 /**
  * Convert rt_pixtype to GDALDataType
  *
- * @param pt: pixeltype to convert
+ * @param pt : pixeltype to convert
  *
  * @return valid GDALDataType
  */
@@ -1788,7 +2022,7 @@ rt_util_pixtype_to_gdal_datatype(rt_pixtype pt);
 /**
  * Convert GDALDataType to rt_pixtype
  *
- * @param gdt: GDAL datatype to convert
+ * @param gdt : GDAL datatype to convert
  *
  * @return valid rt_pixtype
  */
@@ -1933,7 +2167,7 @@ struct rt_raster_t {
 
 struct rt_extband_t {
     uint8_t bandNum; /* 0-based */
-    char* path; /* externally owned ? */
+    char* path; /* internally owned */
 		void *mem; /* loaded external band data, internally owned */
 };
 
@@ -1944,9 +2178,9 @@ struct rt_band_t {
     uint16_t height;
     int32_t hasnodata; /* a flag indicating if this band contains nodata values */
     int32_t isnodata;   /* a flag indicating if this band is filled only with
-                           nodata values */
+                           nodata values. flag CANNOT be TRUE if hasnodata is FALSE */
     double nodataval; /* int will be converted ... */
-    int32_t ownsData; /* XXX mloskot: its behaviour needs to be documented */
+    int8_t ownsdata; /* 0, externally owned. 1, internally owned. only applies to data.mem */
 
 		rt_raster raster; /* reference to parent raster */
 
@@ -2055,6 +2289,35 @@ struct rt_reclassexpr_t {
 		int exc_min; /* exceed min */
 		int exc_max; /* exceed max */
 	} src, dst;
+};
+
+/* raster iterator */
+struct rt_iterator_t {
+	rt_raster raster;
+	uint16_t nband; /* 0-based */
+	uint8_t nbnodata; /* no band = treat as NODATA  */
+};
+
+/* callback argument from raster iterator */
+struct rt_iterator_arg_t {
+	/* # of rasters, Z-axis */
+	uint16_t rasters;
+	/* # of rows, Y-axis */
+	uint32_t rows;
+	/* # of columns, X-axis */
+	uint32_t columns;
+
+	/* axis order: Z,X,Y */
+	/* individual pixel values */
+	double ***values;
+	/* 0,1 value of nodata flag */
+	int ***nodata;
+
+	/* X,Y of pixel from each input raster */
+	int **src_pixel;
+
+	/* X,Y of pixel from output raster */
+	int dst_pixel[2];
 };
 
 /* gdal driver information */

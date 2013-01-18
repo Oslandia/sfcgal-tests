@@ -1,5 +1,5 @@
 /**********************************************************************
- * $Id: cu_geodetic.c 10195 2012-08-22 21:04:34Z pramsey $
+ * $Id: cu_geodetic.c 10864 2012-12-19 20:52:13Z strk $
  *
  * PostGIS - Spatial Types for PostgreSQL
  * http://postgis.refractions.net
@@ -149,6 +149,58 @@ static void test_sphere_project(void)
 	CU_ASSERT_DOUBLE_EQUAL(dir2, -2.35612, 0.0001);	
 }
 
+#if 0
+/**
+* Tests the relative numerical stability of the "robust" and
+* naive cross product calculation methods.
+*/
+static void cross_product_stability(void)
+{
+	POINT2D p1, p2;
+	int i;
+	GEOGRAPHIC_POINT g1, g2;
+	POINT3D A1, A2;
+	POINT3D Nr, Nc;
+	POINT3D Or, Oc;
+
+	p1.x = 10.0;
+	p1.y = 45.0;
+	p2.x = 10.0;
+	p2.y = 50.0;
+	
+	geographic_point_init(p1.x, p1.y, &g1);
+	ll2cart(&p1, &A1);
+
+	for ( i = 0; i < 40; i++ )
+	{
+		geographic_point_init(p2.x, p2.y, &g2);
+		ll2cart(&p2, &A2);
+		
+		/* Skea */
+		robust_cross_product(&g1, &g2, &Nr);
+		normalize(&Nr);
+		
+		/* Ramsey */
+		unit_normal(&A1, &A2, &Nc);
+
+		if ( i > 0 ) 
+		{
+			printf("\n- %d -------------------- %.24g ------------------------\n", i, p2.y);
+			printf("Skea:         %.24g,%.24g,%.24g\n", Nr.x, Nr.y, Nr.z);
+			printf("Skea Diff:    %.24g,%.24g,%.24g\n", Or.x-Nr.x, Or.y-Nr.y, Or.z-Nr.z);
+			printf("Ramsey:       %.24g,%.24g,%.24g\n", Nc.x, Nc.y, Nc.z);
+			printf("Ramsey Diff:  %.24g,%.24g,%.24g\n", Oc.x-Nc.x, Oc.y-Nc.y, Oc.z-Nc.z);
+			printf("Diff:         %.24g,%.24g,%.24g\n", Nr.x-Nc.x, Nr.y-Nc.y, Nr.z-Nc.z);
+		}
+		
+		Or = Nr;
+		Oc = Nc;
+		
+		p2.y += (p1.y - p2.y)/2.0;
+	}
+}
+#endif
+
 static void test_gbox_from_spherical_coordinates(void)
 {
 #if RANDOM_TEST
@@ -189,9 +241,9 @@ static void test_gbox_from_spherical_coordinates(void)
 		ll[3] = (double)rndlat;
 
 		gbox_geocentric_slow = LW_FALSE;
-		lwgeom_calculate_gbox_geocentric(lwline, gbox);
+		lwgeom_calculate_gbox_geodetic(lwline, &gbox);
 		gbox_geocentric_slow = LW_TRUE;
-		lwgeom_calculate_gbox_geocentric(lwline, gbox_slow);
+		lwgeom_calculate_gbox_geodetic(lwline, &gbox_slow);
 		gbox_geocentric_slow = LW_FALSE;
 
 		if (
@@ -206,8 +258,8 @@ static void test_gbox_from_spherical_coordinates(void)
 			printf("If you are seeing this, cut and paste it, it is a randomly generated test case!\n");
 			printf("LOOP: %d\n", i);
 			printf("SEGMENT (Lon Lat): (%.9g %.9g) (%.9g %.9g)\n", ll[0], ll[1], ll[2], ll[3]);
-			printf("CALC: %s\n", gbox_to_string(gbox));
-			printf("SLOW: %s\n", gbox_to_string(gbox_slow));
+			printf("CALC: %s\n", gbox_to_string(&gbox));
+			printf("SLOW: %s\n", gbox_to_string(&gbox_slow));
 			printf("-------\n\n");
 			CU_FAIL_FATAL(Slow (GOOD) and fast (CALC) box calculations returned different values!!);
 		}
@@ -247,12 +299,12 @@ static void test_gserialized_get_gbox_geocentric(void)
 		printf("line %d: diff %.9g\n", i, fabs(gbox.xmin - gbox_slow.xmin)+fabs(gbox.ymin - gbox_slow.ymin)+fabs(gbox.zmin - gbox_slow.zmin));
 		printf("------------\n");
 #endif
-		CU_ASSERT_DOUBLE_EQUAL(gbox.xmin, gbox_slow.xmin, 0.000001);
-		CU_ASSERT_DOUBLE_EQUAL(gbox.ymin, gbox_slow.ymin, 0.000001);
-		CU_ASSERT_DOUBLE_EQUAL(gbox.zmin, gbox_slow.zmin, 0.000001);
-		CU_ASSERT_DOUBLE_EQUAL(gbox.xmax, gbox_slow.xmax, 0.000001);
-		CU_ASSERT_DOUBLE_EQUAL(gbox.ymax, gbox_slow.ymax, 0.000001);
-		CU_ASSERT_DOUBLE_EQUAL(gbox.zmax, gbox_slow.zmax, 0.000001);
+		CU_ASSERT_DOUBLE_EQUAL(gbox.xmin, gbox_slow.xmin, 0.00000001);
+		CU_ASSERT_DOUBLE_EQUAL(gbox.ymin, gbox_slow.ymin, 0.00000001);
+		CU_ASSERT_DOUBLE_EQUAL(gbox.zmin, gbox_slow.zmin, 0.00000001);
+		CU_ASSERT_DOUBLE_EQUAL(gbox.xmax, gbox_slow.xmax, 0.00000001);
+		CU_ASSERT_DOUBLE_EQUAL(gbox.ymax, gbox_slow.ymax, 0.00000001);
+		CU_ASSERT_DOUBLE_EQUAL(gbox.zmax, gbox_slow.zmax, 0.00000001);
 	}
 
 }
@@ -486,6 +538,144 @@ static void test_edge_intersection(void)
 
 }
 
+static void line2pts(const char *wkt, POINT3D *A1, POINT3D *A2)
+{
+	LWLINE *l = (LWLINE*)lwgeom_from_wkt(wkt, LW_PARSER_CHECK_NONE);
+	POINTARRAY *pa;
+	POINT2D p1, p2;
+	GEOGRAPHIC_POINT g1, g2;
+	if ( ! l ) 
+	{
+		printf("BAD WKT FOUND in test_edge_intersects:\n  %s\n\n", wkt);
+		exit(0);
+	}
+	pa = l->points;
+	getPoint2d_p(pa, 0, &p1);
+	getPoint2d_p(pa, 1, &p2);
+	geographic_point_init(p1.x, p1.y, &g1);
+	geographic_point_init(p2.x, p2.y, &g2);
+	geog2cart(&g1, A1);
+	geog2cart(&g2, A2);
+	lwline_free(l);
+	return;
+}
+
+static void test_edge_intersects(void)
+{
+	POINT3D A1, A2, B1, B2;
+	GEOGRAPHIC_POINT g;
+	int rv;
+
+	/* Covers case, end-to-end intersection */
+	line2pts("LINESTRING(50 -10.999999999999998224, -10.0 50.0)", &A1, &A2);
+	line2pts("LINESTRING(-10.0 50.0, -10.272779983831613393 -16.937003313332997578)", &B1, &B2);
+	rv = edge_intersects(&A1, &A2, &B1, &B2);
+	CU_ASSERT(rv & PIR_INTERSECTS);
+
+	/* Medford case, very short segment vs very long one */
+	g.lat = 0.74123572595649878103;
+	g.lon = -2.1496353191142714145;
+	geog2cart(&g, &A1);
+	g.lat = 0.74123631950116664058;
+	g.lon = -2.1496353248304860273;
+	geog2cart(&g, &A2);
+	g.lat = 0.73856343764436815924;
+	g.lon = -2.1461493501950630325;
+	geog2cart(&g, &B1);
+	g.lat = 0.70971354024834598651;
+	g.lon = 2.1082194552519770703;
+	geog2cart(&g, &B2);
+	rv = edge_intersects(&A1, &A2, &B1, &B2);
+	CU_ASSERT(rv == 0);
+
+	/* Second Medford case, very short segment vs very long one */
+	g.lat = 0.73826546728290887156;
+	g.lon = -2.14426380171833042;
+	geog2cart(&g, &A1);
+	g.lat = 0.73826545883786642843;
+	g.lon = -2.1442638997530165668;
+	geog2cart(&g, &A2);
+	g.lat = 0.73775469118192538165;
+	g.lon = -2.1436035534281718817;
+	geog2cart(&g, &B1);
+	g.lat = 0.71021099548296817705;
+	g.lon = 2.1065275171200439353;
+	geog2cart(&g, &B2);
+	rv = edge_intersects(&A1, &A2, &B1, &B2);
+	CU_ASSERT(rv == PIR_INTERSECTS);
+
+	/* Again, this time with a less exact input edge. */
+	line2pts("LINESTRING(-123.165031277506 42.4696787216231, -123.165031605021 42.4697127292275)", &A1, &A2);
+	rv = edge_intersects(&A1, &A2, &B1, &B2);
+	CU_ASSERT(rv == 0);
+
+	/* Intersection at (0 0) */
+	line2pts("LINESTRING(-1.0 0.0, 1.0 0.0)", &A1, &A2);
+	line2pts("LINESTRING(0.0 -1.0, 0.0 1.0)", &B1, &B2);
+	rv = edge_intersects(&A1, &A2, &B1, &B2);
+	CU_ASSERT(rv == PIR_INTERSECTS);
+
+	/*  No intersection at (0 0) */
+	line2pts("LINESTRING(-1.0 0.0, 1.0 0.0)", &A1, &A2);
+	line2pts("LINESTRING(0.0 -1.0, 0.0 -2.0)", &B1, &B2);
+	rv = edge_intersects(&A1, &A2, &B1, &B2);
+	CU_ASSERT(rv == 0);
+
+	/*  End touches middle of segment at (0 0) */
+	line2pts("LINESTRING(-1.0 0.0, 1.0 0.0)", &A1, &A2);
+	line2pts("LINESTRING(0.0 -1.0, 0.0 0.0)", &B1, &B2);
+	rv = edge_intersects(&A1, &A2, &B1, &B2);
+	CU_ASSERT(rv == (PIR_INTERSECTS|PIR_B_TOUCH_RIGHT) );
+
+	/*  End touches end of segment at (0 0) */
+	line2pts("LINESTRING(0.0 0.0, 1.0 0.0)", &A1, &A2);
+	line2pts("LINESTRING(0.0 -1.0, 0.0 0.0)", &B1, &B2);
+	rv = edge_intersects(&A1, &A2, &B1, &B2);
+	CU_ASSERT(rv == (PIR_INTERSECTS|PIR_B_TOUCH_RIGHT|PIR_A_TOUCH_RIGHT) );
+
+	/* Intersection at (180 0) */
+	line2pts("LINESTRING(-179.0 -1.0, 179.0 1.0)", &A1, &A2);
+	line2pts("LINESTRING(-179.0 1.0, 179.0 -1.0)", &B1, &B2);
+	rv = edge_intersects(&A1, &A2, &B1, &B2);
+	CU_ASSERT(rv == PIR_INTERSECTS);
+
+	/* Intersection at (180 0) */
+	line2pts("LINESTRING(-170.0 0.0, 170.0 0.0)", &A1, &A2);
+	line2pts("LINESTRING(180.0 -10.0, 180.0 10.0)", &B1, &B2);
+	rv = edge_intersects(&A1, &A2, &B1, &B2);
+	CU_ASSERT(rv == PIR_INTERSECTS);
+
+	/* Intersection at north pole */
+	line2pts("LINESTRING(-180.0 80.0, 0.0 80.0)", &A1, &A2);
+	line2pts("LINESTRING(90.0 80.0, -90.0 80.0)", &B1, &B2);
+	rv = edge_intersects(&A1, &A2, &B1, &B2);
+	CU_ASSERT(rv == PIR_INTERSECTS);
+
+	/* Equal edges return true */
+	line2pts("LINESTRING(45.0 10.0, 50.0 20.0)", &A1, &A2);
+	line2pts("LINESTRING(45.0 10.0, 50.0 20.0)", &B1, &B2);
+	rv = edge_intersects(&A1, &A2, &B1, &B2);
+	CU_ASSERT(rv & PIR_INTERSECTS);	
+	
+	/* Parallel edges (same great circle, different end points) return true  */
+	line2pts("LINESTRING(40.0 0.0, 70.0 0.0)", &A1, &A2);
+	line2pts("LINESTRING(60.0 0.0, 50.0 0.0)", &B1, &B2);
+	rv = edge_intersects(&A1, &A2, &B1, &B2);
+	CU_ASSERT(rv == (PIR_INTERSECTS|PIR_COLINEAR) );
+
+	/* End touches arc at north pole */
+	line2pts("LINESTRING(-180.0 80.0, 0.0 80.0)", &A1, &A2);
+	line2pts("LINESTRING(90.0 80.0, -90.0 90.0)", &B1, &B2);
+	rv = edge_intersects(&A1, &A2, &B1, &B2);
+	CU_ASSERT(rv == (PIR_INTERSECTS|PIR_B_TOUCH_LEFT) );
+	
+	/* End touches end at north pole */
+	line2pts("LINESTRING(-180.0 80.0, 0.0 90.0)", &A1, &A2);
+	line2pts("LINESTRING(90.0 80.0, -90.0 90.0)", &B1, &B2);
+	rv = edge_intersects(&A1, &A2, &B1, &B2);
+	CU_ASSERT(rv == (PIR_INTERSECTS|PIR_B_TOUCH_LEFT|PIR_A_TOUCH_RIGHT) );
+}
+
 static void test_edge_distance_to_point(void)
 {
 	GEOGRAPHIC_EDGE e;
@@ -680,7 +870,7 @@ static void test_gserialized_from_lwgeom(void)
 
 }
 
-static void test_ptarray_point_in_ring(void)
+static void test_ptarray_contains_point_sphere(void)
 {
 	LWGEOM *lwg;
 	LWPOLY *poly;
@@ -688,6 +878,28 @@ static void test_ptarray_point_in_ring(void)
 	POINT2D pt_outside;
 	int result;
 
+	/* Small polygon and huge distance between outside point and close-but-not-quite-inside point. Should return LW_FALSE. Pretty degenerate case. */
+	lwg = lwgeom_from_hexwkb("0103000020E61000000100000025000000ACAD6F91DDB65EC03F84A86D57264540CCABC279DDB65EC0FCE6926B57264540B6DEAA62DDB65EC0A79F6B63572645402E0BE84CDDB65EC065677155572645405D0B1D39DDB65EC0316310425726454082B5DB27DDB65EC060A4E12957264540798BB619DDB65EC0C393A10D57264540D4BC160FDDB65EC0BD0320EE56264540D7AC4E08DDB65EC096C862CC56264540AFD29205DDB65EC02A1F68A956264540363AFA06DDB65EC0722E418656264540B63A780CDDB65EC06E9B0064562645409614E215DDB65EC0E09DA84356264540FF71EF22DDB65EC0B48145265626454036033F33DDB65EC081B8A60C5626454066FB4546DDB65EC08A47A6F7552645409061785BDDB65EC0F05AE0E755264540D4B63772DDB65EC05C86CEDD55264540D2E4C689DDB65EC09B6EBFD95526454082E573A1DDB65EC0C90BD5DB552645401ABE85B8DDB65EC06692FCE35526454039844ECEDDB65EC04D8AF6F155264540928319E2DDB65EC0AD8D570556264540D31055F3DDB65EC02D618F1D56264540343B7A01DEB65EC0EB70CF3956264540920A1A0CDEB65EC03B00515956264540911BE212DEB65EC0E43A0E7B56264540E3F69D15DEB65EC017E4089E562645408D903614DEB65EC0F0D42FC1562645402191B80EDEB65EC0586870E35626454012B84E05DEB65EC09166C80357264540215B41F8DDB65EC08F832B21572645408392F7E7DDB65EC01138C13A57264540F999F0D4DDB65EC0E4A9C14F57264540AC3FB8BFDDB65EC0EED6875F57264540D3DCFEA8DDB65EC04F6C996957264540ACAD6F91DDB65EC03F84A86D57264540", LW_PARSER_CHECK_NONE);
+	poly = (LWPOLY*)lwg;
+	pt_to_test.x = -122.819436560680316;
+	pt_to_test.y = 42.2702301207017328;
+	pt_outside.x = 120.695136159150778;
+	pt_outside.y = 40.6920926049588516;
+	result = ptarray_contains_point_sphere(poly->rings[0], &pt_outside, &pt_to_test);
+	CU_ASSERT_EQUAL(result, LW_FALSE);
+	lwgeom_free(lwg);
+	
+	/* Point on ring between vertexes case */
+	lwg = lwgeom_from_wkt("POLYGON((1.0 1.0, 1.0 1.1, 1.1 1.1, 1.1 1.0, 1.0 1.0))", LW_PARSER_CHECK_NONE);
+	poly = (LWPOLY*)lwg;
+	pt_to_test.x = 1.1;
+	pt_to_test.y = 1.05;
+	pt_outside.x = 1.2;
+	pt_outside.y = 1.05;
+	result = ptarray_contains_point_sphere(poly->rings[0], &pt_outside, &pt_to_test);
+	CU_ASSERT_EQUAL(result, LW_TRUE);
+	lwgeom_free(lwg);
+	
 	/* Simple containment case */
 	lwg = lwgeom_from_wkt("POLYGON((1.0 1.0, 1.0 1.1, 1.1 1.1, 1.1 1.0, 1.0 1.0))", LW_PARSER_CHECK_NONE);
 	poly = (LWPOLY*)lwg;
@@ -695,7 +907,21 @@ static void test_ptarray_point_in_ring(void)
 	pt_to_test.y = 1.05;
 	pt_outside.x = 1.2;
 	pt_outside.y = 1.15;
-	result = ptarray_point_in_ring(poly->rings[0], &pt_outside, &pt_to_test);
+	result = ptarray_contains_point_sphere(poly->rings[0], &pt_outside, &pt_to_test);
+	CU_ASSERT_EQUAL(result, LW_TRUE);
+	lwgeom_free(lwg);
+
+	/* Less Simple containment case. */
+	/* Interior point quite close to boundary and stab line going through bottom edge vertex */
+	/* This breaks the "extend-it" trick of handling vertex crossings */
+	/* It should also break the "lowest end" trick. */
+	lwg = lwgeom_from_wkt("POLYGON((1.0 1.0, 1.0 1.1, 1.1 1.1, 1.1 1.0, 1.05 0.95, 1.0 1.0))", LW_PARSER_CHECK_NONE);
+	poly = (LWPOLY*)lwg;
+	pt_to_test.x = 1.05;
+	pt_to_test.y = 1.00;
+	pt_outside.x = 1.05;
+	pt_outside.y = 0.5;
+	result = ptarray_contains_point_sphere(poly->rings[0], &pt_outside, &pt_to_test);
 	CU_ASSERT_EQUAL(result, LW_TRUE);
 	lwgeom_free(lwg);
 
@@ -706,7 +932,7 @@ static void test_ptarray_point_in_ring(void)
 	pt_to_test.y = 1.15;
 	pt_outside.x = 1.2;
 	pt_outside.y = 1.2;
-	result = ptarray_point_in_ring(poly->rings[0], &pt_outside, &pt_to_test);
+	result = ptarray_contains_point_sphere(poly->rings[0], &pt_outside, &pt_to_test);
 	CU_ASSERT_EQUAL(result, LW_FALSE);
 	lwgeom_free(lwg);
 
@@ -717,7 +943,7 @@ static void test_ptarray_point_in_ring(void)
 	pt_to_test.y = 0.9;
 	pt_outside.x = 1.2;
 	pt_outside.y = 1.05;
-	result = ptarray_point_in_ring(poly->rings[0], &pt_outside, &pt_to_test);
+	result = ptarray_contains_point_sphere(poly->rings[0], &pt_outside, &pt_to_test);
 	CU_ASSERT_EQUAL(result, LW_FALSE);
 	lwgeom_free(lwg);
 
@@ -728,18 +954,7 @@ static void test_ptarray_point_in_ring(void)
 	pt_to_test.y = 1.0;
 	pt_outside.x = 1.0;
 	pt_outside.y = 10.0;
-	result = ptarray_point_in_ring(poly->rings[0], &pt_outside, &pt_to_test);
-	CU_ASSERT_EQUAL(result, LW_TRUE);
-	lwgeom_free(lwg);
-
-	/* Point on ring at vertex case */
-	lwg = lwgeom_from_wkt("POLYGON((1.0 1.0, 1.0 1.1, 1.1 1.1, 1.1 1.0, 1.0 1.0))", LW_PARSER_CHECK_NONE);
-	poly = (LWPOLY*)lwg;
-	pt_to_test.x = 1.1;
-	pt_to_test.y = 1.05;
-	pt_outside.x = 1.2;
-	pt_outside.y = 1.05;
-	result = ptarray_point_in_ring(poly->rings[0], &pt_outside, &pt_to_test);
+	result = ptarray_contains_point_sphere(poly->rings[0], &pt_outside, &pt_to_test);
 	CU_ASSERT_EQUAL(result, LW_TRUE);
 	lwgeom_free(lwg);
 
@@ -750,18 +965,18 @@ static void test_ptarray_point_in_ring(void)
 	pt_to_test.y = 1.0;
 	pt_outside.x = 1.2;
 	pt_outside.y = 1.05;
-	result = ptarray_point_in_ring(poly->rings[0], &pt_outside, &pt_to_test);
+	result = ptarray_contains_point_sphere(poly->rings[0], &pt_outside, &pt_to_test);
 	CU_ASSERT_EQUAL(result, LW_TRUE);
 	lwgeom_free(lwg);
 
-	/* Point on ring between vertexes case */
+	/* Point on ring at vertex case */
 	lwg = lwgeom_from_wkt("POLYGON((1.0 1.0, 1.0 1.1, 1.1 1.1, 1.1 1.0, 1.0 1.0))", LW_PARSER_CHECK_NONE);
 	poly = (LWPOLY*)lwg;
 	pt_to_test.x = 1.0;
 	pt_to_test.y = 1.1;
 	pt_outside.x = 1.2;
 	pt_outside.y = 1.05;
-	result = ptarray_point_in_ring(poly->rings[0], &pt_outside, &pt_to_test);
+	result = ptarray_contains_point_sphere(poly->rings[0], &pt_outside, &pt_to_test);
 	CU_ASSERT_EQUAL(result, LW_TRUE);
 	lwgeom_free(lwg);
 
@@ -772,19 +987,29 @@ static void test_ptarray_point_in_ring(void)
 	pt_to_test.y = 1.05;
 	pt_outside.x = 1.1;
 	pt_outside.y = 1.3;
-	result = ptarray_point_in_ring(poly->rings[0], &pt_outside, &pt_to_test);
+	result = ptarray_contains_point_sphere(poly->rings[0], &pt_outside, &pt_to_test);
 	CU_ASSERT_EQUAL(result, LW_TRUE);
 	lwgeom_free(lwg);
 
+	/* Co-linear grazing case for point-in-polygon test, should return LW_FALSE */
+	lwg = lwgeom_from_wkt("POLYGON((1.0 1.0, 1.0 1.1, 1.1 1.1, 1.1 1.2, 1.2 1.2, 1.2 1.0, 1.0 1.0))", LW_PARSER_CHECK_NONE);
+	poly = (LWPOLY*)lwg;
+	pt_to_test.x = 1.0;
+	pt_to_test.y = 0.0;
+	pt_outside.x = 1.0;
+	pt_outside.y = 2.0;
+	result = ptarray_contains_point_sphere(poly->rings[0], &pt_outside, &pt_to_test);
+	CU_ASSERT_EQUAL(result, LW_FALSE);
+	lwgeom_free(lwg);
+
 	/* Grazing case for point-in-polygon test, should return LW_FALSE */
-	/* lwg = lwgeom_from_wkt("POLYGON((2.0 3.0, 2.0 0.0, 1.0 1.0, 2.0 3.0))", LW_PARSER_CHECK_NONE); */
 	lwg = lwgeom_from_wkt("POLYGON((1.0 1.0, 1.0 2.0, 1.5 1.5, 1.0 1.0))", LW_PARSER_CHECK_NONE);
 	poly = (LWPOLY*)lwg;
 	pt_to_test.x = 1.5;
 	pt_to_test.y = 1.0;
 	pt_outside.x = 1.5;
 	pt_outside.y = 2.0;
-	result = ptarray_point_in_ring(poly->rings[0], &pt_outside, &pt_to_test);
+	result = ptarray_contains_point_sphere(poly->rings[0], &pt_outside, &pt_to_test);
 	CU_ASSERT_EQUAL(result, LW_FALSE);
 	lwgeom_free(lwg);
 
@@ -795,8 +1020,30 @@ static void test_ptarray_point_in_ring(void)
 	pt_to_test.y = 0.0;
 	pt_outside.x = 1.0;
 	pt_outside.y = 2.0;
-	result = ptarray_point_in_ring(poly->rings[0], &pt_outside, &pt_to_test);
+	result = ptarray_contains_point_sphere(poly->rings[0], &pt_outside, &pt_to_test);
 	CU_ASSERT_EQUAL(result, LW_FALSE);
+	lwgeom_free(lwg);
+
+	/* Outside multi-crossing case for point-in-polygon test, should return LW_FALSE */
+	lwg = lwgeom_from_wkt("POLYGON((1.0 1.0, 1.0 1.1, 1.1 1.1, 1.1 1.2, 1.2 1.2, 1.2 1.0, 1.0 1.0))", LW_PARSER_CHECK_NONE);
+	poly = (LWPOLY*)lwg;
+	pt_to_test.x = 0.99;
+	pt_to_test.y = 0.99;
+	pt_outside.x = 1.21;
+	pt_outside.y = 1.21;
+	result = ptarray_contains_point_sphere(poly->rings[0], &pt_outside, &pt_to_test);
+	CU_ASSERT_EQUAL(result, LW_FALSE);
+	lwgeom_free(lwg);
+
+	/* Inside multi-crossing case for point-in-polygon test, should return LW_TRUE */
+	lwg = lwgeom_from_wkt("POLYGON((1.0 1.0, 1.0 1.1, 1.1 1.1, 1.1 1.2, 1.2 1.2, 1.2 1.0, 1.0 1.0))", LW_PARSER_CHECK_NONE);
+	poly = (LWPOLY*)lwg;
+	pt_to_test.x = 1.11;
+	pt_to_test.y = 1.11;
+	pt_outside.x = 1.21;
+	pt_outside.y = 1.21;
+	result = ptarray_contains_point_sphere(poly->rings[0], &pt_outside, &pt_to_test);
+	CU_ASSERT_EQUAL(result, LW_TRUE);
 	lwgeom_free(lwg);
 
 	/* Point on vertex of ring */
@@ -806,22 +1053,9 @@ static void test_ptarray_point_in_ring(void)
 	pt_to_test.y = 50.0;
 	pt_outside.x = -10.2727799838316134;
 	pt_outside.y = -16.9370033133329976;
-	result = ptarray_point_in_ring(poly->rings[0], &pt_outside, &pt_to_test);
+	result = ptarray_contains_point_sphere(poly->rings[0], &pt_outside, &pt_to_test);
 	CU_ASSERT_EQUAL(result, LW_TRUE);
 	lwgeom_free(lwg);
-
-#if 0
-	/* Small polygon and huge distance between outside point and close-but-not-quite-inside point. Should return LW_FALSE. Pretty degenerate case. */
-	lwg = lwgeom_from_wkt("0103000020E61000000100000025000000ACAD6F91DDB65EC03F84A86D57264540CCABC279DDB65EC0FCE6926B57264540B6DEAA62DDB65EC0A79F6B63572645402E0BE84CDDB65EC065677155572645405D0B1D39DDB65EC0316310425726454082B5DB27DDB65EC060A4E12957264540798BB619DDB65EC0C393A10D57264540D4BC160FDDB65EC0BD0320EE56264540D7AC4E08DDB65EC096C862CC56264540AFD29205DDB65EC02A1F68A956264540363AFA06DDB65EC0722E418656264540B63A780CDDB65EC06E9B0064562645409614E215DDB65EC0E09DA84356264540FF71EF22DDB65EC0B48145265626454036033F33DDB65EC081B8A60C5626454066FB4546DDB65EC08A47A6F7552645409061785BDDB65EC0F05AE0E755264540D4B63772DDB65EC05C86CEDD55264540D2E4C689DDB65EC09B6EBFD95526454082E573A1DDB65EC0C90BD5DB552645401ABE85B8DDB65EC06692FCE35526454039844ECEDDB65EC04D8AF6F155264540928319E2DDB65EC0AD8D570556264540D31055F3DDB65EC02D618F1D56264540343B7A01DEB65EC0EB70CF3956264540920A1A0CDEB65EC03B00515956264540911BE212DEB65EC0E43A0E7B56264540E3F69D15DEB65EC017E4089E562645408D903614DEB65EC0F0D42FC1562645402191B80EDEB65EC0586870E35626454012B84E05DEB65EC09166C80357264540215B41F8DDB65EC08F832B21572645408392F7E7DDB65EC01138C13A57264540F999F0D4DDB65EC0E4A9C14F57264540AC3FB8BFDDB65EC0EED6875F57264540D3DCFEA8DDB65EC04F6C996957264540ACAD6F91DDB65EC03F84A86D57264540", LW_PARSER_CHECK_NONE);
-	poly = (LWPOLY*)lwg;
-	pt_to_test.x = -122.819436560680316;
-	pt_to_test.y = 42.2702301207017328;
-	pt_outside.x = 120.695136159150778;
-	pt_outside.y = 40.6920926049588516;
-	result = ptarray_point_in_ring(poly->rings[0], &pt_outside, &pt_to_test);
-	CU_ASSERT_EQUAL(result, LW_FALSE);
-	lwgeom_free(lwg);
-#endif
 
 }
 
@@ -848,23 +1082,38 @@ static void test_lwpoly_covers_point2d(void)
 	result = lwpoly_covers_point2d(poly, &pt_to_test);
 	CU_ASSERT_EQUAL(result, LW_TRUE);
 	lwgeom_free(lwg);
+	
+}
 
+static void test_ptarray_contains_point_sphere_iowa(void)
+{
+	LWGEOM *lwg = lwgeom_from_wkt(iowa_data, LW_PARSER_CHECK_NONE);
+	LWPOLY *poly = (LWPOLY*)lwg;
+	POINTARRAY *pa = poly->rings[0];
+	POINT2D pt_outside, pt_to_test;
+	int rv;
+
+	pt_to_test.x = -95.900000000000006;
+	pt_to_test.y = 42.899999999999999;
+	pt_outside.x = -96.381873780830645;
+	pt_outside.y = 40.185394449416371;
+	
+	rv = ptarray_contains_point_sphere(pa, &pt_outside, &pt_to_test);
+	CU_ASSERT_EQUAL(rv, LW_TRUE);
+
+	lwgeom_free(lwg);
 }
 
 
 static void test_lwgeom_distance_sphere(void)
 {
 	LWGEOM *lwg1, *lwg2;
-	GBOX gbox1, gbox2;
 	double d;
 	SPHEROID s;
 
 	/* Init and force spherical */
 	spheroid_init(&s, 6378137.0, 6356752.314245179498);
 	s.a = s.b = s.radius;
-
-	gbox1.flags = gflags(0, 0, 1);
-	gbox2.flags = gflags(0, 0, 1);
 
 	/* Line/line distance, 1 degree apart */
 	lwg1 = lwgeom_from_wkt("LINESTRING(-30 10, -20 5, -10 3, 0 1)", LW_PARSER_CHECK_NONE);
@@ -990,8 +1239,8 @@ static void test_spheroid_area(void)
 	a1 = lwgeom_area_sphere(lwg, &s);
 	a2 = lwgeom_area_spheroid(lwg, &s);
 	//printf("\nsphere: %.12g\nspheroid: %.12g\n", a1, a2);
-	CU_ASSERT_DOUBLE_EQUAL(a1, 89.7211470368, 0.0001); /* sphere */
-	CU_ASSERT_DOUBLE_EQUAL(a2, 89.8684316032, 0.0001); /* spheroid */
+	CU_ASSERT_DOUBLE_EQUAL(a1, 89.7127703297, 0.1); /* sphere */
+	CU_ASSERT_DOUBLE_EQUAL(a2, 89.8684316032, 0.1); /* spheroid */
 	lwgeom_free(lwg);
 
 	/* Big-ass polygon */
@@ -1157,6 +1406,24 @@ static void test_lwgeom_segmentize_sphere(void)
 	return;
 }
 
+static void test_lwgeom_area_sphere(void)
+{
+	LWGEOM *lwg;
+	double area;
+	SPHEROID s;
+
+	/* Init to WGS84 */
+	spheroid_init(&s, WGS84_MAJOR_AXIS, WGS84_MINOR_AXIS);
+
+	/* Simple case */
+	lwg = lwgeom_from_wkt("POLYGON((1 1, 1 2, 2 2, 2 1, 1 1))", LW_PARSER_CHECK_NONE);
+	area = lwgeom_area_sphere(lwg, &s);
+	
+	CU_ASSERT_DOUBLE_EQUAL(area, 12360265021.3561, 1.0);
+	lwgeom_free(lwg);	
+	return;
+}
+
 /*
 ** Used by test harness to register the tests in this file.
 */
@@ -1164,11 +1431,13 @@ CU_TestInfo geodetic_tests[] =
 {
 	PG_TEST(test_sphere_direction),
 	PG_TEST(test_sphere_project),
+	PG_TEST(test_lwgeom_area_sphere),
 	PG_TEST(test_signum),
 	PG_TEST(test_gbox_from_spherical_coordinates),
 	PG_TEST(test_gserialized_get_gbox_geocentric),
 	PG_TEST(test_clairaut),
 	PG_TEST(test_edge_intersection),
+	PG_TEST(test_edge_intersects),
 	PG_TEST(test_edge_distance_to_point),
 	PG_TEST(test_edge_distance_to_edge),
 	PG_TEST(test_lwgeom_distance_sphere),
@@ -1177,11 +1446,12 @@ CU_TestInfo geodetic_tests[] =
 	PG_TEST(test_spheroid_distance),
 	PG_TEST(test_spheroid_area),
 	PG_TEST(test_lwpoly_covers_point2d),
-	PG_TEST(test_ptarray_point_in_ring),
 	PG_TEST(test_gbox_utils),
 	PG_TEST(test_vector_angle),
 	PG_TEST(test_vector_rotate),
 	PG_TEST(test_lwgeom_segmentize_sphere),
+	PG_TEST(test_ptarray_contains_point_sphere),
+	PG_TEST(test_ptarray_contains_point_sphere_iowa),
 	CU_TEST_INFO_NULL
 };
 CU_SuiteInfo geodetic_suite = {"Geodetic Suite",  NULL,  NULL, geodetic_tests};

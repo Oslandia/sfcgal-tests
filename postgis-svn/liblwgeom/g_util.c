@@ -1,5 +1,5 @@
 /**********************************************************************
- * $Id: g_util.c 9324 2012-02-27 22:08:12Z pramsey $
+ * $Id: g_util.c 10680 2012-11-15 00:15:24Z pramsey $
  *
  * PostGIS - Spatial Types for PostgreSQL
  * Copyright 2009 Paul Ramsey <pramsey@cleverelephant.ca>
@@ -112,6 +112,21 @@ struct geomtype_struct geomtype_struct_array[] =
 };
 #define GEOMTYPE_STRUCT_ARRAY_LEN (sizeof geomtype_struct_array/sizeof(struct geomtype_struct))
 
+/*
+* We use a very simple upper case mapper here, because the system toupper() function
+* is locale dependent and may have trouble mapping lower case strings to the upper
+* case ones we expect (see, the "Turkisk I", http://www.i18nguy.com/unicode/turkish-i18n.html)
+* We could also count on PgSQL sending us *lower* case inputs, as it seems to do that
+* regardless of the case the user provides for the type arguments.
+*/
+const char dumb_upper_map[128] = "................................................0123456789.......ABCDEFGHIJKLMNOPQRSTUVWXYZ......ABCDEFGHIJKLMNOPQRSTUVWXYZ.....";
+
+static char dump_toupper(int in)
+{
+	if ( in < 0 || in > 127 ) 
+		return '.';
+	return dumb_upper_map[in];
+}
 
 uint8_t gflags(int hasz, int hasm, int geodetic)
 {
@@ -171,7 +186,7 @@ int geometry_type_from_string(const char *str, uint8_t *type, int *z, int *m)
 	/* Copy and convert to upper case for comparison */
 	tmpstr = lwalloc(tmpendpos - tmpstartpos + 2);
 	for (i = tmpstartpos; i <= tmpendpos; i++)
-		tmpstr[i - tmpstartpos] = toupper(str[i]);
+		tmpstr[i - tmpstartpos] = dump_toupper(str[i]);
 
 	/* Add NULL to terminate */
 	tmpstr[i - tmpstartpos] = '\0';

@@ -25,6 +25,7 @@ dnl
 AC_PROG_CC
 AC_PROG_CPP
 AC_PROG_CXX
+AC_PROG_GREP
 AC_PATH_PROG([ANT], [ant], [])
 AC_SUBST([ANT])
 
@@ -224,19 +225,22 @@ AC_SUBST([XSLBASE])
 dnl
 dnl Let's see if we can find mathml2.dtd
 dnl
-
-MATHML2_DTD="http://www.w3.org/Math/DTD/mathml2/mathml2.dtd"
+AC_ARG_WITH([mathmldtd], 
+	[AS_HELP_STRING([--with-mathmldtd=PATH], [specify the dtd path for mathml2.dtd])], 
+	[MATHML2_DTD="$withval"], [MATHML2_DTD=""])
 dnl TODO: get more paths to add here...
-SEARCHPATH="
-		/usr/share/xml/schema/w3c/mathml/dtd
-		"
-for p in ${SEARCHPATH}; do
-	if test -r "${p}"/mathml2.dtd; then
-		MATHML2_DTD="${p}/mathml2.dtd"
-		break
-	fi
-done
-
+if test "x$MATHML2_DTD" = "x"; then
+	MATHML2_DTD="http://www.w3.org/Math/DTD/mathml2/mathml2.dtd"
+	SEARCHPATH="
+			/usr/share/xml/schema/w3c/mathml/dtd
+			"
+	for p in ${SEARCHPATH}; do
+		if test -r "${p}"/mathml2.dtd; then
+			MATHML2_DTD="${p}/mathml2.dtd"
+			break
+		fi
+	done
+fi
 AC_SUBST([MATHML2_DTD])
 
 dnl ===========================================================================
@@ -251,10 +255,10 @@ dnl ===========================================================================
 CUNIT_LDFLAGS=""
 AC_CHECK_HEADER([CUnit/CUnit.h], [
 	CUNIT_CPPFLAGS="$CPPFLAGS"
-	AC_CHECK_LIB([cunit], [CU_initialize_registry], [CUNIT_LDFLAGS="$LDFLAGS -lcunit"], [AC_MSG_WARN([could not locate CUnit required for liblwgeom unit tests])])
+	AC_CHECK_LIB([cunit], [CU_initialize_registry], [CUNIT_LDFLAGS="$LDFLAGS -lcunit"], [AC_MSG_WARN([could not locate CUnit required for unit tests])])
 	],
 	[
-	AC_MSG_WARN([could not locate CUnit required for liblwgeom unit tests])
+	AC_MSG_WARN([could not locate CUnit required for unit tests])
 	])
 	
 AC_SUBST([CUNIT_CPPFLAGS])
@@ -1020,6 +1024,7 @@ if test "x$with_raster" != "xno"; then
 	USE_GDAL_SOURCE_TREE="no"
 	LIBGDAL_CFLAGS=""
 	LIBGDAL_LDFLAGS=""
+	LIBGDAL_DEPLIBS_LDFLAGS=""
 
 	dnl GDAL version constants, update here
 	GDAL_MIN_VERSION=1.8.0
@@ -1067,6 +1072,7 @@ if test "x$with_raster" != "xno"; then
 
 		dnl Extract the linker and include flags 
 		LIBGDAL_LDFLAGS=`$GDAL_CONFIG --libs`
+		LIBGDAL_DEPLIBS_LDFLAGS=`$GDAL_CONFIG --dep-libs`
 		LIBGDAL_CFLAGS=`$GDAL_CONFIG --cflags`
 
 		CPPFLAGS_SAVE="$CPPFLAGS"
@@ -1105,6 +1111,7 @@ if test "x$with_raster" != "xno"; then
 
 		AC_SUBST([LIBGDAL_CFLAGS])
 		AC_SUBST([LIBGDAL_LDFLAGS])
+		AC_SUBST([LIBGDAL_DEPLIBS_LDFLAGS])
 
 		AC_SUBST([GDALFPOLYGONIZE])
 
@@ -1132,6 +1139,7 @@ if test "x$with_raster" != "xno"; then
 		raster/loader/Makefile \
 		raster/test/Makefile \
 		raster/test/core/Makefile \
+		raster/test/cunit/Makefile \
 		raster/test/regress/Makefile \
 		raster/scripts/Makefile \
 		raster/scripts/python/Makefile"
@@ -1174,6 +1182,8 @@ AC_OUTPUT([GNUmakefile
    extensions/postgis/postgis.control 
    extensions/postgis_topology/Makefile 
    extensions/postgis_topology/postgis_topology.control 
+   extensions/postgis_tiger_geocoder/Makefile 
+   extensions/postgis_tiger_geocoder/postgis_tiger_geocoder.control 
    liblwgeom/Makefile 
    liblwgeom/cunit/Makefile 
    liblwgeom/liblwgeom.h 

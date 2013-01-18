@@ -1,4 +1,4 @@
-REM $Id: upgrade_geocoder.bat 9691 2012-04-29 15:25:55Z robe $
+REM $Id: upgrade_geocoder.bat 10656 2012-11-08 05:46:48Z robe $
 set PGPORT=5432
 set PGHOST=localhost
 set PGUSER=postgres
@@ -7,8 +7,11 @@ set THEDB=geocoder
 set PGBIN=C:\Program Files\PostgreSQL\8.4\bin
 set PGCONTRIB=C:\Program Files\PostgreSQL\8.4\share\contrib
 "%PGBIN%\psql"  -d "%THEDB%" -f "upgrade_geocode.sql"
-"%PGBIN%\psql"  -d "%THEDB%" -f "tiger_loader_2011.sql"
+
+REM unremark the loader line to update your loader scripts
+REM note this wipes out your custom settings in loader_* tables
+REM "%PGBIN%\psql"  -d "%THEDB%" -f "tiger_loader_2012.sql"
 cd regress
-"%PGBIN%\psql" -t -f regress.sql
+REM "%PGBIN%\psql"  -d "%THEDB%" -t -f regress.sql
 pause
 

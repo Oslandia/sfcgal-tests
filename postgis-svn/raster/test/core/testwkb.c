@@ -1,5 +1,5 @@
 /*
- * $Id: testwkb.c 9324 2012-02-27 22:08:12Z pramsey $
+ * $Id: testwkb.c 10937 2012-12-27 12:56:59Z strk $
  *
  * WKTRaster - Raster Types for PostGIS
  * http://www.postgis.org/support/wiki/index.php?WKTRasterHomePage
@@ -187,8 +187,9 @@ main()
         CHECK_EQUALS(rt_band_get_pixtype(band), PT_1BB);
         CHECK(!rt_band_is_offline(band));
         CHECK(rt_band_get_hasnodata_flag(band));
-        CHECK_EQUALS(rt_band_get_nodata(band), 0);
-        failure = rt_band_get_pixel(band, 0, 0, &val);
+				rt_band_get_nodata(band, &val);
+        CHECK_EQUALS(val, 0);
+        failure = rt_band_get_pixel(band, 0, 0, &val, NULL);
         CHECK(!failure);
         CHECK_EQUALS(val, 1);
     }
@@ -252,29 +253,30 @@ main()
         CHECK_EQUALS(rt_band_get_pixtype(band), PT_8BSI);
         CHECK(!rt_band_is_offline(band));
         CHECK(rt_band_get_hasnodata_flag(band));
-        CHECK_EQUALS(rt_band_get_nodata(band), -1);
+				rt_band_get_nodata(band, &val);
+        CHECK_EQUALS(val, -1);
 
-        failure = rt_band_get_pixel(band, 0, 0, &val);
+        failure = rt_band_get_pixel(band, 0, 0, &val, NULL);
         CHECK(!failure);
         CHECK_EQUALS(val, -1);
 
-        failure = rt_band_get_pixel(band, 1, 0, &val);
+        failure = rt_band_get_pixel(band, 1, 0, &val, NULL);
         CHECK(!failure);
         CHECK_EQUALS(val, 0);
 
-        failure = rt_band_get_pixel(band, 2, 0, &val);
+        failure = rt_band_get_pixel(band, 2, 0, &val, NULL);
         CHECK(!failure);
         CHECK_EQUALS(val, 1);
 
-        failure = rt_band_get_pixel(band, 0, 1, &val);
+        failure = rt_band_get_pixel(band, 0, 1, &val, NULL);
         CHECK(!failure);
         CHECK_EQUALS(val, 127);
 
-        failure = rt_band_get_pixel(band, 1, 1, &val);
+        failure = rt_band_get_pixel(band, 1, 1, &val, NULL);
         CHECK(!failure);
         CHECK_EQUALS(val, 10);
 
-        failure = rt_band_get_pixel(band, 2, 1, &val);
+        failure = rt_band_get_pixel(band, 2, 1, &val, NULL);
         CHECK(!failure);
         CHECK_EQUALS(val, 2);
     }
@@ -350,29 +352,28 @@ main()
         CHECK_EQUALS(rt_band_get_pixtype(band), PT_16BSI);
         CHECK(!rt_band_is_offline(band));
         CHECK(!rt_band_get_hasnodata_flag(band));
-        CHECK_EQUALS(rt_band_get_nodata(band), -1);
 
-        failure = rt_band_get_pixel(band, 0, 0, &val);
+        failure = rt_band_get_pixel(band, 0, 0, &val, NULL);
         CHECK(!failure);
         CHECK_EQUALS(val, -1);
 
-        failure = rt_band_get_pixel(band, 1, 0, &val);
+        failure = rt_band_get_pixel(band, 1, 0, &val, NULL);
         CHECK(!failure);
         CHECK_EQUALS(val, 0);
 
-        failure = rt_band_get_pixel(band, 2, 0, &val);
+        failure = rt_band_get_pixel(band, 2, 0, &val, NULL);
         CHECK(!failure);
         CHECK_EQUALS(val, -16);
 
-        failure = rt_band_get_pixel(band, 0, 1, &val);
+        failure = rt_band_get_pixel(band, 0, 1, &val, NULL);
         CHECK(!failure);
         CHECK_EQUALS(val, 127);
 
-        failure = rt_band_get_pixel(band, 1, 1, &val);
+        failure = rt_band_get_pixel(band, 1, 1, &val, NULL);
         CHECK(!failure);
         CHECK_EQUALS(val, 10);
 
-        failure = rt_band_get_pixel(band, 2, 1, &val);
+        failure = rt_band_get_pixel(band, 2, 1, &val, NULL);
         CHECK(!failure);
         CHECK_EQUALS(val, 2);
     }
@@ -435,29 +436,28 @@ main()
         CHECK_EQUALS(rt_band_get_pixtype(band), PT_16BSI);
         CHECK(!rt_band_is_offline(band));
         CHECK(!rt_band_get_hasnodata_flag(band));
-        CHECK_EQUALS(rt_band_get_nodata(band), -1);
 
-        failure = rt_band_get_pixel(band, 0, 0, &val);
+        failure = rt_band_get_pixel(band, 0, 0, &val, NULL);
         CHECK(!failure);
         CHECK_EQUALS(val, -1);
 
-        failure = rt_band_get_pixel(band, 1, 0, &val);
+        failure = rt_band_get_pixel(band, 1, 0, &val, NULL);
         CHECK(!failure);
         CHECK_EQUALS(val, 0);
 
-        failure = rt_band_get_pixel(band, 2, 0, &val);
+        failure = rt_band_get_pixel(band, 2, 0, &val, NULL);
         CHECK(!failure);
         CHECK_EQUALS(val, -16);
 
-        failure = rt_band_get_pixel(band, 0, 1, &val);
+        failure = rt_band_get_pixel(band, 0, 1, &val, NULL);
         CHECK(!failure);
         CHECK_EQUALS(val, 127);
 
-        failure = rt_band_get_pixel(band, 1, 1, &val);
+        failure = rt_band_get_pixel(band, 1, 1, &val, NULL);
         CHECK(!failure);
         CHECK_EQUALS(val, 10);
 
-        failure = rt_band_get_pixel(band, 2, 1, &val);
+        failure = rt_band_get_pixel(band, 2, 1, &val, NULL);
         CHECK(!failure);
         CHECK_EQUALS(val, 2);
     }
@@ -510,16 +510,18 @@ main()
     CHECK_EQUALS(rt_raster_get_width(raster), 3);
     CHECK_EQUALS(rt_raster_get_height(raster), 2);
     {
+				double val;
+				uint8_t bandnum = 0;
         rt_band band = rt_raster_get_band(raster, 0);
         CHECK(band);
         CHECK_EQUALS(rt_band_get_pixtype(band), PT_16BSI);
         CHECK(rt_band_is_offline(band));
         CHECK(rt_band_get_hasnodata_flag(band));
-        CHECK_EQUALS(rt_band_get_nodata(band), -1);
-        printf("ext band path: %s\n", rt_band_get_ext_path(band));
-        printf("ext band  num: %u\n", rt_band_get_ext_band_num(band));
+				rt_band_get_nodata(band, &val);
+        CHECK_EQUALS(val, -1);
         CHECK( ! strcmp(rt_band_get_ext_path(band), "/tmp/t.tif"));
-        CHECK_EQUALS(rt_band_get_ext_band_num(band), 3);
+        CHECK_EQUALS(rt_band_get_ext_band_num(band, &bandnum), ES_NONE);
+        CHECK_EQUALS(bandnum, 3);
     }
 
     out  = rt_raster_to_hexwkb(raster, &len);
@@ -577,17 +579,18 @@ main()
         CHECK_EQUALS(rt_band_get_pixtype(band), PT_16BSI);
         CHECK(!rt_band_is_offline(band));
         CHECK(rt_band_get_hasnodata_flag(band));
-        CHECK_EQUALS(rt_band_get_nodata(band), 1);
+				rt_band_get_nodata(band, &val);
+        CHECK_EQUALS(val, 1);
 
-        failure = rt_band_get_pixel(band, 0, 0, &val);
+        failure = rt_band_get_pixel(band, 0, 0, &val, NULL);
         CHECK(!failure);
         CHECK_EQUALS(val, 1);
 
-        failure = rt_band_get_pixel(band, 1, 0, &val);
+        failure = rt_band_get_pixel(band, 1, 0, &val, NULL);
         CHECK(!failure);
         CHECK_EQUALS(val, 436);
 
-        failure = rt_band_get_pixel(band, 2, 0, &val);
+        failure = rt_band_get_pixel(band, 2, 0, &val, NULL);
         CHECK(!failure);
         CHECK_EQUALS(val, 431);
     }
@@ -672,25 +675,26 @@ main()
         CHECK_EQUALS(rt_band_get_pixtype(band), PT_8BUI);
         CHECK(!rt_band_is_offline(band));
         CHECK(rt_band_get_hasnodata_flag(band));
-        CHECK_EQUALS(rt_band_get_nodata(band), 0);
+				rt_band_get_nodata(band, &val);
+        CHECK_EQUALS(val, 0);
 
-        failure = rt_band_get_pixel(band, 0, 0, &val);
+        failure = rt_band_get_pixel(band, 0, 0, &val, NULL);
         CHECK(!failure);
         CHECK_EQUALS(val, 253);
 
-        failure = rt_band_get_pixel(band, 1, 0, &val);
+        failure = rt_band_get_pixel(band, 1, 0, &val, NULL);
         CHECK(!failure);
         CHECK_EQUALS(val, 254);
 
-        failure = rt_band_get_pixel(band, 2, 0, &val);
+        failure = rt_band_get_pixel(band, 2, 0, &val, NULL);
         CHECK(!failure);
         CHECK_EQUALS(val, 253);
 
-        failure = rt_band_get_pixel(band, 3, 0, &val);
+        failure = rt_band_get_pixel(band, 3, 0, &val, NULL);
         CHECK(!failure);
         CHECK_EQUALS(val, 254);
 
-        failure = rt_band_get_pixel(band, 4, 0, &val);
+        failure = rt_band_get_pixel(band, 4, 0, &val, NULL);
         CHECK(!failure);
         CHECK_EQUALS(val, 254);
     }
@@ -704,25 +708,26 @@ main()
         CHECK_EQUALS(rt_band_get_pixtype(band), PT_8BUI);
         CHECK(!rt_band_is_offline(band));
         CHECK(rt_band_get_hasnodata_flag(band));
-        CHECK_EQUALS(rt_band_get_nodata(band), 0);
+				rt_band_get_nodata(band, &val);
+        CHECK_EQUALS(val, 0);
 
-        failure = rt_band_get_pixel(band, 0, 0, &val);
+        failure = rt_band_get_pixel(band, 0, 0, &val, NULL);
         CHECK(!failure);
         CHECK_EQUALS(val, 78);
 
-        failure = rt_band_get_pixel(band, 1, 0, &val);
+        failure = rt_band_get_pixel(band, 1, 0, &val, NULL);
         CHECK(!failure);
         CHECK_EQUALS(val, 98);
 
-        failure = rt_band_get_pixel(band, 2, 0, &val);
+        failure = rt_band_get_pixel(band, 2, 0, &val, NULL);
         CHECK(!failure);
         CHECK_EQUALS(val, 122);
 
-        failure = rt_band_get_pixel(band, 3, 0, &val);
+        failure = rt_band_get_pixel(band, 3, 0, &val, NULL);
         CHECK(!failure);
         CHECK_EQUALS(val, 173);
 
-        failure = rt_band_get_pixel(band, 4, 0, &val);
+        failure = rt_band_get_pixel(band, 4, 0, &val, NULL);
         CHECK(!failure);
         CHECK_EQUALS(val, 209);
     }
@@ -736,25 +741,26 @@ main()
         CHECK_EQUALS(rt_band_get_pixtype(band), PT_8BUI);
         CHECK(!rt_band_is_offline(band));
         CHECK(rt_band_get_hasnodata_flag(band));
-        CHECK_EQUALS(rt_band_get_nodata(band), 0);
+				rt_band_get_nodata(band, &val);
+        CHECK_EQUALS(val, 0);
 
-        failure = rt_band_get_pixel(band, 0, 0, &val);
+        failure = rt_band_get_pixel(band, 0, 0, &val, NULL);
         CHECK(!failure);
         CHECK_EQUALS(val, 70);
 
-        failure = rt_band_get_pixel(band, 1, 0, &val);
+        failure = rt_band_get_pixel(band, 1, 0, &val, NULL);
         CHECK(!failure);
         CHECK_EQUALS(val, 86);
 
-        failure = rt_band_get_pixel(band, 2, 0, &val);
+        failure = rt_band_get_pixel(band, 2, 0, &val, NULL);
         CHECK(!failure);
         CHECK_EQUALS(val, 100);
 
-        failure = rt_band_get_pixel(band, 3, 0, &val);
+        failure = rt_band_get_pixel(band, 3, 0, &val, NULL);
         CHECK(!failure);
         CHECK_EQUALS(val, 135);
 
-        failure = rt_band_get_pixel(band, 4, 0, &val);
+        failure = rt_band_get_pixel(band, 4, 0, &val, NULL);
         CHECK(!failure);
         CHECK_EQUALS(val, 161);
     }
@@ -795,13 +801,6 @@ main()
     printf("All tests successful !\n");
 
     return EXIT_SUCCESS;
-}
-
-/* This is needed by liblwgeom */
-void
-lwgeom_init_allocators(void)
-{
-    lwgeom_install_default_allocators();
 }
 
 void rt_init_allocators(void)

@@ -43,7 +43,8 @@ TEST_BASIC_FUNC = \
 	rt_bytea \
 	box3d \
 	rt_addband \
-	rt_band
+	rt_band \
+	rt_tile
 
 TEST_PROPS = \
 	rt_dimensions \
@@ -56,8 +57,8 @@ TEST_PROPS = \
 	rt_isempty \
 	rt_hasnoband \
 	rt_metadata \
-	rt_raster2worldcoord \
-	rt_world2rastercoord
+	rt_rastertoworldcoord \
+	rt_worldtorastercoord
 
 TEST_BANDPROPS = \
 	rt_band_properties \
@@ -85,46 +86,34 @@ TEST_UTILITY = \
 	rt_astiff \
 	rt_asjpeg \
 	rt_aspng \
+	rt_reclass \
+	rt_gdalwarp \
+	rt_asraster \
+	rt_dumpvalues
+
+TEST_MAPALGEBRA = \
 	rt_mapalgebraexpr \
 	rt_mapalgebrafct \
 	rt_mapalgebraexpr_2raster \
 	rt_mapalgebrafct_2raster \
 	rt_mapalgebrafctngb \
 	rt_mapalgebrafctngb_userfunc \
-	rt_reclass \
-	rt_resample \
-	rt_asraster \
 	rt_intersection \
 	rt_clip \
-	rt_union
-
-TEST_GIST = \
-	rt_above \
-	rt_below \
-	rt_contained \
-	rt_contain \
-	rt_left \
-	rt_overabove \
-	rt_overbelow \
-	rt_overlap \
-	rt_overleft \
-	rt_overright \
-	rt_right \
-	rt_same 
+	rt_mapalgebra \
+	rt_mapalgebra_expr \
+	rt_union \
+	rt_invdistweight4ma \
+	rt_4ma \
+	rt_setvalues_geomval \
+	rt_elevation_functions
 
 TEST_SREL = \
+	rt_gist_relationships \
 	rt_intersects \
-	rt_overlaps \
-	rt_touches \
-	rt_contains \
-	rt_containsproperly \
-	rt_covers \
-	rt_coveredby \
-	rt_within \
-	rt_disjoint \
-	rt_dwithin \
-	rt_dfullywithin \
-	rt_samealignment
+	rt_samealignment \
+	rt_geos_relationships \
+	rt_iscoveragetile
 	
 TEST_BUGS = \
 	bug_test_car5 \
@@ -134,11 +123,12 @@ TEST_LOADER = \
 	loader/Basic \
 	loader/BasicCopy \
 	loader/Tiled10x10 \
-	loader/Tiled10x10Copy
+	loader/Tiled10x10Copy \
+	loader/Tiled8x8
 
 TESTS = $(TEST_FIRST) $(TEST_METADATA) $(TEST_IO) $(TEST_BASIC_FUNC) \
-		$(TEST_PROPS) $(TEST_GIST) $(TEST_BANDPROPS) \
-		$(TEST_UTILITY) $(TEST_SREL) \
+		$(TEST_PROPS) $(TEST_BANDPROPS) \
+		$(TEST_UTILITY) $(TEST_MAPALGEBRA) $(TEST_SREL) \
 		$(TEST_BUGS) \
 		$(TEST_LOADER)
 

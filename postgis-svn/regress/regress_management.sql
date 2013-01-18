@@ -1,6 +1,7 @@
--- $Id: regress_management.sql 9324 2012-02-27 22:08:12Z pramsey $
+-- $Id: regress_management.sql 10326 2012-09-25 02:45:28Z robe $
 -- Test the populate_geometry_columns,DropGeometryTable etc --
 \set VERBOSITY terse
+SET client_min_messages TO warning;
 DELETE FROM spatial_ref_sys WHERE srid = 4326;
 INSERT INTO spatial_ref_sys ( srid, proj4text ) VALUES( 4326, '+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs');
 CREATE TABLE test_pt(gid SERIAL PRIMARY KEY, geom geometry);

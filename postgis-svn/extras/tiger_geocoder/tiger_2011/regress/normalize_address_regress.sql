@@ -1,4 +1,4 @@
---$Id: normalize_address_regress.sql 9324 2012-02-27 22:08:12Z pramsey $
+--$Id: normalize_address_regress.sql 10309 2012-09-20 11:54:44Z robe $
 \timing
 SELECT '#887' As ticket, * FROM normalize_address('2450 N COLORADO ST, PHILADELPHIA, PA, 19132');
 SELECT '#1051a' As ticket, * FROM normalize_address('212 3rd Ave N Suite 560, Minneapolis, MN 55401');
@@ -88,4 +88,8 @@ SELECT '#1125f' As ticket, pprint_addy(addy), addy.* FROM normalize_address('I 9
 
 -- location with prefixes getting caught in post prefix
 SELECT '#1310a' As ticket, pprint_addy(addy), addy.* FROM normalize_address('1110 W CAPITOL AVE, WEST SACRAMENTO, CA') As addy;
+
+-- #1614 County Rd
+SELECT '#1614a' As ticket, pprint_addy(addy), addy.* FROM normalize_address('8435 COUNTY RD 20 SE, ROCHESTER, MN 55904') As addy;
+SELECT '#1614b' As ticket, pprint_addy(addy), addy.* FROM normalize_address('3208 U.S. 52, Rochester, MN 55901') As addy;
 \timing

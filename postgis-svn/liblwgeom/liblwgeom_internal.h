@@ -121,6 +121,26 @@
 #define SIZE_GET(varsize) (((varsize) >> 2) & 0x3FFFFFFF)
 #define SIZE_SET(varsize, size) (((varsize) & 0x00000003)|(((size) & 0x3FFFFFFF) << 2 ))
 
+/**
+* Tolerance used to determine equality.
+*/
+#define EPSILON_SQLMM 1e-8
+
+/*
+ * Export functions
+ */
+#define OUT_MAX_DOUBLE 1E15
+#define OUT_SHOW_DIGS_DOUBLE 20
+#define OUT_MAX_DOUBLE_PRECISION 15
+#define OUT_MAX_DIGS_DOUBLE (OUT_SHOW_DIGS_DOUBLE + 2) /* +2 mean add dot and sign */
+
+
+/**
+* Constants for point-in-polygon return values
+*/
+#define LW_INSIDE 1
+#define LW_BOUNDARY 0
+#define LW_OUTSIDE -1
 
 /*
 * Internal prototypes
@@ -204,17 +224,6 @@ enum CG_SEGMENT_INTERSECTION_TYPE {
 int lw_segment_intersects(const POINT2D *p1, const POINT2D *p2, const POINT2D *q1, const POINT2D *q2);
 
 /*
-* What side of the line formed by p1 and p2 does q fall? 
-* Returns < 0 for left and > 0 for right and 0 for co-linearity
-*/
-double lw_segment_side(const POINT2D *p1, const POINT2D *p2, const POINT2D *q);
-
-/* 
-* Do the envelopes of the the segments intersect?
-*/
-int lw_segment_envelope_intersects(const POINT2D *p1, const POINT2D *p2, const POINT2D *q1, const POINT2D *q2);
-
-/*
 * Get/Set an enumeratoed ordinate. (x,y,z,m)
 */
 double lwpoint_get_ordinate(const POINT4D *p, char ordinate);
@@ -256,6 +265,7 @@ char *geohash_point(double longitude, double latitude, int precision);
 * Point comparisons
 */
 int p4d_same(const POINT4D *p1, const POINT4D *p2);
+int p3d_same(const POINT3D *p1, const POINT3D *p2);
 int p2d_same(const POINT2D *p1, const POINT2D *p2);
 
 /*
@@ -302,9 +312,10 @@ void ptarray_affine(POINTARRAY *pa, const AFFINE *affine);
 /*
 * PointArray
 */
-char ptarray_isccw(const POINTARRAY *pa);
+int ptarray_isccw(const POINTARRAY *pa);
 int ptarray_has_z(const POINTARRAY *pa);
 int ptarray_has_m(const POINTARRAY *pa);
+double ptarray_signed_area(const POINTARRAY *pa);
 
 /*
 * Clone support
@@ -319,6 +330,7 @@ GBOX *box2d_clone(const GBOX *lwgeom);
 LWLINE *lwline_clone_deep(const LWLINE *lwgeom);
 LWPOLY *lwpoly_clone_deep(const LWPOLY *lwgeom);
 LWCOLLECTION *lwcollection_clone_deep(const LWCOLLECTION *lwgeom);
+GBOX *gbox_clone(const GBOX *gbox);
 
 /*
 * Startpoint
@@ -353,6 +365,24 @@ int lwpsurface_is_closed(const LWPSURFACE *psurface);
 int lwtin_is_closed(const LWTIN *tin);
 
 
+
+/*
+* What side of the line formed by p1 and p2 does q fall? 
+* Returns -1 for left and 1 for right and 0 for co-linearity
+*/
+int lw_segment_side(const POINT2D *p1, const POINT2D *p2, const POINT2D *q);
+int lw_arc_side(const POINT2D *A1, const POINT2D *A2, const POINT2D *A3, const POINT2D *Q);
+int lw_arc_calculate_gbox_cartesian_2d(const POINT2D *A1, const POINT2D *A2, const POINT2D *A3, GBOX *gbox);
+double lw_arc_center(const POINT2D *p1, const POINT2D *p2, const POINT2D *p3, POINT2D *result);
+int lw_pt_in_seg(const POINT2D *P, const POINT2D *A1, const POINT2D *A2);
+int lw_pt_in_arc(const POINT2D *P, const POINT2D *A1, const POINT2D *A2, const POINT2D *A3);
+int lw_arc_is_pt(const POINT2D *A1, const POINT2D *A2, const POINT2D *A3);
+double lw_seg_length(const POINT2D *A1, const POINT2D *A2);
+double lw_arc_length(const POINT2D *A1, const POINT2D *A2, const POINT2D *A3);
+int pt_in_ring_2d(const POINT2D *p, const POINTARRAY *ring);
+int ptarray_contains_point(const POINTARRAY *pa, const POINT2D *pt);
+int ptarray_contains_point_arc(const POINTARRAY *pa, const POINT2D *pt);
+
 /**
 * Split a line by a point and push components to the provided multiline.
 * If the point doesn't split the line, push nothing to the container.
@@ -375,6 +405,9 @@ extern int lwcollection_allows_subtype(int collectiontype, int subtype);
 double gbox_angular_height(const GBOX* gbox);
 double gbox_angular_width(const GBOX* gbox);
 int gbox_centroid(const GBOX* gbox, POINT2D* out);
+
+/* Utilities */
+extern void trim_trailing_zeros(char *num);
 
 
 #endif /* _LIBLWGEOM_INTERNAL_H */

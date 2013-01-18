@@ -1,5 +1,5 @@
 /**********************************************************************
- * $Id: lwsegmentize.c 10257 2012-09-07 22:20:00Z pramsey $
+ * $Id: lwsegmentize.c 10871 2012-12-20 17:19:13Z strk $
  *
  * PostGIS - Spatial Types for PostgreSQL
  * http://postgis.refractions.net
@@ -30,11 +30,6 @@ LWGEOM *lwmline_desegmentize(LWMLINE *mline);
 LWGEOM *lwmpolygon_desegmentize(LWMPOLY *mpoly);
 LWGEOM *lwgeom_desegmentize(LWGEOM *geom);
 
-
-/*
- * Tolerance used to determine equality.
- */
-#define EPSILON_SQLMM 1e-8
 
 /*
  * Determines (recursively in the case of collections) whether the geometry
@@ -74,59 +69,6 @@ lwgeom_has_arc(const LWGEOM *geom)
 	}
 }
 
-/*
- * Determines the center of the circle defined by the three given points.
- * In the event the circle is complete, the midpoint of the segment defined
- * by the first and second points is returned.  If the points are colinear,
- * as determined by equal slopes, then NULL is returned.  If the interior
- * point is coincident with either end point, they are taken as colinear.
- */
-double
-lwcircle_center(const POINT4D *p1, const POINT4D *p2, const POINT4D *p3, POINT4D *result)
-{
-	POINT4D c;
-	double cx, cy, cr;
-	double temp, bc, cd, det;
-
-    c.x = c.y = c.z = c.m = 0.0;
-
-	LWDEBUGF(2, "lwcircle_center called (%.16f,%.16f), (%.16f,%.16f), (%.16f,%.16f).", p1->x, p1->y, p2->x, p2->y, p3->x, p3->y);
-
-	/* Closed circle */
-	if (fabs(p1->x - p3->x) < EPSILON_SQLMM &&
-	    fabs(p1->y - p3->y) < EPSILON_SQLMM)
-	{
-		cx = p1->x + (p2->x - p1->x) / 2.0;
-		cy = p1->y + (p2->y - p1->y) / 2.0;
-		c.x = cx;
-		c.y = cy;
-		*result = c;
-		cr = sqrt(pow(cx - p1->x, 2.0) + pow(cy - p1->y, 2.0));
-		return cr;
-	}
-
-	temp = p2->x*p2->x + p2->y*p2->y;
-	bc = (p1->x*p1->x + p1->y*p1->y - temp) / 2.0;
-	cd = (temp - p3->x*p3->x - p3->y*p3->y) / 2.0;
-	det = (p1->x - p2->x)*(p2->y - p3->y)-(p2->x - p3->x)*(p1->y - p2->y);
-
-	/* Check colinearity */
-	if (fabs(det) < EPSILON_SQLMM)
-		return -1.0;
-
-
-	det = 1.0 / det;
-	cx = (bc*(p2->y - p3->y)-cd*(p1->y - p2->y))*det;
-	cy = ((p1->x - p2->x)*cd-(p2->x - p3->x)*bc)*det;
-	c.x = cx;
-	c.y = cy;
-	*result = c;
-	cr = sqrt((cx-p1->x)*(cx-p1->x)+(cy-p1->y)*(cy-p1->y));
-	
-	LWDEBUGF(2, "lwcircle_center center is (%.16f,%.16f)", result->x, result->y);
-	
-	return cr;
-}
 
 
 /*******************************************************************************
@@ -157,7 +99,10 @@ static double interpolate_arc(double angle, double a1, double a2, double a3, dou
 static POINTARRAY *
 lwcircle_segmentize(POINT4D *p1, POINT4D *p2, POINT4D *p3, uint32_t perQuad)
 {
-	POINT4D center;
+	POINT2D center;
+	POINT2D *t1 = (POINT2D*)p1;
+	POINT2D *t2 = (POINT2D*)p2;
+	POINT2D *t3 = (POINT2D*)p3;
 	POINT4D pt;
 	int p2_side = 0;
 	int clockwise = LW_TRUE;
@@ -170,8 +115,8 @@ lwcircle_segmentize(POINT4D *p1, POINT4D *p2, POINT4D *p3, uint32_t perQuad)
 
 	LWDEBUG(2, "lwcircle_calculate_gbox called.");
 
-	radius = lwcircle_center(p1, p2, p3, &center);
-	p2_side = signum(lw_segment_side((POINT2D*)p1, (POINT2D*)p3, (POINT2D*)p2));
+	radius = lw_arc_center(t1, t2, t3, &center);
+	p2_side = lw_segment_side(t1, t3, t2);
 
 	/* Matched start/end points imply circle */
 	if ( p1->x == p3->x && p1->y == p3->y )
@@ -315,7 +260,7 @@ lwcompound_segmentize(const LWCOMPOUND *icompound, uint32_t perQuad)
 				getPoint4d_p(tmp->points, j, &p);
 				ptarray_append_point(ptarray, &p, LW_TRUE);
 			}
-			lwfree(tmp);
+			lwline_free(tmp);
 		}
 		else if (geom->type == LINETYPE)
 		{
@@ -527,24 +472,27 @@ lwgeom_segmentize(LWGEOM *geom, uint32_t perQuad)
 */
 static int pt_continues_arc(const POINT4D *a1, const POINT4D *a2, const POINT4D *a3, const POINT4D *b)
 {
-	POINT4D center;
-	POINT4D *centerptr=&center;
-	double radius = lwcircle_center(a1, a2, a3, &center);
+	POINT2D center;
+	POINT2D *t1 = (POINT2D*)a1;
+	POINT2D *t2 = (POINT2D*)a2;
+	POINT2D *t3 = (POINT2D*)a3;
+	POINT2D *tb = (POINT2D*)b;
+	double radius = lw_arc_center(t1, t2, t3, &center);
 	double b_distance, diff;
 
 	/* Co-linear a1/a2/a3 */
 	if ( radius < 0.0 )
 		return LW_FALSE;
 
-	b_distance = distance2d_pt_pt((POINT2D*)b, (POINT2D*)centerptr);
+	b_distance = distance2d_pt_pt(tb, &center);
 	diff = fabs(radius - b_distance);
 	LWDEBUGF(4, "circle_radius=%g, b_distance=%g, diff=%g, percentage=%g", radius, b_distance, diff, diff/radius);
 	
 	/* Is the point b on the circle? */
 	if ( diff < EPSILON_SQLMM ) 
 	{
-		int a2_side = signum(lw_segment_side((POINT2D*)a1, (POINT2D*)a3, (POINT2D*)a2));
-		int b_side = signum(lw_segment_side((POINT2D*)a1, (POINT2D*)a3, (POINT2D*)b));
+		int a2_side = lw_segment_side(t1, t3, t2);
+		int b_side  = lw_segment_side(t1, t3, tb);
 		
 		/* Is the point b on the same side of a1/a3 as the mid-point a2 is? */
 		/* If not, it's in the unbounded part of the circle, so it continues the arc, return true. */
@@ -700,6 +648,8 @@ pta_desegmentize(POINTARRAY *points, int type, int srid)
 			edge_type = edges_in_arcs[i];
 		}
 	}
+	lwfree(edges_in_arcs); /* not needed anymore */
+
 	/* Roll out last item */
 	end = num_edges - 1;
 	lwcollection_add_lwgeom(outcol, geom_from_pa(points, srid, edge_type, start, end));
@@ -708,7 +658,7 @@ pta_desegmentize(POINTARRAY *points, int type, int srid)
 	if ( outcol->ngeoms == 1 )
 	{
 		LWGEOM *outgeom = outcol->geoms[0];
-		lwfree(outcol);
+		outcol->ngeoms = 0; lwcollection_free(outcol);
 		return outgeom;
 	}
 	return lwcollection_as_lwgeom(outcol);

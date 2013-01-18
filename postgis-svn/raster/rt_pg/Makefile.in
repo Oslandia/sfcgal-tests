@@ -1,5 +1,5 @@
 #############################################################################
-# $Id: Makefile.in 9841 2012-05-31 16:47:21Z pramsey $
+# $Id: Makefile.in 10860 2012-12-19 18:06:17Z strk $
 #
 # Copyright (c) 2009-2011 Sandro Santilli <strk@keybit.net>
 #
@@ -101,7 +101,7 @@ $(SQL_OBJS): ../../postgis/sqldefines.h ../../postgis_svn_revision.h
 rtpostgis_upgrade.sql: rtpostgis.sql
 	$(PERL) -0777 -ne 's/^(CREATE|ALTER) (CAST|OPERATOR|TYPE|TABLE|SCHEMA|DOMAIN|TRIGGER).*?;//msg;print;' $< > $@
 
-rtpostgis_upgrade_20_minor.sql: rtpostgis_drop.sql rtpostgis_upgrade_cleanup.sql rtpostgis_upgrade.sql 
+rtpostgis_upgrade_20_minor.sql: rtpostgis_upgrade_cleanup.sql rtpostgis_drop.sql rtpostgis_upgrade.sql 
 	cat $^ > $@
 
 uninstall_rtpostgis.sql: rtpostgis.sql ../../utils/create_undef.pl 

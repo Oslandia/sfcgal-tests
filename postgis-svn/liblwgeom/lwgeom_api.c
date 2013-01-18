@@ -419,9 +419,9 @@ getPoint3dm_p(const POINTARRAY *pa, int n, POINT3DM *op)
 POINT2D
 getPoint2d(const POINTARRAY *pa, int n)
 {
-	POINT2D result;
-	getPoint2d_p(pa, n, &result);
-	return result;
+	const POINT2D *result;
+	result = getPoint2d_cp(pa, n);
+	return *result;
 }
 
 /*
@@ -448,6 +448,27 @@ getPoint2d_p(const POINTARRAY *pa, int n, POINT2D *point)
 	return 1;
 }
 
+/**
+* Returns a pointer into the POINTARRAY serialized_ptlist, 
+* suitable for reading from. This is very high performance
+* and declared const because you aren't allowed to muck with the 
+* values, only read them.
+*/
+const POINT2D*
+getPoint2d_cp(const POINTARRAY *pa, int n)
+{
+	if ( ! pa ) return 0;
+
+	if ( (n<0) || (n>=pa->npoints))
+	{
+		lwerror("getPoint2D_const_p: point offset out of range");
+		return 0; /*error */
+	}
+
+	return (const POINT2D*)getPoint_internal(pa, n);
+}
+
+
 /*
  * set point N to the given value
  * NOTE that the pointarray can be of any
@@ -458,8 +479,9 @@ getPoint2d_p(const POINTARRAY *pa, int n, POINT2D *point)
 void
 ptarray_set_point4d(POINTARRAY *pa, int n, const POINT4D *p4d)
 {
+	uint8_t *ptr;
 	assert(n >= 0 && n < pa->npoints);
-	uint8_t *ptr=getPoint_internal(pa, n);
+	ptr=getPoint_internal(pa, n);
 	switch ( FLAGS_GET_ZM(pa->flags) )
 	{
 	case 3:
@@ -552,30 +574,6 @@ void printPA(POINTARRAY *pa)
 	lwnotice("      }");
 }
 
-
-char
-ptarray_isccw(const POINTARRAY *pa)
-{
-	int i;
-	double area = 0;
-	POINT2D p1, p2, p0;
-
-	if ( pa->npoints == 0 ) return 0;
-
-	getPoint2d_p(pa, 0, &p1);
-	p0 = p1;
-	p1.x -= p0.x; p1.y -= p0.y;
-	for (i=0; i<pa->npoints-1; i++)
-	{
-		getPoint2d_p(pa, i+1, &p2);
-		p2.x -= p0.x; p2.y -= p0.y;
-		area += (p1.y * p2.x) - (p1.x * p2.y);
-		p1 = p2;
-	}
-	/* lwnotice("Signed area: %.16g", area); */
-	if ( area > 0 ) return 0;
-	else return 1;
-}
 
 /**
  * Given a string with at least 2 chars in it, convert them to

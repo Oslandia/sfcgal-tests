@@ -15,7 +15,7 @@ MODULE_big=postgis-@POSTGIS_MAJOR_VERSION@.@POSTGIS_MINOR_VERSION@
 MODULEDIR=contrib/$(MODULE_big)
 
 # Files to be copied to the contrib/ directory
-DATA_built=postgis.sql uninstall_postgis.sql postgis_upgrade_20_21.sql postgis_upgrade_21_minor.sql legacy.sql uninstall_legacy.sql legacy_minimal.sql
+DATA_built=postgis.sql uninstall_postgis.sql postgis_upgrade_20_21.sql postgis_upgrade_21_minor.sql legacy.sql uninstall_legacy.sql legacy_minimal.sql legacy_gist.sql
 DATA=../spatial_ref_sys.sql
 
 # SQL preprocessor
@@ -48,6 +48,7 @@ PG_OBJS= \
 	lwgeom_in_geojson.o \
 	lwgeom_triggers.o \
 	lwgeom_dump.o \
+	lwgeom_dumppoints.o \
 	lwgeom_functions_lrs.o \
 	long_xact.o \
 	lwgeom_sqlmm.o \
@@ -56,12 +57,14 @@ PG_OBJS= \
 	gserialized_typmod.o \
 	gserialized_gist_2d.o \
 	gserialized_gist_nd.o \
+	gserialized_estimate.o \
 	geography_inout.o \
 	geography_btree.o \
 	geography_estimate.o \
 	geography_measurement.o \
 	geography_measurement_trees.o \
-	geometry_estimate.o 
+	geometry_estimate.o \
+	geometry_inout.o
 
 # Objects to build using PGXS
 OBJS=$(PG_OBJS)

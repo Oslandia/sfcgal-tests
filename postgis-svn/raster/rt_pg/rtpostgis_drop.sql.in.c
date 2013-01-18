@@ -30,6 +30,8 @@ DROP AGGREGATE IF EXISTS ST_Union(raster, text, text);
 DROP AGGREGATE IF EXISTS ST_Union(raster, text, text, text, double precision);
 DROP AGGREGATE IF EXISTS ST_Union(raster, text);
 DROP AGGREGATE IF EXISTS ST_Union(raster, integer);
+DROP AGGREGATE IF EXISTS ST_Union(raster, unionarg[]);
+DROP AGGREGATE IF EXISTS ST_Union(raster, record[]);
 DROP AGGREGATE IF EXISTS ST_Union(raster);
 
 DROP AGGREGATE IF EXISTS st_samealignment(raster);
@@ -172,6 +174,8 @@ DROP FUNCTION IF EXISTS st_value(raster, integer, integer, integer, boolean);
 DROP FUNCTION IF EXISTS st_value(raster, integer, integer, boolean);
 DROP FUNCTION IF EXISTS st_value(raster, integer, geometry, boolean);
 DROP FUNCTION IF EXISTS st_value(raster, geometry, boolean);
+DROP FUNCTION IF EXISTS st_value(raster, integer, geometry, double precision);
+DROP FUNCTION IF EXISTS st_value(raster, geometry, double precision);
 
 -- function no longer exists
 DROP FUNCTION IF EXISTS st_georeference(raster);
@@ -352,8 +356,8 @@ DROP FUNCTION IF EXISTS st_intersects(raster, integer, raster, integer);
 DROP FUNCTION IF EXISTS st_intersects(raster, raster);
 
 -- functions have changed dramatically
-DROP FUNCTION IF EXISTS st_intersection(rast raster, band integer, geom geometry);
-DROP FUNCTION IF EXISTS st_intersection(rast raster, geom geometry);
+DROP FUNCTION IF EXISTS st_intersection(raster, integer, geometry);
+DROP FUNCTION IF EXISTS st_intersection(raster, geometry);
 
 -- function was renamed
 DROP FUNCTION IF EXISTS st_minpossibleval(text);
@@ -391,12 +395,6 @@ DROP FUNCTION IF EXISTS st_intersection(raster, integer, raster, integer, regpro
 DROP FUNCTION IF EXISTS st_intersection(raster, raster, text, regprocedure);
 DROP FUNCTION IF EXISTS st_intersection(raster, raster, regprocedure);
 
--- parameter name change
-DROP FUNCTION IF EXISTS st_value(raster, integer, integer, integer, boolean);
-DROP FUNCTION IF EXISTS st_value(raster, integer, integer, boolean);
-DROP FUNCTION IF EXISTS st_value(raster, integer, geometry, boolean);
-DROP FUNCTION IF EXISTS st_value(raster, geometry, boolean);
-
 -- function deprecated
 DROP FUNCTION IF EXISTS st_pixelaspolygons(raster, integer);
 
@@ -433,3 +431,55 @@ DROP FUNCTION IF EXISTS _st_contains(geometry, raster, integer);
 
 -- function signature changed
 DROP FUNCTION IF EXISTS st_addband(raster, raster[], integer);
+
+-- function signatures changed
+DROP FUNCTION IF EXISTS st_slope(raster, integer, text, text, double precision, boolean);
+DROP FUNCTION IF EXISTS st_slope(raster, integer, text, boolean);
+DROP FUNCTION IF EXISTS st_slope(raster, integer, text);
+DROP FUNCTION IF EXISTS st_aspect(raster, integer, text, text, boolean);
+DROP FUNCTION IF EXISTS st_aspect(raster, integer, text, boolean);
+DROP FUNCTION IF EXISTS st_aspect(raster, integer, text);
+DROP FUNCTION IF EXISTS st_hillshade(raster, integer, text, double precision, double precision, double precision, double precision, boolean);
+DROP FUNCTION IF EXISTS st_hillshade(raster, integer, text, float, float, float, float, boolean);
+DROP FUNCTION IF EXISTS st_hillshade(raster, integer, text, float, float, float, float);
+
+-- function no longer exists
+DROP FUNCTION IF EXISTS st_tile(raster, integer, integer, integer[]);
+DROP FUNCTION IF EXISTS st_tile(raster, integer, integer, integer);
+
+-- function signatures changed
+DROP FUNCTION IF EXISTS st_setvalue(raster, integer, geometry, double precision);
+DROP FUNCTION IF EXISTS st_setvalue(raster, geometry, double precision);
+
+-- function name change
+DROP FUNCTION IF EXISTS st_world2rastercoord(raster, double precision, double precision);
+DROP FUNCTION IF EXISTS st_world2rastercoord(raster, geometry);
+DROP FUNCTION IF EXISTS _st_world2rastercoord(raster, double precision, double precision);
+DROP FUNCTION IF EXISTS st_world2rastercoordx(raster, float8, float8);
+DROP FUNCTION IF EXISTS st_world2rastercoordx(raster, float8);
+DROP FUNCTION IF EXISTS st_world2rastercoordx(raster, geometry);
+DROP FUNCTION IF EXISTS st_world2rastercoordy(raster, float8, float8);
+DROP FUNCTION IF EXISTS st_world2rastercoordy(raster, float8);
+DROP FUNCTION IF EXISTS st_world2rastercoordy(raster, geometry);
+DROP FUNCTION IF EXISTS st_raster2worldcoord( raster, integer, integer);
+DROP FUNCTION IF EXISTS _st_raster2worldcoord(raster, integer, integer);
+DROP FUNCTION IF EXISTS st_raster2worldcoordx(raster, int, int);
+DROP FUNCTION IF EXISTS st_raster2worldcoordx(raster, int);
+DROP FUNCTION IF EXISTS st_raster2worldcoordy(raster, int, int);
+DROP FUNCTION IF EXISTS st_raster2worldcoordy(raster, int);
+
+-- function name change
+DROP FUNCTION IF EXISTS _st_resample(raster, text, double precision, integer, double precision, double precision, double precision, double precision, double precision, double precision, integer, integer);
+
+-- function signatures changed
+DROP FUNCTION IF EXISTS st_resample(raster, integer, double precision, double precision, double precision, double precision, double precision, double precision, text, double precision);
+DROP FUNCTION IF EXISTS st_resample(raster, integer, integer, integer, double precision, double precision, double precision, double precision, text, double precision);
+
+-- function signatures changed
+DROP FUNCTION IF EXISTS _st_tile(raster, integer, integer, int[]);
+DROP FUNCTION IF EXISTS st_tile(raster, integer[], integer, integer);
+DROP FUNCTION IF EXISTS st_tile(raster, integer, integer, integer);
+DROP FUNCTION IF EXISTS st_tile(raster, integer, integer);
+
+-- function no longer exists
+DROP FUNCTION IF EXISTS _add_raster_constraint_regular_blocking(name, name, name);

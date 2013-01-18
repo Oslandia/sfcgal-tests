@@ -1,4 +1,4 @@
---$Id: geocode_address.sql 9823 2012-05-27 18:28:48Z robe $
+--$Id: geocode_address.sql 10310 2012-09-20 13:32:14Z robe $
 --DROP FUNCTION IF EXISTS geocode_address(norm_addy, integer , geometry);
 CREATE OR REPLACE FUNCTION geocode_address(IN parsed norm_addy, max_results integer DEFAULT 10, restrict_geom geometry DEFAULT NULL, OUT addy norm_addy, OUT geomout geometry, OUT rating integer)
   RETURNS SETOF record AS
@@ -433,6 +433,5 @@ BEGIN
 END;
 $$
   LANGUAGE 'plpgsql' STABLE COST 1000 ROWS 50;
---ALTER FUNCTION geocode_address(IN norm_addy, IN integer , IN geometry) SET enable_mergejoin='off';
-
+ALTER FUNCTION geocode_address(IN norm_addy, IN integer, IN geometry) SET join_collapse_limit='2';
 

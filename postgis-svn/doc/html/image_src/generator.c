@@ -49,16 +49,6 @@ char *imageSize = "200x200";
 int getStyleName(char **styleName, char* line);
 
 /**
- * Set up liblwgeom to run in stand-alone mode using the
- * usual system memory handling functions.
- */
-void lwgeom_init_allocators(void)
-{
-	/* liblwgeom callback - install default handlers */
-	lwgeom_install_default_allocators();
-}
-
-/**
  * Writes the coordinates of a POINTARRAY to a char* where ordinates are
  * separated by a comma and coordinates by a space so that the coordinate
  * pairs can be interpreted by ImageMagick's SVG draw command.
@@ -298,6 +288,10 @@ flattenLayers(char* filename)
 	remove("tmp3.png");
 	remove("tmp4.png");
 	remove("tmp5.png");
+	remove("tmp6.png");
+	remove("tmp7.png");
+	remove("tmp8.png");
+	remove("tmp9.png");
 	free(str);
 }
 

@@ -1,5 +1,5 @@
 /**********************************************************************
- * $Id: cu_tester.c 9993 2012-06-27 14:26:47Z strk $
+ * $Id: cu_tester.c 10937 2012-12-27 12:56:59Z strk $
  *
  * PostGIS - Spatial Types for PostgreSQL
  * http://postgis.refractions.net
@@ -15,6 +15,10 @@
 #include "CUnit/Basic.h"
 #include "liblwgeom_internal.h"
 #include "cu_tester.h"
+
+/* Internal funcs */
+static void
+cu_errorreporter(const char *fmt, va_list ap);
 
 /* ADD YOUR SUITE HERE (1 of 2) */
 extern CU_SuiteInfo print_suite;
@@ -94,6 +98,9 @@ int main(int argc, char *argv[])
 	CU_pTestRegistry registry;
 	int num_run;
 	int num_failed;
+
+	/* install the custom error handler */
+	lwgeom_set_handlers(0, 0, 0, cu_errorreporter, 0);
 
 	/* initialize the CUnit test registry */
 	if (CUE_SUCCESS != CU_initialize_registry())
@@ -234,17 +241,3 @@ cu_error_msg_reset()
 {
 	memset(cu_error_msg, '\0', MAX_CUNIT_ERROR_LENGTH);
 }
-
-/*
-** Set up liblwgeom to run in stand-alone mode using the
-** usual system memory handling functions.
-*/
-void lwgeom_init_allocators(void)
-{
-	lwalloc_var = default_allocator;
-	lwrealloc_var = default_reallocator;
-	lwfree_var = default_freeor;
-	lwnotice_var = default_noticereporter;
-	lwerror_var = cu_errorreporter;
-}
-

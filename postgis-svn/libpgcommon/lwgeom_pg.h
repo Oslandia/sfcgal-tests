@@ -22,12 +22,8 @@
 #include "liblwgeom.h"
 #include "pgsql_compat.h"
 
-void *pg_alloc(size_t size);
-void *pg_realloc(void *ptr, size_t size);
-void pg_free(void *ptr);
-void pg_error(const char *msg, va_list vp);
-void pg_notice(const char *msg, va_list vp);
-
+/* Install PosgreSQL handlers for liblwgeom use */
+void pg_install_lwgeom_handlers(void);
 
 /* Debugging macros */
 #if POSTGIS_DEBUG_LEVEL > 0
@@ -100,6 +96,14 @@ GSERIALIZED *geometry_serialize(LWGEOM *lwgeom);
 * PgSQL varsize header appropriately with the serialized size.
 */
 GSERIALIZED* geography_serialize(LWGEOM *lwgeom);
+
+/**
+* Pull out a gbox bounding box as fast as possible. 
+* Tries to read cached box from front of serialized vardata.
+* If no cached box, calculates box from scratch.
+* Fails on empty.
+*/
+int gserialized_datum_get_gbox_p(Datum gsdatum, GBOX *gbox);
 
 /**
 * Convert cstrings (null-terminated byte array) to textp pointers 

@@ -1,5 +1,5 @@
 /*
- * $Id: raster2pgsql.c 10123 2012-07-25 15:03:48Z dustymugs $
+ * $Id: raster2pgsql.c 10937 2012-12-27 12:56:59Z strk $
  *
  * PostGIS raster loader
  * http://trac.osgeo.org/postgis/wiki/WKTRaster
@@ -30,11 +30,6 @@
 #include "gdal_vrt.h"
 #include "ogr_srs_api.h"
 #include <assert.h>
-
-/* This is needed by liblwgeom */
-void lwgeom_init_allocators(void) {
-	lwgeom_install_default_allocators();
-}
 
 static void
 loader_rt_error_handler(const char *fmt, va_list ap) {
@@ -83,7 +78,7 @@ raster_destroy(rt_raster raster) {
 	uint16_t nbands = rt_raster_get_num_bands(raster);
 	for (i = 0; i < nbands; i++) {
 		rt_band band = rt_raster_get_band(raster, i);
-		if (!rt_band_is_offline(band)) {
+		if (!rt_band_is_offline(band) && !rt_band_get_ownsdata_flag(band)) {
      	void* mem = rt_band_get_data(band);
        if (mem) rtdealloc(mem);
 		}
@@ -346,6 +341,13 @@ usage() {
 	printf(_(
 		"  -t <tile size> Cut raster into tiles to be inserted one per\n"
 		"      table row.  <tile size> is expressed as WIDTHxHEIGHT.\n"
+		"      <tile size> can also be \"auto\" to allow the loader to compute\n"
+		"      an appropriate tile size using the first raster and applied to\n"
+		"      all rasters.\n"
+	));
+	printf(_(
+		"  -P Pad right-most and bottom-most tiles to guarantee that all tiles\n"
+		"     have the same width and height.\n"
 	));
 	printf(_(
 		"  -R  Register the raster as an out-of-db (filesystem) raster.  Provided\n"
@@ -390,8 +392,8 @@ usage() {
 		"      if one or more rasters violate the constraint.\n"
 		"  -x  Disable setting the max extent constraint.  Only applied if\n"
 		"      -C flag is also used.\n"
-		"  -r  Set the regular blocking constraint.  Only applied if -C flag is\n"
-		"      also used.\n"
+		"  -r  Set the constraints (spatially unique and coverage tile) for\n"
+		"      regular blocking.  Only applied if -C flag is also used.\n"
 	));
 	printf(_(
 		"  -T <tablespace> Specify the tablespace for the new table.\n"
@@ -427,6 +429,66 @@ usage() {
 	printf(_(
 		"  -?  Display this help screen.\n"
 	));
+}
+
+static void calc_tile_size(
+	int dimX, int dimY,
+	int *tileX, int *tileY
+) {
+	int i = 0;
+	int j = 0;
+	int min = 30;
+	int max = 100;
+
+	int d = 0;
+	double r = 0;
+	int _d = 0;
+	double _r = -1;
+	int _i = 0;
+
+	/* j = 0, X */
+	for (j = 0; j < 2; j++) {
+		_i = 0;
+		_d = 0;
+		_r = -1;
+
+		if (j < 1 && dimX <= max) {
+			*tileX = dimX;
+			continue;
+		}
+		else if (dimY <= max) {
+			*tileY = dimY;
+			continue;
+		}
+
+		for (i = max; i >= min; i--) {
+			if (j < 1) {
+				d = dimX / i;
+				r = (double) dimX / (double) i;
+
+			}
+			else {
+				d = dimY / i;
+				r = (double) dimY / (double) i;
+			}
+			r = r - (double) d;
+
+			if (
+				FLT_EQ(_r, -1) ||
+				(r < _r) ||
+				FLT_EQ(r, _r)
+			) {
+				_d = d;
+				_r = r;
+				_i = i;
+			}
+		}
+
+		if (j < 1)
+			*tileX = _i;
+		else
+			*tileY = _i;
+	}
 }
 
 static void
@@ -583,7 +645,7 @@ diff_rastinfo(RASTERINFO *x, RASTERINFO *ref) {
 		rt_raster_set_geotransform_matrix(rx, x->gt);
 		rt_raster_set_geotransform_matrix(rref, ref->gt);
 
-		err = rt_raster_same_alignment(rx, rref, &aligned);
+		err = rt_raster_same_alignment(rx, rref, &aligned, NULL);
 		rt_raster_destroy(rx);
 		rt_raster_destroy(rref);
 		if (!err) {
@@ -626,6 +688,7 @@ init_config(RTLOADERCFG *config) {
 	config->nband = NULL;
 	config->nband_count = 0;
 	memset(config->tile_size, 0, sizeof(int) * 2);
+	config->pad_tile = 0;
 	config->outdb = 0;
 	config->opt = 'c';
 	config->idx = 0;
@@ -1084,6 +1147,7 @@ add_raster_constraints(
 	char *sql = NULL;
 	uint32_t len = 0;
 
+	char *_tmp = NULL;
 	char *_schema = NULL;
 	char *_table = NULL;
 	char *_column = NULL;
@@ -1091,13 +1155,25 @@ add_raster_constraints(
 	assert(table != NULL);
 	assert(column != NULL);
 
+	/* schema */
 	if (schema != NULL) {
-		char *tmp = chartrim(schema, ".");
-		_schema = chartrim(tmp, "\"");
-		rtdealloc(tmp);
+		_tmp = chartrim(schema, ".");
+		_schema = chartrim(_tmp, "\"");
+		rtdealloc(_tmp);
+		_tmp = strreplace(_schema, "'", "''", NULL);
+		rtdealloc(_schema);
+		_schema = _tmp;
 	}
-	_table = chartrim(table, "\"");
-	_column = chartrim(column, "\"");
+
+	/* table */
+	_tmp = chartrim(table, "\"");
+	_table = strreplace(_tmp, "'", "''", NULL);
+	rtdealloc(_tmp);
+
+	/* column */
+	_tmp = chartrim(column, "\"");
+	_column = strreplace(_tmp, "'", "''", NULL);
+	rtdealloc(_tmp);
 
 	len = strlen("SELECT AddRasterConstraints('','','',TRUE,TRUE,TRUE,TRUE,TRUE,TRUE,FALSE,TRUE,TRUE,TRUE,TRUE,FALSE);") + 1;
 	if (_schema != NULL)
@@ -1139,6 +1215,8 @@ add_overview_constraints(
 	char *sql = NULL;
 	uint32_t len = 0;
 
+	char *_tmp = NULL;
+
 	char *_ovschema = NULL;
 	char *_ovtable = NULL;
 	char *_ovcolumn = NULL;
@@ -1153,21 +1231,45 @@ add_overview_constraints(
 	assert(column != NULL);
 	assert(factor >= MINOVFACTOR && factor <= MAXOVFACTOR);
 
+	/* overview schema */
 	if (ovschema != NULL) {
-		char *tmp = chartrim(ovschema, ".");
-		_ovschema = chartrim(tmp, "\"");
-		rtdealloc(tmp);
+		_tmp = chartrim(ovschema, ".");
+		_ovschema = chartrim(_tmp, "\"");
+		rtdealloc(_tmp);
+		_tmp = strreplace(_ovschema, "'", "''", NULL);
+		rtdealloc(_ovschema);
+		_schema = _tmp;
 	}
-	_ovtable = chartrim(ovtable, "\"");
-	_ovcolumn = chartrim(ovcolumn, "\"");
 
+	/* overview table */
+	_tmp = chartrim(ovtable, "\"");
+	_ovtable = strreplace(_tmp, "'", "''", NULL);
+	rtdealloc(_tmp);
+
+	/* overview column*/
+	_tmp = chartrim(ovcolumn, "\"");
+	_ovcolumn = strreplace(_tmp, "'", "''", NULL);
+	rtdealloc(_tmp);
+
+	/* schema */
 	if (schema != NULL) {
-		char *tmp = chartrim(schema, ".");
-		_schema = chartrim(tmp, "\"");
-		rtdealloc(tmp);
+		_tmp = chartrim(schema, ".");
+		_schema = chartrim(_tmp, "\"");
+		rtdealloc(_tmp);
+		_tmp = strreplace(_schema, "'", "''", NULL);
+		rtdealloc(_schema);
+		_schema = _tmp;
 	}
-	_table = chartrim(table, "\"");
-	_column = chartrim(column, "\"");
+
+	/* table */
+	_tmp = chartrim(table, "\"");
+	_table = strreplace(_tmp, "'", "''", NULL);
+	rtdealloc(_tmp);
+
+	/* column */
+	_tmp = chartrim(column, "\"");
+	_column = strreplace(_tmp, "'", "''", NULL);
+	rtdealloc(_tmp);
 
 	len = strlen("SELECT AddOverviewConstraints('','','','','','',);") + 5;
 	if (_ovschema != NULL)
@@ -1225,6 +1327,7 @@ build_overview(int idx, RTLOADERCFG *config, RASTERINFO *info, int ovx, STRINGBU
 	VRTDatasetH hdsDst;
 	VRTSourcedRasterBandH hbandDst;
 	int tile_size[2] = {0};
+	int _tile_size[2] = {0};
 	int ntiles[2] = {1, 1};
 	int xtile = 0;
 	int ytile = 0;
@@ -1318,11 +1421,24 @@ build_overview(int idx, RTLOADERCFG *config, RASTERINFO *info, int ovx, STRINGBU
 	/* tile overview */
 	/* each tile is a VRT with constraints set for just the data required for the tile */
 	for (ytile = 0; ytile < ntiles[1]; ytile++) {
+
+		/* edge y tile */
+		if (!config->pad_tile && ntiles[1] > 1 && (ytile + 1) == ntiles[1])
+			_tile_size[1] = dimOv[1] - (ytile * tile_size[1]);
+		else
+			_tile_size[1] = tile_size[1];
+
 		for (xtile = 0; xtile < ntiles[0]; xtile++) {
 			/*
 			char fn[100];
 			sprintf(fn, "/tmp/ovtile%d.vrt", (ytile * ntiles[0]) + xtile);
 			*/
+
+			/* edge x tile */
+			if (!config->pad_tile && ntiles[0] > 1 && (xtile + 1) == ntiles[0])
+				_tile_size[0] = dimOv[0] - (xtile * tile_size[0]);
+			else
+				_tile_size[0] = tile_size[0];
 
 			/* compute tile's upper-left corner */
 			GDALApplyGeoTransform(
@@ -1332,7 +1448,7 @@ build_overview(int idx, RTLOADERCFG *config, RASTERINFO *info, int ovx, STRINGBU
 			);
 
 			/* create VRT dataset */
-			hdsDst = VRTCreate(tile_size[0], tile_size[1]);
+			hdsDst = VRTCreate(_tile_size[0], _tile_size[1]);
 			/*
 			GDALSetDescription(hdsDst, fn);
 			*/
@@ -1350,9 +1466,9 @@ build_overview(int idx, RTLOADERCFG *config, RASTERINFO *info, int ovx, STRINGBU
 				VRTAddSimpleSource(
 					hbandDst, GDALGetRasterBand(hdsOv, j + 1),
 					xtile * tile_size[0], ytile * tile_size[1],
-					tile_size[0], tile_size[1],
+					_tile_size[0], _tile_size[1],
 					0, 0,
-					tile_size[0], tile_size[1],
+					_tile_size[0], _tile_size[1],
 					"near", VRT_NODATA_UNSET
 				);
 			}
@@ -1416,12 +1532,16 @@ convert_raster(int idx, RTLOADERCFG *config, RASTERINFO *info, STRINGBUFFER *til
 	int nband = 0;
 	int i = 0;
 	int ntiles[2] = {1, 1};
+	int _tile_size[2] = {0, 0};
 	int xtile = 0;
 	int ytile = 0;
 	double gt[6] = {0.};
 	const char* pszProjectionRef = NULL;
+	int tilesize = 0;
 
 	rt_raster rast = NULL;
+	int numbands = 0;
+	rt_band band = NULL;
 	char *hex;
 	uint32_t hexlen = 0;
 
@@ -1548,6 +1668,19 @@ convert_raster(int idx, RTLOADERCFG *config, RASTERINFO *info, STRINGBUFFER *til
 	info->dim[0] = GDALGetRasterXSize(hdsSrc);
 	info->dim[1] = GDALGetRasterYSize(hdsSrc);
 
+	/* tile size is "auto" */
+	if (
+		config->tile_size[0] == -1 &&
+		config->tile_size[1] == -1
+	) {
+		calc_tile_size(
+			info->dim[0], info->dim[1],
+			&(config->tile_size[0]), &(config->tile_size[1])
+		);
+
+		rtinfo(_("Using computed tile size: %dx%d"), config->tile_size[0], config->tile_size[1]);
+	}
+
 	/* decide on tile size */
 	if (!config->tile_size[0])
 		info->tile_size[0] = info->dim[0];
@@ -1563,6 +1696,9 @@ convert_raster(int idx, RTLOADERCFG *config, RASTERINFO *info, STRINGBUFFER *til
 		ntiles[0] = (info->dim[0] + info->tile_size[0]  - 1) / info->tile_size[0];
 	if (info->tile_size[1] != info->dim[1]) 
 		ntiles[1] = (info->dim[1] + info->tile_size[1]  - 1) / info->tile_size[1];
+
+	/* estimate size of 1 tile */
+	tilesize = info->tile_size[0] * info->tile_size[1];
 
 	/* go through bands for attributes */
 	for (i = 0; i < info->nband_count; i++) {
@@ -1592,18 +1728,36 @@ convert_raster(int idx, RTLOADERCFG *config, RASTERINFO *info, STRINGBUFFER *til
 			else
 				info->nodataval[i] = 0;
 		}
+
+		/* update estimated size of 1 tile */
+		tilesize *= rt_pixtype_size(info->bandtype[i]);
 	}
+
+	/* roughly estimate size of one tile and all bands */
+	tilesize *= 1.1;
+	if (tilesize > MAXTILESIZE)
+		rtwarn(_("The size of each output tile may exceed 1 GB. Use -t to specify a reasonable tile size"));
 
 	/* out-db raster */
 	if (config->outdb) {
-		rt_band band = NULL;
-
 		GDALClose(hdsSrc);
 
 		/* each tile is a raster */
 		for (ytile = 0; ytile < ntiles[1]; ytile++) {
+			/* edge y tile */
+			if (!config->pad_tile && ntiles[1] > 1 && (ytile + 1) == ntiles[1])
+				_tile_size[1] = info->dim[1] - (ytile * info->tile_size[1]);
+			else
+				_tile_size[1] = info->tile_size[1];
+
 			for (xtile = 0; xtile < ntiles[0]; xtile++) {
-				
+
+				/* edge x tile */
+				if (!config->pad_tile && ntiles[0] > 1 && (xtile + 1) == ntiles[0])
+					_tile_size[0] = info->dim[0] - (xtile * info->tile_size[0]);
+				else
+					_tile_size[0] = info->tile_size[0];
+
 				/* compute tile's upper-left corner */
 				GDALApplyGeoTransform(
 					info->gt,
@@ -1612,7 +1766,7 @@ convert_raster(int idx, RTLOADERCFG *config, RASTERINFO *info, STRINGBUFFER *til
 				);
 
 				/* create raster object */
-				rast = rt_raster_new(info->tile_size[0], info->tile_size[1]);
+				rast = rt_raster_new(_tile_size[0], _tile_size[1]);
 				if (rast == NULL) {
 					rterror(_("convert_raster: Could not create raster"));
 					return 0;
@@ -1625,7 +1779,7 @@ convert_raster(int idx, RTLOADERCFG *config, RASTERINFO *info, STRINGBUFFER *til
 				/* add bands */
 				for (i = 0; i < info->nband_count; i++) {
 					band = rt_band_new_offline(
-						info->tile_size[0], info->tile_size[1],
+						_tile_size[0], _tile_size[1],
 						info->bandtype[i],
 						info->hasnodata[i], info->nodataval[i],
 						info->nband[i] - 1,
@@ -1644,6 +1798,9 @@ convert_raster(int idx, RTLOADERCFG *config, RASTERINFO *info, STRINGBUFFER *til
 						raster_destroy(rast);
 						return 0;
 					}
+
+					/* inspect each band of raster where band is NODATA */
+					rt_band_check_is_nodata(band);
 				}
 
 				/* convert rt_raster to hexwkb */
@@ -1683,11 +1840,24 @@ convert_raster(int idx, RTLOADERCFG *config, RASTERINFO *info, STRINGBUFFER *til
 
 		/* each tile is a VRT with constraints set for just the data required for the tile */
 		for (ytile = 0; ytile < ntiles[1]; ytile++) {
+
+			/* edge y tile */
+			if (!config->pad_tile && ntiles[1] > 1 && (ytile + 1) == ntiles[1])
+				_tile_size[1] = info->dim[1] - (ytile * info->tile_size[1]);
+			else
+				_tile_size[1] = info->tile_size[1];
+
 			for (xtile = 0; xtile < ntiles[0]; xtile++) {
 				/*
 				char fn[100];
 				sprintf(fn, "/tmp/tile%d.vrt", (ytile * ntiles[0]) + xtile);
 				*/
+
+				/* edge x tile */
+				if (!config->pad_tile && ntiles[0] > 1 && (xtile + 1) == ntiles[0])
+					_tile_size[0] = info->dim[0] - (xtile * info->tile_size[0]);
+				else
+					_tile_size[0] = info->tile_size[0];
 
 				/* compute tile's upper-left corner */
 				GDALApplyGeoTransform(
@@ -1703,7 +1873,7 @@ convert_raster(int idx, RTLOADERCFG *config, RASTERINFO *info, STRINGBUFFER *til
 				*/
 
 				/* create VRT dataset */
-				hdsDst = VRTCreate(info->tile_size[0], info->tile_size[1]);
+				hdsDst = VRTCreate(_tile_size[0], _tile_size[1]);
 				/*
   	 		GDALSetDescription(hdsDst, fn);
 				*/
@@ -1721,9 +1891,9 @@ convert_raster(int idx, RTLOADERCFG *config, RASTERINFO *info, STRINGBUFFER *til
 					VRTAddSimpleSource(
 						hbandDst, GDALGetRasterBand(hdsSrc, info->nband[i]),
 						xtile * info->tile_size[0], ytile * info->tile_size[1],
-						info->tile_size[0], info->tile_size[1],
+						_tile_size[0], _tile_size[1],
 						0, 0,
-						info->tile_size[0], info->tile_size[1],
+						_tile_size[0], _tile_size[1],
 						"near", VRT_NODATA_UNSET
 					);
 				}
@@ -1741,6 +1911,14 @@ convert_raster(int idx, RTLOADERCFG *config, RASTERINFO *info, STRINGBUFFER *til
 
 				/* set srid if provided */
 				rt_raster_set_srid(rast, info->srid);
+
+				/* inspect each band of raster where band is NODATA */
+				numbands = rt_raster_get_num_bands(rast);
+				for (i = 0; i < numbands; i++) {
+					band = rt_raster_get_band(rast, i);
+					if (band != NULL)
+						rt_band_check_is_nodata(band);
+				}
 
 				/* convert rt_raster to hexwkb */
 				hex = rt_raster_to_hexwkb(rast, &hexlen);
@@ -2220,31 +2398,40 @@ main(int argc, char **argv) {
 		}
 		/* tile size */
 		else if (CSEQUAL(argv[i], "-t") && i < argc - 1) {
-			elements = strsplit(argv[++i], "x", &n);
-			if (n != 2) {
-				rterror(_("Could not process -t"));
-				rtdealloc_config(config);
-				exit(1);
+			if (CSEQUAL(argv[++i], "auto")) {
+				config->tile_size[0] = -1;
+				config->tile_size[1] = -1;
 			}
-
-			for (j = 0; j < n; j++) {
-				char *t = trim(elements[j]);
-				config->tile_size[j] = atoi(t);
-				rtdealloc(t);
-				rtdealloc(elements[j]);
-			}
-			rtdealloc(elements);
-			elements = NULL;
-			n = 0;
-
-			for (j = 0; j < 2; j++) {
-				if (config->tile_size[j] < 1) {
-					rterror(_("Tile size must be greater than 0x0"));
+			else {
+				elements = strsplit(argv[i], "x", &n);
+				if (n != 2) {
+					rterror(_("Could not process -t"));
 					rtdealloc_config(config);
 					exit(1);
 				}
-			}
 
+				for (j = 0; j < n; j++) {
+					char *t = trim(elements[j]);
+					config->tile_size[j] = atoi(t);
+					rtdealloc(t);
+					rtdealloc(elements[j]);
+				}
+				rtdealloc(elements);
+				elements = NULL;
+				n = 0;
+
+				for (j = 0; j < 2; j++) {
+					if (config->tile_size[j] < 1) {
+						rterror(_("Tile size must be greater than 0x0"));
+						rtdealloc_config(config);
+						exit(1);
+					}
+				}
+			}
+		}
+		/* pad tiles */
+		else if (CSEQUAL(argv[i], "-P")) {
+			config->pad_tile = 1;
 		}
 		/* out-of-db raster */
 		else if (CSEQUAL(argv[i], "-R")) {

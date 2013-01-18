@@ -77,7 +77,7 @@ Datum geom_from_kml(PG_FUNCTION_ARGS)
 
 	/* Begin to Parse XML doc */
 	xmlInitParser();
-	xmldoc = xmlParseMemory(xml, xml_size);
+	xmldoc = xmlReadMemory(xml, xml_size, NULL, NULL, XML_PARSE_SAX1);
 	if (!xmldoc || (xmlroot = xmlDocGetRootElement(xmldoc)) == NULL)
 	{
 		xmlFreeDoc(xmldoc);
@@ -136,23 +136,26 @@ static bool is_kml_namespace(xmlNodePtr xnode, bool is_strict)
 	 */
 	if (ns == NULL) return !is_strict;
 
-	for (p=ns ; *p ; p++)
-	{
-		if ((*p)->href == NULL) continue;
-		if (!strcmp((char *) (*p)->href, KML_NS))
-		{
-			if (	(*p)->prefix == NULL ||
-			        !xmlStrcmp(xnode->ns->prefix, (*p)->prefix))
-			{
+        for (p=ns ; *p ; p++)
+        {
+                if ((*p)->href == NULL || (*p)->prefix == NULL ||
+                     xnode->ns == NULL || xnode->ns->prefix == NULL) continue;
 
-				xmlFree(ns);
-				return true;
-			}
-		}
-	}
+                if (!xmlStrcmp(xnode->ns->prefix, (*p)->prefix))
+                {
+                        if (!strcmp((char *) (*p)->href, KML_NS))
+                        {
+                                xmlFree(ns);
+                                return true;
+                        } else {
+                                xmlFree(ns);
+                                return false;
+                        }
+                }
+        }
 
-	xmlFree(ns);
-	return false;
+        xmlFree(ns);
+        return !is_strict; /* Same reason here to not return false */;
 }
 
 
@@ -397,8 +400,8 @@ static LWGEOM* parse_kml_polygon(xmlNodePtr xnode, bool *hasz)
 			ppa[0] = parse_kml_coordinates(xb->children, hasz);
 
 			if (ppa[0]->npoints < 4
-			        || (!*hasz && !ptarray_isclosed2d(ppa[0]))
-			        ||  (*hasz && !ptarray_isclosed3d(ppa[0])))
+			        || (!*hasz && !ptarray_is_closed_2d(ppa[0]))
+			        ||  (*hasz && !ptarray_is_closed_3d(ppa[0])))
 				lwerror("invalid KML representation");
 		}
 	}
@@ -423,8 +426,8 @@ static LWGEOM* parse_kml_polygon(xmlNodePtr xnode, bool *hasz)
 			ppa[ring] = parse_kml_coordinates(xb->children, hasz);
 
 			if (ppa[ring]->npoints < 4
-			        || (!*hasz && !ptarray_isclosed2d(ppa[ring]))
-			        ||  (*hasz && !ptarray_isclosed3d(ppa[ring])))
+			        || (!*hasz && !ptarray_is_closed_2d(ppa[ring]))
+			        ||  (*hasz && !ptarray_is_closed_3d(ppa[ring])))
 				lwerror("invalid KML representation");
 
 			ring++;

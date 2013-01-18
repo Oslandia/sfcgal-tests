@@ -1367,133 +1367,24 @@ gisdb=# SELECT
               <tbody>
                 <row>
                   <entry><emphasis role="bold">Interior</emphasis></entry>
-
-                  <entry><emphasis><inlineequation>
-                      <mml:math display="block">
-                        <mml:mrow>
-                          <mml:mtext mathvariant="italic">dim(
-                          I(a)</mml:mtext>
-
-                          <mml:mo>∩</mml:mo>
-
-                          <mml:mtext mathvariant="italic">I(b) )</mml:mtext>
-                        </mml:mrow>
-                      </mml:math>
-                    </inlineequation></emphasis></entry>
-
-                  <entry><emphasis><inlineequation>
-                      <mml:math display="block">
-                        <mml:mrow>
-                          <mml:mtext mathvariant="italic">dim(
-                          I(a)</mml:mtext>
-
-                          <mml:mo>∩</mml:mo>
-
-                          <mml:mtext mathvariant="italic">B(b) )</mml:mtext>
-                        </mml:mrow>
-                      </mml:math>
-                    </inlineequation></emphasis></entry>
-
-                  <entry><emphasis><inlineequation>
-                      <mml:math display="block">
-                        <mml:mrow>
-                          <mml:mtext mathvariant="italic">dim(
-                          I(a)</mml:mtext>
-
-                          <mml:mo>∩</mml:mo>
-
-                          <mml:mtext mathvariant="italic">E(b) )</mml:mtext>
-                        </mml:mrow>
-                      </mml:math>
-                    </inlineequation></emphasis></entry>
+                  <entry><emphasis>dim( I(a) ∩ I(b) )</emphasis></entry>
+                  <entry><emphasis>dim( I(a) ∩ B(b) )</emphasis></entry>
+                  <entry><emphasis>dim( I(a) ∩ E(b) )</emphasis></entry>
                 </row>
-
                 <row>
                   <entry><emphasis role="bold">Boundary</emphasis></entry>
-
-                  <entry><emphasis><inlineequation>
-                      <mml:math display="block">
-                        <mml:mrow>
-                          <mml:mtext mathvariant="italic">dim(
-                          B(a)</mml:mtext>
-
-                          <mml:mo>∩</mml:mo>
-
-                          <mml:mtext mathvariant="italic">I(b) )</mml:mtext>
-                        </mml:mrow>
-                      </mml:math>
-                    </inlineequation></emphasis></entry>
-
-                  <entry><emphasis><inlineequation>
-                      <mml:math display="block">
-                        <mml:mrow>
-                          <mml:mtext mathvariant="italic">dim(
-                          B(a)</mml:mtext>
-
-                          <mml:mo>∩</mml:mo>
-
-                          <mml:mtext mathvariant="italic">B(b) )</mml:mtext>
-                        </mml:mrow>
-                      </mml:math>
-                    </inlineequation></emphasis></entry>
-
-                  <entry><emphasis><inlineequation>
-                      <mml:math display="block">
-                        <mml:mrow>
-                          <mml:mtext mathvariant="italic">dim(
-                          B(a)</mml:mtext>
-
-                          <mml:mo>∩</mml:mo>
-
-                          <mml:mtext mathvariant="italic">E(b) )</mml:mtext>
-                        </mml:mrow>
-                      </mml:math>
-                    </inlineequation></emphasis></entry>
+                  <entry><emphasis>dim( B(a) ∩ I(b) )</emphasis></entry>
+                  <entry><emphasis>dim( B(a) ∩ B(b) )</emphasis></entry>
+                  <entry><emphasis>dim( B(a) ∩ E(b) )</emphasis></entry>
                 </row>
-
                 <row>
                   <entry><emphasis role="bold">Exterior</emphasis></entry>
-
-                  <entry><emphasis><inlineequation>
-                      <mml:math display="block">
-                        <mml:mrow>
-                          <mml:mtext mathvariant="italic">dim(
-                          E(a)</mml:mtext>
-
-                          <mml:mo>∩</mml:mo>
-
-                          <mml:mtext mathvariant="italic">I(b) )</mml:mtext>
-                        </mml:mrow>
-                      </mml:math>
-                    </inlineequation></emphasis></entry>
-
-                  <entry><emphasis><inlineequation>
-                      <mml:math display="block">
-                        <mml:mrow>
-                          <mml:mtext mathvariant="italic">dim(
-                          E(a)</mml:mtext>
-
-                          <mml:mo>∩</mml:mo>
-
-                          <mml:mtext mathvariant="italic">B(b) )</mml:mtext>
-                        </mml:mrow>
-                      </mml:math>
-                    </inlineequation></emphasis></entry>
-
-                  <entry><emphasis><inlineequation>
-                      <mml:math display="block">
-                        <mml:mrow>
-                          <mml:mtext mathvariant="italic">dim(
-                          E(a)</mml:mtext>
-
-                          <mml:mo>∩</mml:mo>
-
-                          <mml:mtext mathvariant="italic">E(b) )</mml:mtext>
-                        </mml:mrow>
-                      </mml:math>
-                    </inlineequation></emphasis></entry>
+                  <entry><emphasis>dim( E(a) ∩ I(b) )</emphasis></entry>
+                  <entry><emphasis>dim( E(a) ∩ B(b) )</emphasis></entry>
+                  <entry><emphasis>dim( E(a) ∩ E(b) )</emphasis></entry>
                 </row>
               </tbody>
+              
             </tgroup>
           </informaltable>
 
@@ -1695,8 +1586,8 @@ AND ST_Relate(a.geom, b.geom, '102101FF2');</programlisting>
 	
   </sect1>
 
-  <sect1>
-	<title>Loading GIS Data</title>
+  <sect1 id="loading_geometry_data">
+	<title>Loading GIS (Vector) Data</title>
 
 	<para>Once you have created a spatial table, you are ready to upload GIS
 	data to the database. Currently, there are two ways to get data into a
@@ -1704,7 +1595,7 @@ AND ST_Relate(a.geom, b.geom, '102101FF2');</programlisting>
 	Shape file loader/dumper.</para>
 
 	<sect2>
-	  <title>Using SQL</title>
+	  <title>Loading Data Using SQL</title>
 
 	  <para>If you can convert your data to a text representation, then using
 	  formatted SQL might be the easiest way to get your data into PostGIS. As
@@ -1737,7 +1628,7 @@ COMMIT;</programlisting>
 	</sect2>
 
 <sect2 id="shp2pgsql_usage">
-  <title>Using the Loader</title>
+  <title>shp2pgsql: Using the ESRI Shapefile Loader</title>
 
   <para>
     The <filename>shp2pgsql</filename> data loader converts ESRI Shape files into SQL suitable for
@@ -1985,7 +1876,7 @@ COMMIT;</programlisting>
 </sect2>
   </sect1>
 
-  <sect1>
+  <sect1 id="retrieving_vector-data">
 	<title>Retrieving GIS Data</title>
 
 	<para>Data can be extracted from the database using either SQL or the
@@ -1994,7 +1885,7 @@ COMMIT;</programlisting>
 	tables.</para>
 
 	<sect2>
-	  <title>Using SQL</title>
+	  <title>Using SQL to Retrieve Data</title>
 
 	  <para>The most straightforward means of pulling data out of the
         database is to use a SQL select query to reduce the number of RECORDS and COLUMNS returned
@@ -2393,7 +2284,7 @@ WHERE ST_DWithin(the_geom,  ST_MakeEnvelope(90900, 190900, 100100, 200100,312), 
 	  </note>
 	</sect2>
 
-	<sect2>
+	<sect2 id="examples_spatial_sql">
 	  <title>Examples of Spatial SQL</title>
 
 	  <para>The examples in this section will make use of two tables, a table
@@ -2417,7 +2308,7 @@ name       | character varying | City / Town Name
 the_geom   | geometry          | Location Geometry (Polygon)</programlisting>
 
 	  <qandaset>
-		<qandaentry>
+		<qandaentry id="qa_total_length_roads">
 		  <question>
 			<para>What is the total length of all roads, expressed in
 			kilometers?</para>

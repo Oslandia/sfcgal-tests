@@ -1,4 +1,4 @@
---$Id: lookup_tables_2011.sql 9699 2012-04-30 00:50:35Z robe $
+--$Id: lookup_tables_2011.sql 10394 2012-10-10 22:30:55Z robe $
 --SET search_path TO tiger, public;
 SELECT tiger.SetSearchPathForInstall('tiger');
 -- Create direction lookup table
@@ -717,6 +717,7 @@ SELECT name, abbrev, true
         ('COUNTY HIGHWAY', 'Co Hwy'),
         ('COUNTY HIGH WAY', 'Co Hwy'),
         ('COUNTY ROAD', 'Co Rd'),
+        ('COUNTY RD', 'Co Rd'),
         ('CO RD', 'Co Rd'),
         ('CORD', 'Co Rd'),
         ('CO RTE', 'Co Rte'),
@@ -772,6 +773,7 @@ SELECT name, abbrev, true
         ('US HWY', 'US Hwy'),
         ('US HIGHWAY', 'US Hwy'),
         ('US HIGH WAY', 'US Hwy'),
+        ('U.S.', 'US Hwy'),
         ('US RTE', 'US Rte'),
         ('US ROUTE', 'US Rte'),
         ('US RT', 'US Rte'),
@@ -1177,7 +1179,7 @@ CREATE TABLE addrfeat
   CONSTRAINT enforce_geotype_the_geom CHECK (geometrytype(the_geom) = 'LINESTRING'::text OR the_geom IS NULL),
   CONSTRAINT enforce_srid_the_geom CHECK (st_srid(the_geom) = 4269)
 );
-CREATE INDEX idx_addrfeat_geom_gist ON addrfeat USING gist(geom );
+CREATE INDEX idx_addrfeat_geom_gist ON addrfeat USING gist(the_geom );
 CREATE INDEX idx_addrfeat_tlid ON addrfeat USING btree(tlid);
 CREATE INDEX idx_addrfeat_zipl ON addrfeat USING btree(zipl);
 CREATE INDEX idx_addrfeat_zipr ON addrfeat USING btree(zipr);

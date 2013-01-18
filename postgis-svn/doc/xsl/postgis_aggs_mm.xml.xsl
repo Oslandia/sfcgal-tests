@@ -1,6 +1,6 @@
 <xsl:stylesheet version="1.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
 <!-- ********************************************************************
-	 $Id: postgis_aggs_mm.xml.xsl 9884 2012-06-11 18:01:14Z robe $
+	 $Id: postgis_aggs_mm.xml.xsl 10815 2012-12-07 09:24:31Z strk $
 	 ********************************************************************
 	 Copyright 2010, Regina Obe
 	 License: BSD
@@ -500,7 +500,32 @@
 								</xsl:for-each>
 							</xsl:for-each>
 					</xsl:for-each>
-				</itemizedlist>				
+				</itemizedlist>	
+				
+				<para>The functions given below are PostGIS functions that have possibly breaking changes in PostGIS 2.1.  If you use any of these, you may need to check your existing code.</para>
+				<itemizedlist>
+				<!-- Pull out the purpose section for each ref entry   -->
+					<xsl:for-each select='//refentry'>
+						<xsl:sort select="@id"/>
+						<xsl:variable name="refid">
+							<xsl:value-of select="@id" />
+						</xsl:variable>
+						
+						<xsl:variable name="refname">
+							<xsl:value-of select="refnamediv/refname" />
+						</xsl:variable>
+				<!-- For each section if there is note about enhanced in this version -->
+							<xsl:for-each select="refsection">
+								<xsl:for-each select="para | */para">
+									<xsl:choose>
+										<xsl:when test="contains(.,'Changed: 2.1')">
+											<listitem><simpara><link linkend="{$refid}"><xsl:value-of select="$refname" /></link> - <xsl:value-of select="." /></simpara></listitem>
+										</xsl:when>
+									</xsl:choose>
+								</xsl:for-each>
+							</xsl:for-each>
+					</xsl:for-each>
+				</itemizedlist>
 				
 			
 			</sect2>
@@ -574,7 +599,7 @@
                     <note><para>Most deprecated functions have been removed.  These are functions that haven't been documented since 1.2
                         or some internal functions that were never documented.  If you are using a function that you don't see documented,
                         it's probably deprecated, about to be deprecated, or internal and should be avoided.  If you have applications or tools
-                        that rely on deprecated functions, please refer to <link linkend="legacy_faq" /> for more details.</para></note>
+                        that rely on deprecated functions, please refer to <xref linkend="legacy_faq" /> for more details.</para></note>
                     <note><para>Bounding boxes of geometries have been changed from float4 to double precision (float8).  This has an impact
                     	on answers you get using bounding box operators and casting of bounding boxes to geometries. E.g ST_SetSRID(abbox) will
                     	often return a different more accurate answer in PostGIS 2.0+ than it did in prior versions which may very well slightly

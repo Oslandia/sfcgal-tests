@@ -1,5 +1,5 @@
 /**********************************************************************
- * $Id: liblwgeom.h.in 10252 2012-09-07 19:54:52Z pramsey $
+ * $Id: liblwgeom.h.in 10937 2012-12-27 12:56:59Z strk $
  *
  * PostGIS - Spatial Types for PostgreSQL
  *
@@ -32,10 +32,9 @@
 * units tests at cunit/cu_tester.c and the loader/dumper programs at
 * ../loader/shp2pgsql.c are examples of non-PostGIS applications using liblwgeom.
 *
-* Programs using this library should set up the default memory managers and error
-* handlers by implementing an lwgeom_init_allocators() function, which can be as
-* a wrapper around the lwgeom_install_default_allocators() function if you want
-* no special handling for memory management and error reporting.
+* Programs using this library can install their custom memory managers and error
+* handlers by calling the lwgeom_set_handlers() function, otherwise the default 
+* ones will be used.
 */
 
 /**
@@ -177,25 +176,16 @@ typedef void* (*lwallocator)(size_t size);
 typedef void* (*lwreallocator)(void *mem, size_t size);
 typedef void (*lwfreeor)(void* mem);
 typedef void (*lwreporter)(const char* fmt, va_list ap);
-extern lwreallocator lwrealloc_var;
-extern lwallocator lwalloc_var;
-extern lwfreeor lwfree_var;
-extern lwreporter lwerror_var;
-extern lwreporter lwnotice_var;
 
 /**
-* Supply the memory management and error handling functions you want your
+* Install custom memory management and error handling functions you want your
 * application to use.
 * @ingroup system
+* @todo take a structure ?
 */
-extern void lwgeom_init_allocators(void);
-
-/**
-* Apply the default memory management (malloc() and free()) and error handlers.
-* Called inside lwgeom_init_allocators() generally.
-* @ingroup system
-*/
-extern void lwgeom_install_default_allocators(void);
+extern void lwgeom_set_handlers(lwallocator allocator, 
+        lwreallocator reallocator, lwfreeor freeor, lwreporter errorreporter,
+        lwreporter noticereporter);
 
 /**
  * Write a notice out to the notice handler.
@@ -217,16 +207,8 @@ void lwnotice(const char *fmt, ...);
  */
 void lwerror(const char *fmt, ...);
 
-/**
- * The default memory/logging handlers installed by
- * lwgeom_install_default_allocators()
- */
-void *default_allocator(size_t size);
-void *default_reallocator(void *mem, size_t size);
-void default_freeor(void *ptr);
-void default_errorreporter(const char *fmt, va_list ap);
-void default_noticereporter(const char *fmt, va_list ap);
 
+/* TODO: move these elsewhere */
 extern int lw_vasprintf (char **result, const char *format, va_list args);
 extern int lw_asprintf
 #if __STDC__
@@ -681,6 +663,10 @@ extern void lwgeom_drop_srid(LWGEOM *lwgeom);
  * NULL if the geometry is empty.
  */
 extern void lwgeom_add_bbox(LWGEOM *lwgeom);
+/**
+* Compute a box for geom and all sub-geometries, if not already computed
+*/
+extern void lwgeom_add_bbox_deep(LWGEOM *lwgeom, GBOX *gbox);
 
 /** 
  * Get a non-empty geometry bounding box, computing and
@@ -764,6 +750,14 @@ extern POINT2D getPoint2d(const POINTARRAY *pa, int n);
  * NOTE: this will modify the point2d pointed to by 'point'.
  */
 extern int getPoint2d_p(const POINTARRAY *pa, int n, POINT2D *point);
+
+/**
+* Returns a pointer into the POINTARRAY serialized_ptlist, 
+* suitable for reading from. This is very high performance
+* and declared const because you aren't allowed to muck with the 
+* values, only read them.
+*/
+extern const POINT2D* getPoint2d_cp(const POINTARRAY *pa, int n);
 
 /*
  * set point N to the given value
@@ -852,10 +846,10 @@ extern int ptarray_remove_point(POINTARRAY *pa, int where);
 extern POINTARRAY *ptarray_addPoint(const POINTARRAY *pa, uint8_t *p, size_t pdims, uint32_t where);
 extern POINTARRAY *ptarray_removePoint(POINTARRAY *pa, uint32_t where);
 extern POINTARRAY *ptarray_merge(POINTARRAY *pa1, POINTARRAY *pa2);
-extern int ptarray_isclosed(const POINTARRAY *pa);
-extern int ptarray_isclosed2d(const POINTARRAY *pa);
-extern int ptarray_isclosed3d(const POINTARRAY *pa);
-extern int ptarray_isclosedz(const POINTARRAY *pa);
+extern int ptarray_is_closed(const POINTARRAY *pa);
+extern int ptarray_is_closed_2d(const POINTARRAY *pa);
+extern int ptarray_is_closed_3d(const POINTARRAY *pa);
+extern int ptarray_is_closed_z(const POINTARRAY *pa);
 extern void ptarray_longitude_shift(POINTARRAY *pa);
 extern void ptarray_reverse(POINTARRAY *pa);
 extern POINTARRAY* ptarray_flip_coordinates(POINTARRAY *pa);
@@ -1075,9 +1069,8 @@ extern double ptarray_length(const POINTARRAY *pts);
 
 
 extern int pt_in_ring_2d(const POINT2D *p, const POINTARRAY *ring);
-extern int pt_in_poly_2d(const POINT2D *p, const LWPOLY *poly);
 extern int azimuth_pt_pt(const POINT2D *p1, const POINT2D *p2, double *ret);
-extern int lwgeom_pt_inside_circle(POINT2D *p, double cx, double cy, double rad);
+extern int lwpoint_inside_circle(const LWPOINT *p, double cx, double cy, double rad);
 extern void lwgeom_reverse(LWGEOM *lwgeom);
 extern void lwline_reverse(LWLINE *line);
 extern void lwpoly_reverse(LWPOLY *poly);
@@ -1115,7 +1108,6 @@ extern int lwgeom_needs_bbox(const LWGEOM *geom);
 * Count the total number of vertices in any #LWGEOM.
 */
 extern int lwgeom_count_vertices(const LWGEOM *geom);
-extern int lwgeom_npoints(uint8_t *serialized);
 
 /**
 * Count the total number of rings in any #LWGEOM. Multipolygons
@@ -1234,6 +1226,11 @@ extern double lwpoint_get_m(const LWPOINT *point);
 extern int32_t lwgeom_get_srid(const LWGEOM *geom);
 
 /**
+* Return LWTYPE number
+*/
+extern uint32_t lwgeom_get_type(const LWGEOM *geom);
+
+/**
 * Return #LW_TRUE if geometry has Z ordinates
 */
 extern int lwgeom_has_z(const LWGEOM *geom);
@@ -1321,14 +1318,6 @@ int lwline_crossing_direction(const LWLINE *l1, const LWLINE *l2);
 * Given a geometry clip  based on the from/to range of one of its ordinates (x, y, z, m). Use for m- and z- clipping.
 */
 LWCOLLECTION* lwgeom_clip_to_ordinate_range(const LWGEOM *lwin, char ordinate, double from, double to, double offset);
-
-/*
- * Export functions
- */
-#define OUT_MAX_DOUBLE 1E15
-#define OUT_SHOW_DIGS_DOUBLE 20
-#define OUT_MAX_DOUBLE_PRECISION 15
-#define OUT_MAX_DIGS_DOUBLE (OUT_SHOW_DIGS_DOUBLE + 2) /* +2 mean add dot and sign */
 
 /**
  * Macros for specifying GML options. 
@@ -1467,14 +1456,19 @@ extern char* gserialized_to_string(const GSERIALIZED *g);
 extern GSERIALIZED* gserialized_copy(const GSERIALIZED *g);
 
 /**
-* Check that coordinates of LWGEOM are all within the geodetic range.
+* Check that coordinates of LWGEOM are all within the geodetic range (-180, -90, 180, 90)
 */
 extern int lwgeom_check_geodetic(const LWGEOM *geom);
 
 /**
-* Check that coordinates of LWGEOM are all within the geodetic range.
+* Gently move coordinates of LWGEOM if they are close enough into geodetic range.
 */
 extern int lwgeom_nudge_geodetic(LWGEOM *geom);
+
+/**
+* Force coordinates of LWGEOM into geodetic range (-180, -90, 180, 90)
+*/
+extern int lwgeom_force_geodetic(LWGEOM *geom);
 
 /**
 * Set the FLAGS geodetic bit on geometry an all sub-geometries and pointlists
@@ -1551,6 +1545,11 @@ extern int gbox_union(const GBOX *g1, const GBOX *g2, GBOX *gout);
 extern void gbox_expand(GBOX *g, double d);
 
 /**
+* Initialize a #GBOX using the values of the point.
+*/
+extern int gbox_init_point3d(const POINT3D *p, GBOX *gbox);
+
+/**
 * Update the #GBOX to be large enough to include itself and the new point.
 */
 extern int gbox_merge_point3d(const POINT3D *p, GBOX *gbox);
@@ -1610,6 +1609,11 @@ extern int gbox_same(const GBOX *g1, const GBOX *g2);
 extern void gbox_float_round(GBOX *gbox);
 
 /**
+* Return false if any of the dimensions is NaN or infinite
+*/
+extern int gbox_is_valid(const GBOX *gbox);
+
+/**
 * Utility function to get type number from string. For example, a string 'POINTZ' 
 * would return type of 1 and z of 1 and m of 0. Valid 
 */
@@ -1639,7 +1643,8 @@ extern LWGEOM* lwgeom_from_gserialized(const GSERIALIZED *g);
 
 /**
 * Pull a #GBOX from the header of a #GSERIALIZED, if one is available. If
-* it is not, return LW_FAILURE.
+* it is not, calculate it from the geometry. If that doesn't work (null
+* or empty) return LW_FAILURE.
 */
 extern int gserialized_get_gbox_p(const GSERIALIZED *g, GBOX *gbox);
 
@@ -1793,7 +1798,6 @@ extern void *lwrealloc(void *mem, size_t size);
 extern void lwfree(void *mem);
 
 /* Utilities */
-extern void trim_trailing_zeros(char *num);
 extern char *lwmessage_truncate(char *str, int startpos, int endpos, int maxlength, int truncdirection);
 
 
@@ -1802,7 +1806,6 @@ extern char *lwmessage_truncate(char *str, int startpos, int endpos, int maxleng
  ******************************************************************************/
 
 int lwgeom_has_arc(const LWGEOM *geom);
-double lwcircle_center(const POINT4D *p1, const POINT4D *p2, const POINT4D *p3, POINT4D *result);
 LWGEOM *lwgeom_segmentize(LWGEOM *geom, uint32_t perQuad);
 LWGEOM *lwgeom_desegmentize(LWGEOM *geom);
 
@@ -1897,6 +1900,9 @@ LWGEOM* lwgeom_buildarea(const LWGEOM *geom) ;
 
 /**
  * Attempts to make an invalid geometries valid w/out losing points.
+ *
+ * NOTE: this is only available when liblwgeom is built against
+ *       GEOS 3.3.0 or higher
  */
 LWGEOM* lwgeom_make_valid(LWGEOM* geom);
 

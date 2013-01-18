@@ -1,5 +1,5 @@
 /**********************************************************************
- * $Id: cu_libgeom.c 9324 2012-02-27 22:08:12Z pramsey $
+ * $Id: cu_libgeom.c 10661 2012-11-09 00:09:35Z pramsey $
  *
  * PostGIS - Spatial Types for PostgreSQL
  * http://postgis.refractions.net
@@ -462,11 +462,28 @@ static void test_lwgeom_free(void)
 
 static void do_lwgeom_flip_coordinates(char *in, char *out)
 {
-	LWGEOM *g,*h;
+	LWGEOM *g;
 	char * t;
+	double xmax, ymax;
+	int testbox;
 
 	g = lwgeom_from_wkt(in, LW_PARSER_CHECK_NONE);
-	h = lwgeom_flip_coordinates(g);
+	lwgeom_add_bbox(g);
+
+	testbox = (g->bbox != NULL);
+	if ( testbox )
+	{
+		xmax = g->bbox->xmax;
+		ymax = g->bbox->ymax;
+	}
+	
+	g = lwgeom_flip_coordinates(g);
+	
+	if ( testbox )
+	{
+		CU_ASSERT_DOUBLE_EQUAL(g->bbox->xmax, ymax, 0.00001);
+		CU_ASSERT_DOUBLE_EQUAL(g->bbox->ymax, xmax, 0.00001);
+	}
 
 	t = lwgeom_to_wkt(g, WKT_EXTENDED, 8, NULL);
 	if (t == NULL) fprintf(stderr, "In:%s", in);
@@ -871,7 +888,6 @@ static void test_lwgeom_same(void)
 	lwgeom_free(geom2);
 
 }
-
 
 /*
 ** Used by test harness to register the tests in this file.

@@ -428,9 +428,9 @@ int
 lwline_is_closed(const LWLINE *line)
 {
 	if (FLAGS_GET_Z(line->flags))
-		return ptarray_isclosed3d(line->points);
+		return ptarray_is_closed_3d(line->points);
 
-	return ptarray_isclosed2d(line->points);
+	return ptarray_is_closed_2d(line->points);
 }
 
 
@@ -456,7 +456,7 @@ lwline_force_dims(const LWLINE *line, int hasz, int hasm)
 
 int lwline_is_empty(const LWLINE *line)
 {
-	if ( !line->points || line->points->npoints == 0 )
+	if ( !line->points || line->points->npoints < 1 )
 		return LW_TRUE;
 	return LW_FALSE;
 }
@@ -480,7 +480,8 @@ LWLINE* lwline_simplify(const LWLINE *iline, double dist)
 	if( lwline_is_empty(iline) )
 		return lwline_clone(iline);
 		
-	oline = lwline_construct(iline->srid, NULL, ptarray_simplify(iline->points, dist, 2));
+	static const int minvertices = 0; /* TODO: allow setting this */
+	oline = lwline_construct(iline->srid, NULL, ptarray_simplify(iline->points, dist, minvertices));
 	oline->type = iline->type;
 	return oline;
 }

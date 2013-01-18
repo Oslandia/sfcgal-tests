@@ -55,7 +55,6 @@ Datum geography_analyze(PG_FUNCTION_ARGS);
  * tweak the deviation factor used in computation with
  * SDFACTOR.
  */
-#define USE_STANDARD_DEVIATION 1
 #define SDFACTOR 3.25
 
 
@@ -453,8 +452,6 @@ Datum geography_gist_selectivity(PG_FUNCTION_ARGS)
 	int geogstats_nvalues = 0;
 	Node *other;
 	Var *self;
-	GSERIALIZED *serialized;
-	LWGEOM *geometry;
 	GBOX search_box;
 	float8 selectivity = 0;
 
@@ -494,30 +491,30 @@ Datum geography_gist_selectivity(PG_FUNCTION_ARGS)
 	}
 
 	/*
-	 * We are working on two constants..
-	 * TODO: check if expression is true,
-	 *       returned set would be either
-	 *       the whole or none.
-	 */
+	* We don't have a nice <const> && <var> or <var> && <const> 
+	* situation here. <const> && <const> would probably get evaluated
+	* away by PgSQL earlier on. <func> && <const> is harder, and the
+	* case we get often is <const> && ST_Expand(<var>), which does 
+	* actually have a subtly different selectivity than a bae
+	* <const> && <var> call. It's calculatable though, by expanding
+	* every cell in the histgram appropriately.
+	* 
+	* Discussion: http://trac.osgeo.org/postgis/ticket/1828
+	*
+	* To do? Do variable selectivity based on the <func> node.
+	*/
 	if ( ! IsA(self, Var) )
 	{
-		POSTGIS_DEBUG(3, " no variable argument ? - returning default selectivity");
-
-		PG_RETURN_FLOAT8(DEFAULT_GEOGRAPHY_SEL);
+		POSTGIS_DEBUG(3, " no bare variable argument ? - returning a moderate selectivity");
+//		PG_RETURN_FLOAT8(DEFAULT_GEOMETRY_SEL);
+		PG_RETURN_FLOAT8(0.33333);
 	}
-
-	/*
-	 * Convert the constant to a GBOX
-	 */
-	serialized = (GSERIALIZED *)PG_DETOAST_DATUM( ((Const*)other)->constvalue );
-	geometry = lwgeom_from_gserialized(serialized);
-
+	
 	/* Convert coordinates to 3D geodesic */
 	FLAGS_SET_GEODETIC(search_box.flags, 1);
-	if (!lwgeom_calculate_gbox_geodetic(geometry, &search_box))
+	if ( ! gserialized_datum_get_gbox_p(((Const*)other)->constvalue, &search_box) )
 	{
 		POSTGIS_DEBUG(3, " search box cannot be calculated");
-
 		PG_RETURN_FLOAT8(0.0);
 	}
 
@@ -530,7 +527,7 @@ Datum geography_gist_selectivity(PG_FUNCTION_ARGS)
 	 */
 	relid = getrelid(self->varno, root->parse->rtable);
 
-	stats_tuple = SearchSysCache(STATRELATT, ObjectIdGetDatum(relid), Int16GetDatum(self->varattno), 0, 0);
+	stats_tuple = SearchSysCache2(STATRELATT, ObjectIdGetDatum(relid), Int16GetDatum(self->varattno));
 	if ( ! stats_tuple )
 	{
 		POSTGIS_DEBUG(3, " No statistics, returning default estimate");
@@ -646,7 +643,7 @@ Datum geography_gist_join_selectivity(PG_FUNCTION_ARGS)
 	POSTGIS_DEBUGF(3, "Working with relations oids: %d %d", relid1, relid2);
 
 	/* Read the stats tuple from the first column */
-	stats1_tuple = SearchSysCache(STATRELATT, ObjectIdGetDatum(relid1), Int16GetDatum(var1->varattno), 0, 0);
+	stats1_tuple = SearchSysCache2(STATRELATT, ObjectIdGetDatum(relid1), Int16GetDatum(var1->varattno));
 	if ( ! stats1_tuple )
 	{
 		POSTGIS_DEBUG(3, " No statistics, returning default geometry join selectivity");
@@ -668,7 +665,7 @@ Datum geography_gist_join_selectivity(PG_FUNCTION_ARGS)
 
 
 	/* Read the stats tuple from the second column */
-	stats2_tuple = SearchSysCache(STATRELATT, ObjectIdGetDatum(relid2), Int16GetDatum(var2->varattno), 0, 0);
+	stats2_tuple = SearchSysCache2(STATRELATT, ObjectIdGetDatum(relid2), Int16GetDatum(var2->varattno));
 	if ( ! stats2_tuple )
 	{
 		POSTGIS_DEBUG(3, " No statistics, returning default geometry join selectivity");
@@ -814,13 +811,11 @@ compute_geography_stats(VacAttrStats *stats, AnalyzeAttrFetchFunc fetchfunc,
 	double total_width = 0;
 	int notnull_cnt = 0, examinedsamples = 0, total_count_cells=0, total_cells_coverage = 0;
 
-#if USE_STANDARD_DEVIATION
 	/* for standard deviation */
 	double avgLOWx, avgLOWy, avgLOWz, avgHIGx, avgHIGy, avgHIGz;
 	double sumLOWx = 0, sumLOWy = 0, sumLOWz = 0, sumHIGx = 0, sumHIGy = 0, sumHIGz = 0;
 	double sdLOWx = 0, sdLOWy = 0, sdLOWz = 0, sdHIGx = 0, sdHIGy = 0, sdHIGz = 0;
 	GBOX *newhistobox = NULL;
-#endif
 
 	bool isnull;
 	int i;
@@ -855,7 +850,7 @@ compute_geography_stats(VacAttrStats *stats, AnalyzeAttrFetchFunc fetchfunc,
 		Datum datum;
 		GSERIALIZED *serialized;
 		LWGEOM *geometry;
-
+		
 		/* Fetch the datum and cast it into a geography */
 		datum = fetchfunc(stats, i, &isnull);
 
@@ -863,11 +858,10 @@ compute_geography_stats(VacAttrStats *stats, AnalyzeAttrFetchFunc fetchfunc,
 		if (isnull)
 			continue;
 
-		serialized = (GSERIALIZED *)PG_DETOAST_DATUM(datum);
+		serialized = (GSERIALIZED*)PG_DETOAST_DATUM(datum);
 		geometry = lwgeom_from_gserialized(serialized);
-
 		/* Convert coordinates to 3D geodesic */
-		if (!lwgeom_calculate_gbox_geodetic(geometry, &gbox))
+		if ( ! lwgeom_calculate_gbox_geodetic(geometry, &gbox) )
 		{
 			/* Unable to obtain or calculate a bounding box */
 			POSTGIS_DEBUGF(3, "skipping geometry at position %d", i);
@@ -912,9 +906,8 @@ compute_geography_stats(VacAttrStats *stats, AnalyzeAttrFetchFunc fetchfunc,
 		}
 
 		/** TODO: ask if we need geom or bvol size for stawidth */
-		total_width += serialized->size;
+		total_width += VARSIZE(serialized);
 
-#if USE_STANDARD_DEVIATION
 		/*
 		 * Add bvol coordinates to sum for standard deviation
 		 * computation.
@@ -925,7 +918,6 @@ compute_geography_stats(VacAttrStats *stats, AnalyzeAttrFetchFunc fetchfunc,
 		sumHIGx += gbox.xmax;
 		sumHIGy += gbox.ymax;
 		sumHIGz += gbox.zmax;
-#endif
 
 		notnull_cnt++;
 
@@ -945,8 +937,6 @@ compute_geography_stats(VacAttrStats *stats, AnalyzeAttrFetchFunc fetchfunc,
 		stats->stats_valid = false;
 		return;
 	}
-
-#if USE_STANDARD_DEVIATION
 
 	POSTGIS_DEBUG(3, "Standard deviation filter enabled");
 
@@ -1067,21 +1057,6 @@ compute_geography_stats(VacAttrStats *stats, AnalyzeAttrFetchFunc fetchfunc,
 		histobox.ymax = newhistobox->ymax;
 	if ( histobox.zmax > newhistobox->zmax )
 		histobox.zmax = newhistobox->zmax;
-
-#else /* ! USE_STANDARD_DEVIATION */
-
-	/*
-	* Set histogram extent box
-	*/
-	histobox.xmin = sample_extent->xmin;
-	histobox.ymin = sample_extent->ymin;
-	histobox.zmin = sample_extent->zmin;
-	histobox.xmax = sample_extent->xmax;
-	histobox.ymax = sample_extent->ymax;
-	histobox.zmax = sample_extent->zmax;
-
-#endif /* USE_STANDARD_DEVIATION */
-
 
 	POSTGIS_DEBUGF(3, " histogram_extent: xmin, ymin, zmin: %f, %f, %f",
 	               histobox.xmin, histobox.ymin, histobox.zmin);
@@ -1210,9 +1185,9 @@ compute_geography_stats(VacAttrStats *stats, AnalyzeAttrFetchFunc fetchfunc,
 		else if (histodims[0].axis == 'Z' && histodims[1].axis == 'X')
 		{
 			/* Z and X */
-			unitsx = Abs(histodims[0].max - histodims[0].min) / edgelength;
+			unitsx = Abs(histodims[1].max - histodims[1].min) / edgelength;
 			unitsy = 1;
-			unitsz = Abs(histodims[1].max - histodims[1].min) / edgelength;
+			unitsz = Abs(histodims[0].max - histodims[0].min) / edgelength;
 		}
 		else if (histodims[0].axis == 'Y' && histodims[1].axis == 'Z')
 		{
@@ -1223,7 +1198,7 @@ compute_geography_stats(VacAttrStats *stats, AnalyzeAttrFetchFunc fetchfunc,
 		}
 		else if (histodims[0].axis == 'Z' && histodims[1].axis == 'Y')
 		{
-			/* Z and X */
+			/* Z and Y */
 			unitsx = 1;
 			unitsy = Abs(histodims[1].max - histodims[1].min) / edgelength;
 			unitsz = Abs(histodims[0].max - histodims[0].min) / edgelength;

@@ -1,5 +1,5 @@
 /*
- * $Id: rt_pg.h 9324 2012-02-27 22:08:12Z pramsey $
+ * $Id: rt_pg.h 10860 2012-12-19 18:06:17Z strk $
  *
  * WKTRaster - Raster Types for PostGIS
  * http://www.postgis.org/support/wiki/index.php?WKTRasterHomePage

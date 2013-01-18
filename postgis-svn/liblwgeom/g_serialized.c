@@ -1,5 +1,5 @@
 /**********************************************************************
- * $Id: g_serialized.c 9324 2012-02-27 22:08:12Z pramsey $
+ * $Id: g_serialized.c 10667 2012-11-13 22:48:31Z pramsey $
  *
  * PostGIS - Spatial Types for PostgreSQL
  *
@@ -230,8 +230,8 @@ int gserialized_read_gbox_p(const GSERIALIZED *g, GBOX *gbox)
 			{
 				/* Advance to M */
 				i++;
-				gbox->zmin = FP_MIN(dptr[i], dptr[i+ndims]);
-				gbox->zmax = FP_MAX(dptr[i], dptr[i+ndims]);
+				gbox->mmin = FP_MIN(dptr[i], dptr[i+ndims]);
+				gbox->mmax = FP_MAX(dptr[i], dptr[i+ndims]);
 			}
 			gbox_float_round(gbox);
 			return LW_SUCCESS;

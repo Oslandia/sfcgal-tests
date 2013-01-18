@@ -262,19 +262,19 @@ LWGEOM *lwpoint_as_lwgeom(const LWPOINT *obj)
 /**
 ** Look-up for the correct MULTI* type promotion for singleton types.
 */
-static uint8_t MULTITYPE[16] =
+static uint8_t MULTITYPE[17] =
 {
 	0,
-	MULTIPOINTTYPE,
-	MULTILINETYPE,
-	MULTIPOLYGONTYPE,
+	MULTIPOINTTYPE,        /*  1 */
+	MULTILINETYPE,         /*  2 */
+	MULTIPOLYGONTYPE,      /*  3 */
 	0,0,0,0,
-	MULTICURVETYPE,
-	MULTICURVETYPE,
-	MULTISURFACETYPE,
-	POLYHEDRALSURFACETYPE,
-	0,
-	TINTYPE,
+	MULTICURVETYPE,        /*  8 */
+	MULTICURVETYPE,        /*  9 */
+	MULTISURFACETYPE,      /* 10 */
+	POLYHEDRALSURFACETYPE, /* 11 */
+	0, 0,
+	TINTYPE,               /* 14 */
 	0,0
 };
 
@@ -528,6 +528,26 @@ lwgeom_same(const LWGEOM *lwgeom1, const LWGEOM *lwgeom2)
 
 }
 
+int
+lwpoint_inside_circle(const LWPOINT *p, double cx, double cy, double rad)
+{
+	POINT2D center;
+	POINT2D pt;
+
+	if ( ! p || ! p->point )
+		return LW_FALSE;
+		
+	getPoint2d_p(p->point, 0, &pt);
+
+	center.x = cx;
+	center.y = cy;
+
+	if ( distance2d_pt_pt(&pt, &center) < rad ) 
+		return LW_TRUE;
+
+	return LW_FALSE;
+}
+
 void
 lwgeom_drop_bbox(LWGEOM *lwgeom)
 {
@@ -545,12 +565,41 @@ void
 lwgeom_add_bbox(LWGEOM *lwgeom)
 {
 	/* an empty LWGEOM has no bbox */
-	if( lwgeom_is_empty(lwgeom) ) return;
+	if ( lwgeom_is_empty(lwgeom) ) return;
 
 	if ( lwgeom->bbox ) return;
 	FLAGS_SET_BBOX(lwgeom->flags, 1);
 	lwgeom->bbox = gbox_new(lwgeom->flags);
 	lwgeom_calculate_gbox(lwgeom, lwgeom->bbox);
+}
+
+void 
+lwgeom_add_bbox_deep(LWGEOM *lwgeom, GBOX *gbox)
+{
+	if ( lwgeom_is_empty(lwgeom) ) return;
+
+	FLAGS_SET_BBOX(lwgeom->flags, 1);
+	
+	if ( ! ( gbox || lwgeom->bbox ) )
+	{
+		lwgeom->bbox = gbox_new(lwgeom->flags);
+		lwgeom_calculate_gbox(lwgeom, lwgeom->bbox);		
+	}
+	else if ( gbox && ! lwgeom->bbox )
+	{
+		lwgeom->bbox = gbox_clone(gbox);
+	}
+	
+	if ( lwgeom_is_collection(lwgeom) )
+	{
+		int i;
+		LWCOLLECTION *lwcol = (LWCOLLECTION*)lwgeom;
+
+		for ( i = 0; i < lwcol->ngeoms; i++ )
+		{
+			lwgeom_add_bbox_deep(lwcol->geoms[i], lwgeom->bbox);
+		}
+	}
 }
 
 const GBOX *
@@ -662,6 +711,13 @@ lwgeom_get_srid(const LWGEOM *geom)
 {
 	if ( ! geom ) return SRID_UNKNOWN;
 	return geom->srid;
+}
+
+uint32_t 
+lwgeom_get_type(const LWGEOM *geom)
+{
+	if ( ! geom ) return 0;
+	return geom->type;
 }
 
 int 
@@ -1264,6 +1320,9 @@ LWGEOM* lwgeom_flip_coordinates(LWGEOM *in)
 	LWPOLY *poly;
 	int i;
 
+	if ( (!in) || lwgeom_is_empty(in) )
+		return in;
+
 	LWDEBUGF(4, "lwgeom_flip_coordinates, got type: %s",
 	         lwtype_name(in->type));
 
@@ -1271,25 +1330,27 @@ LWGEOM* lwgeom_flip_coordinates(LWGEOM *in)
 	{
 	case POINTTYPE:
 		ptarray_flip_coordinates(lwgeom_as_lwpoint(in)->point);
-		return in;
+		break;
 
 	case LINETYPE:
 		ptarray_flip_coordinates(lwgeom_as_lwline(in)->points);
-		return in;
+		break;
 
 	case CIRCSTRINGTYPE:
 		ptarray_flip_coordinates(lwgeom_as_lwcircstring(in)->points);
-		return in;
+		break;
 
 	case POLYGONTYPE:
 		poly = (LWPOLY *) in;
 		for (i=0; i<poly->nrings; i++)
+		{
 			ptarray_flip_coordinates(poly->rings[i]);
-		return in;
+		}
+		break;
 
 	case TRIANGLETYPE:
 		ptarray_flip_coordinates(lwgeom_as_lwtriangle(in)->points);
-		return in;
+		break;
 
 	case MULTIPOINTTYPE:
 	case MULTILINETYPE:
@@ -1303,14 +1364,20 @@ LWGEOM* lwgeom_flip_coordinates(LWGEOM *in)
 	case TINTYPE:
 		col = (LWCOLLECTION *) in;
 		for (i=0; i<col->ngeoms; i++)
+		{
 			lwgeom_flip_coordinates(col->geoms[i]);
-		return in;
+		}
+		break;
 
 	default:
 		lwerror("lwgeom_flip_coordinates: unsupported geometry type: %s",
 		        lwtype_name(in->type));
+		return NULL;
 	}
-	return NULL;
+
+	lwgeom_drop_bbox(in);
+	lwgeom_add_bbox(in);
+	return in;
 }
 
 void lwgeom_set_srid(LWGEOM *geom, int32_t srid)

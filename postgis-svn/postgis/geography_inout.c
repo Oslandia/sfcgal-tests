@@ -1,5 +1,5 @@
 /**********************************************************************
- * $Id: geography_inout.c 9785 2012-05-22 16:02:05Z colivier $
+ * $Id: geography_inout.c 10670 2012-11-14 20:45:16Z pramsey $
  *
  * PostGIS - Spatial Types for PostgreSQL
  * Copyright 2009-2011 Paul Ramsey <pramsey@cleverelephant.ca>
@@ -85,15 +85,12 @@ GSERIALIZED* gserialized_geography_from_lwgeom(LWGEOM *lwgeom, int32 geog_typmod
 	/* Check that this is a type we can handle */
 	geography_valid_type(lwgeom->type);
 
-	/* Check that the coordinates are in range */
-	if ( lwgeom_check_geodetic(lwgeom) == LW_FALSE )
+	/* Force the geometry to have valid geodetic coordinate range. */
+	if ( lwgeom_force_geodetic(lwgeom) == LW_TRUE )
 	{
-		if ( (! lwgeom_nudge_geodetic(lwgeom)) || lwgeom_check_geodetic(lwgeom) == LW_FALSE )
-		{
-			ereport(ERROR, (
-			        errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-			        errmsg("Coordinate values are out of range [-180 -90, 180 90] for GEOGRAPHY type" )));
-		}
+		ereport(NOTICE, (
+		        errmsg_internal("Coordinate values were coerced into range [-180 -90, 180 90] for GEOGRAPHY" ))
+		);
 	}
 
 	/* Force default SRID to the default */
@@ -207,7 +204,7 @@ Datum geography_as_gml(PG_FUNCTION_ARGS)
 	int version;
 	char *srs;
 	int srid = SRID_DEFAULT;
-	int precision = OUT_MAX_DOUBLE_PRECISION;
+	int precision = DBL_DIG;
 	int option=0;
 	int lwopts = LW_GML_IS_DIMS;
 	static const char *default_prefix = "gml:";
@@ -237,8 +234,9 @@ Datum geography_as_gml(PG_FUNCTION_ARGS)
 	if (PG_NARGS() >2 && !PG_ARGISNULL(2))
 	{
 		precision = PG_GETARG_INT32(2);
-		if ( precision > OUT_MAX_DOUBLE_PRECISION )
-			precision = OUT_MAX_DOUBLE_PRECISION;
+		/* TODO: leave this to liblwgeom */
+		if ( precision > DBL_DIG )
+			precision = DBL_DIG;
 		else if ( precision < 0 ) precision = 0;
 	}
 
@@ -328,7 +326,7 @@ Datum geography_as_kml(PG_FUNCTION_ARGS)
 	char *kml;
 	text *result;
 	int version;
-	int precision = OUT_MAX_DOUBLE_PRECISION;
+	int precision = DBL_DIG;
 	static const char *default_prefix = "";
 	char *prefixbuf;
 	const char* prefix = default_prefix;
@@ -354,8 +352,9 @@ Datum geography_as_kml(PG_FUNCTION_ARGS)
 	if (PG_NARGS() >2 && !PG_ARGISNULL(2))
 	{
 		precision = PG_GETARG_INT32(2);
-		if ( precision > OUT_MAX_DOUBLE_PRECISION )
-			precision = OUT_MAX_DOUBLE_PRECISION;
+		/* TODO: leave this to liblwgeom */
+		if ( precision > DBL_DIG )
+			precision = DBL_DIG;
 		else if ( precision < 0 ) precision = 0;
 	}
 
@@ -406,7 +405,7 @@ Datum geography_as_svg(PG_FUNCTION_ARGS)
 	char *svg;
 	text *result;
 	int relative = 0;
-	int precision=OUT_MAX_DOUBLE_PRECISION;
+	int precision=DBL_DIG;
 
 	if ( PG_ARGISNULL(0) ) PG_RETURN_NULL();
 
@@ -422,8 +421,9 @@ Datum geography_as_svg(PG_FUNCTION_ARGS)
 	if ( PG_NARGS() > 2 && ! PG_ARGISNULL(2) )
 	{
 		precision = PG_GETARG_INT32(2);
-		if ( precision > OUT_MAX_DOUBLE_PRECISION )
-			precision = OUT_MAX_DOUBLE_PRECISION;
+		/* TODO: leave this to liblwgeom */
+		if ( precision > DBL_DIG )
+			precision = DBL_DIG;
 		else if ( precision < 0 ) precision = 0;
 	}
 
@@ -452,7 +452,7 @@ Datum geography_as_geojson(PG_FUNCTION_ARGS)
 	int version;
 	int option = 0;
 	int has_bbox = 0;
-	int precision = OUT_MAX_DOUBLE_PRECISION;
+	int precision = DBL_DIG;
 	char * srs = NULL;
 
 	/* Get the version */
@@ -474,8 +474,9 @@ Datum geography_as_geojson(PG_FUNCTION_ARGS)
 	if (PG_NARGS() >2 && !PG_ARGISNULL(2))
 	{
 		precision = PG_GETARG_INT32(2);
-		if ( precision > OUT_MAX_DOUBLE_PRECISION )
-			precision = OUT_MAX_DOUBLE_PRECISION;
+		/* TODO: leave this to liblwgeom */
+		if ( precision > DBL_DIG )
+			precision = DBL_DIG;
 		else if ( precision < 0 ) precision = 0;
 	}
 
@@ -585,15 +586,12 @@ Datum geography_from_geometry(PG_FUNCTION_ARGS)
 	/* Error on any SRID != default */
 	srid_is_latlong(fcinfo, lwgeom->srid);
 
-	/* Check if the geography has valid coordinate range. */
-	if ( lwgeom_check_geodetic(lwgeom) == LW_FALSE )
+	/* Force the geometry to have valid geodetic coordinate range. */
+	if ( lwgeom_force_geodetic(lwgeom) == LW_TRUE )
 	{
-		if ( (! lwgeom_nudge_geodetic(lwgeom)) || lwgeom_check_geodetic(lwgeom) == LW_FALSE )
-		{
-			ereport(ERROR, (
-			        errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-			        errmsg("Coordinate values are out of range [-180 -90, 180 90] for GEOGRAPHY type" )));
-		}
+		ereport(NOTICE, (
+		        errmsg_internal("Coordinate values were coerced into range [-180 -90, 180 90] for GEOGRAPHY" ))
+		);
 	}
 
 	/*

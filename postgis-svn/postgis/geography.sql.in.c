@@ -1,5 +1,5 @@
 ---------------------------------------------------------------------------
--- $Id: geography.sql.in.c 10195 2012-08-22 21:04:34Z pramsey $
+-- $Id: geography.sql.in.c 10796 2012-12-04 19:54:29Z pramsey $
 --
 -- PostGIS - Spatial Types for PostgreSQL
 -- Copyright 2009 Paul Ramsey <pramsey@cleverelephant.ca>
@@ -52,7 +52,7 @@ CREATE OR REPLACE FUNCTION geography_send(geography)
 -- Availability: 1.5.0
 CREATE OR REPLACE FUNCTION geography_analyze(internal)
 	RETURNS bool
-	AS 'MODULE_PATHNAME','geography_analyze'
+	AS 'MODULE_PATHNAME','gserialized_analyze_nd'
 	LANGUAGE 'c' VOLATILE STRICT; 
 
 -- Availability: 1.5.0
@@ -255,8 +255,8 @@ CREATE OR REPLACE FUNCTION geography_overlaps(geography, geography)
 CREATE OPERATOR && (
 	LEFTARG = geography, RIGHTARG = geography, PROCEDURE = geography_overlaps,
 	COMMUTATOR = '&&',
-	RESTRICT = geography_gist_selectivity, 
-	JOIN = geography_gist_join_selectivity
+	RESTRICT = gserialized_gist_sel_nd,
+	JOIN = gserialized_gist_joinsel_nd	
 );
 
 
@@ -772,6 +772,12 @@ CREATE OR REPLACE FUNCTION GeometryType(geography)
 CREATE OR REPLACE FUNCTION ST_Summary(geography)
 	RETURNS text
 	AS 'MODULE_PATHNAME', 'LWGEOM_summary'
+	LANGUAGE 'c' IMMUTABLE STRICT;
+
+-- Availability: 2.1.0
+CREATE OR REPLACE FUNCTION ST_GeoHash(geog geography, maxchars int4 DEFAULT 0)
+	RETURNS TEXT
+	AS 'MODULE_PATHNAME', 'ST_GeoHash'
 	LANGUAGE 'c' IMMUTABLE STRICT;
 
 	

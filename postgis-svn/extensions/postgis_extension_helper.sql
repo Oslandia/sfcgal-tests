@@ -1,6 +1,6 @@
 -- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 -- 
--- $Id: postgis_extension_helper.sql 9324 2012-02-27 22:08:12Z pramsey $
+-- $Id: postgis_extension_helper.sql 10934 2012-12-26 13:44:51Z robe $
 ----
 -- PostGIS - Spatial Types for PostgreSQL
 -- http://www.postgis.org
@@ -80,3 +80,24 @@ BEGIN
 END;
 $$
 LANGUAGE plpgsql VOLATILE;
+
+CREATE OR REPLACE FUNCTION postgis_extension_AddToSearchPath(a_schema_name varchar)
+RETURNS text
+AS
+$$
+DECLARE
+	var_result text;
+	var_cur_search_path text;
+BEGIN
+	SELECT reset_val INTO var_cur_search_path FROM pg_settings WHERE name = 'search_path';
+	IF var_cur_search_path LIKE '%' || quote_ident(a_schema_name) || '%' THEN
+		var_result := a_schema_name || ' already in database search_path';
+	ELSE
+		EXECUTE 'ALTER DATABASE ' || quote_ident(current_database()) || ' SET search_path = ' || var_cur_search_path || ', ' || quote_ident(a_schema_name); 
+		var_result := a_schema_name || ' has been added to end of database search_path ';
+	END IF;
+  
+  RETURN var_result;
+END
+$$
+LANGUAGE 'plpgsql' VOLATILE STRICT;

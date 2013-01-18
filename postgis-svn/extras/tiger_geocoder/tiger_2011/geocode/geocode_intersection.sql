@@ -1,4 +1,4 @@
---$Id: geocode_intersection.sql 9823 2012-05-27 18:28:48Z robe $
+--$Id: geocode_intersection.sql 10310 2012-09-20 13:32:14Z robe $
  /*** 
  * 
  * Copyright (C) 2011 Regina Obe and Leo Hsu (Paragon Corporation)
@@ -146,3 +146,4 @@ $$
   LANGUAGE plpgsql IMMUTABLE
   COST 1000
   ROWS 10;
+ALTER FUNCTION geocode_intersection(IN text, IN text, IN text, IN text, IN text, IN integer) SET join_collapse_limit='2';

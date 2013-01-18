@@ -24,6 +24,11 @@
 #include "utils/rel.h"
 
 #include "../postgis_config.h"
+
+#if POSTGIS_PGSQL_VERSION >= 93
+	#include "access/htup_details.h"
+#endif
+
 #include "liblwgeom.h"
 #include "lwgeom_pg.h"       /* For debugging macros. */
 #include "gserialized_gist.h" /* For index common functions */
@@ -58,7 +63,6 @@
  * tweak the deviation factor used in computation with
  * SDFACTOR.
  */
-#define USE_STANDARD_DEVIATION 1
 #define SDFACTOR 3.25
 
 typedef struct GEOM_STATS_T
@@ -102,35 +106,12 @@ static float8 estimate_selectivity(GBOX *box, GEOM_STATS *geomstats);
  */
 #define DEFAULT_GEOMETRY_JOINSEL 0.000005
 
-/**
- * Define this to actually DO join selectivity
- * (as contrary to just return the default JOINSEL value)
- * Note that this is only possible when compiling postgis
- * against pgsql >= 800
- */
-#define REALLY_DO_JOINSEL 1
-
 Datum geometry_gist_sel_2d(PG_FUNCTION_ARGS);
 Datum geometry_gist_joinsel_2d(PG_FUNCTION_ARGS);
 Datum geometry_analyze_2d(PG_FUNCTION_ARGS);
 Datum geometry_estimated_extent(PG_FUNCTION_ARGS);
+Datum _postgis_geometry_sel(PG_FUNCTION_ARGS);
 
-
-#if ! REALLY_DO_JOINSEL
-/**
- * JOIN selectivity in the GiST && operator
- * for all PG versions
- */
-PG_FUNCTION_INFO_V1(LWGEOM_gist_joinsel);
-Datum geometry_gist_joinsel_2d(PG_FUNCTION_ARGS)
-{
-	POSTGIS_DEBUGF(2, "geometry_gist_joinsel_2d called (returning %f)",
-	               DEFAULT_GEOMETRY_JOINSEL);
-
-	PG_RETURN_FLOAT8(DEFAULT_GEOMETRY_JOINSEL);
-}
-
-#else /* REALLY_DO_JOINSEL */
 
 static int
 calculate_column_intersection(GBOX *search_box, GEOM_STATS *geomstats1, GEOM_STATS *geomstats2)
@@ -159,8 +140,12 @@ calculate_column_intersection(GBOX *search_box, GEOM_STATS *geomstats1, GEOM_STA
 }
 
 /**
-* JOIN selectivity in the GiST && operator
-* for all PG versions
+* Join selectivity of the && operator. The selectivity
+* is the ratio of the number of rows we think will be 
+* returned divided the maximum number of rows the join
+* could possibly return (the full combinatoric join).
+*
+* selectivity = estimated_nrows / (totalrows1 * totalrows2)
 */
 PG_FUNCTION_INFO_V1(geometry_gist_joinsel_2d);
 Datum geometry_gist_joinsel_2d(PG_FUNCTION_ARGS)
@@ -197,8 +182,6 @@ Datum geometry_gist_joinsel_2d(PG_FUNCTION_ARGS)
 	* geometry in col 1 that intersects a geometry in col 2, the same
 	* will also be true.
 	*/
-
-
 	POSTGIS_DEBUGF(3, "geometry_gist_joinsel called with jointype %d", jointype);
 
 	/*
@@ -231,7 +214,7 @@ Datum geometry_gist_joinsel_2d(PG_FUNCTION_ARGS)
 	POSTGIS_DEBUGF(3, "Working with relations oids: %d %d", relid1, relid2);
 
 	/* Read the stats tuple from the first column */
-	stats1_tuple = SearchSysCache(STATRELATT, ObjectIdGetDatum(relid1), Int16GetDatum(var1->varattno), 0, 0);
+	stats1_tuple = SearchSysCache2(STATRELATT, ObjectIdGetDatum(relid1), Int16GetDatum(var1->varattno));
 	if ( ! stats1_tuple )
 	{
 		POSTGIS_DEBUG(3, " No statistics, returning default geometry join selectivity");
@@ -242,9 +225,7 @@ Datum geometry_gist_joinsel_2d(PG_FUNCTION_ARGS)
 
 
 	if ( ! get_attstatsslot(stats1_tuple, 0, 0, STATISTIC_KIND_GEOMETRY, InvalidOid, NULL, NULL,
-#if POSTGIS_PGSQL_VERSION > 84
 	                        NULL,
-#endif
 	                        (float4 **)gs1ptr, &geomstats1_nvalues) )
 	{
 		POSTGIS_DEBUG(3, " STATISTIC_KIND_GEOMETRY stats not found - returning default geometry join selectivity");
@@ -255,7 +236,7 @@ Datum geometry_gist_joinsel_2d(PG_FUNCTION_ARGS)
 
 
 	/* Read the stats tuple from the second column */
-	stats2_tuple = SearchSysCache(STATRELATT, ObjectIdGetDatum(relid2), Int16GetDatum(var2->varattno), 0, 0);
+	stats2_tuple = SearchSysCache2(STATRELATT, ObjectIdGetDatum(relid2), Int16GetDatum(var2->varattno));
 	if ( ! stats2_tuple )
 	{
 		POSTGIS_DEBUG(3, " No statistics, returning default geometry join selectivity");
@@ -268,9 +249,7 @@ Datum geometry_gist_joinsel_2d(PG_FUNCTION_ARGS)
 
 
 	if ( ! get_attstatsslot(stats2_tuple, 0, 0, STATISTIC_KIND_GEOMETRY, InvalidOid, NULL, NULL,
-#if POSTGIS_PGSQL_VERSION > 84
 	                        NULL,
-#endif
 	                        (float4 **)gs2ptr, &geomstats2_nvalues) )
 	{
 		POSTGIS_DEBUG(3, " STATISTIC_KIND_GEOMETRY stats not found - returning default geometry join selectivity");
@@ -314,8 +293,7 @@ Datum geometry_gist_joinsel_2d(PG_FUNCTION_ARGS)
 	* divided by the total number of tuples - hence we need to
 	* multiply out the returned selectivity by the total number of rows.
 	*/
-	class_tuple = SearchSysCache(RELOID, ObjectIdGetDatum(relid1),
-	                             0, 0, 0);
+	class_tuple = SearchSysCache1(RELOID, ObjectIdGetDatum(relid1));
 
 	if (HeapTupleIsValid(class_tuple))
 	{
@@ -326,8 +304,7 @@ Datum geometry_gist_joinsel_2d(PG_FUNCTION_ARGS)
 	ReleaseSysCache(class_tuple);
 
 
-	class_tuple = SearchSysCache(RELOID, ObjectIdGetDatum(relid2),
-	                             0, 0, 0);
+	class_tuple = SearchSysCache1(RELOID, ObjectIdGetDatum(relid2));
 
 	if (HeapTupleIsValid(class_tuple))
 	{
@@ -377,17 +354,14 @@ Datum geometry_gist_joinsel_2d(PG_FUNCTION_ARGS)
 	PG_RETURN_FLOAT8(rows_returned / total_tuples);
 }
 
-#endif /* REALLY_DO_JOINSEL */
-
-/**************************** FROM POSTGIS ****************/
-
 
 /**
- * This function returns an estimate of the selectivity
- * of a search_box looking at data in the GEOM_STATS
- * structure.
- * */
-/**
+* This function returns an estimate of the selectivity
+* of a search GBOX by looking at data in the GEOM_STATS
+* structure. The selectivity is a float from 0-1, that estimates
+* the proportion of the rows in the table that will be returned
+* as a result of the search box.
+*
 * TODO: handle box dimension collapses (probably should be handled
 * by the statistic generator, avoiding GEOM_STATS with collapsed
 * dimensions)
@@ -610,6 +584,59 @@ estimate_selectivity(GBOX *box, GEOM_STATS *geomstats)
 }
 
 /**
+* Utility function to read the calculated selectivity for a given search
+* box and table/column. Used for debugging the selectivity code.
+*/
+PG_FUNCTION_INFO_V1(_postgis_geometry_sel);
+Datum _postgis_geometry_sel(PG_FUNCTION_ARGS)
+{
+	HeapTuple stats_tuple;
+	float4 *floatptr;
+	Oid table_oid = PG_GETARG_OID(0);
+	Datum geom_datum = PG_GETARG_DATUM(2);
+	text *att_text = PG_GETARG_TEXT_P(1);
+	const char *att_name = text2cstring(att_text);
+	int rv;
+	GBOX gbox;
+	int32 nvalues = 0;
+	float8 selectivity = 0;
+	AttrNumber att_num;
+
+	/* Calculate the gbox */
+	if ( ! gserialized_datum_get_gbox_p(geom_datum, &gbox) )
+		elog(ERROR, "unable to calculate bounding box from geometry");
+
+	/* Get the attribute number */
+	att_num = get_attnum(table_oid, att_name);
+	if  ( ! att_num )
+		elog(ERROR, "attribute \"%s\" does not exist", att_name);
+	
+	/* First pull the stats tuple */
+	stats_tuple = SearchSysCache2(STATRELATT, table_oid, att_num);
+	if ( ! stats_tuple )
+		elog(ERROR, "stats for \"%s.%s\" do not exist", get_rel_name(table_oid), att_name);
+		
+	/* Then read the geom status histogram from that */
+	rv = get_attstatsslot(stats_tuple, 0, 0, STATISTIC_KIND_GEOMETRY, InvalidOid, NULL, NULL, NULL, &floatptr, &nvalues);
+	if ( ! rv )
+	{
+		ReleaseSysCache(stats_tuple);
+		elog(ERROR, "unable to retreive geomstats, hmmm");		
+	}
+	
+	/* Do the estimation */
+	selectivity = estimate_selectivity(&gbox, (GEOM_STATS*)floatptr);
+
+	/* Clean up */
+	free_attstatsslot(0, NULL, 0, floatptr, nvalues);
+	ReleaseSysCache(stats_tuple);
+	
+	PG_RETURN_FLOAT8(selectivity);
+}
+
+
+
+/**
  * This function should return an estimation of the number of
  * rows returned by a query involving an overlap check
  * ( it's the restrict function for the && operator )
@@ -620,8 +647,6 @@ estimate_selectivity(GBOX *box, GEOM_STATS *geomstats)
  * Note that the good work is done by estimate_selectivity() above.
  * This function just tries to find the search_box, loads the statistics
  * and invoke the work-horse.
- *
- * This is the one used for PG version >= 7.5
  *
  */
 PG_FUNCTION_INFO_V1(geometry_gist_sel_2d);
@@ -674,22 +699,30 @@ Datum geometry_gist_sel_2d(PG_FUNCTION_ARGS)
 
 	if ( ! IsA(other, Const) )
 	{
-		POSTGIS_DEBUG(3, " no constant arguments - returning default selectivity");
+		POSTGIS_DEBUG(3, " no constant arguments - returning a default selectivity");
 
 		PG_RETURN_FLOAT8(DEFAULT_GEOMETRY_SEL);
+//		PG_RETURN_FLOAT8(0.33333);
 	}
 
 	/*
-	 * We are working on two constants..
-	 * TODO: check if expression is true,
-	 *       returned set would be either
-	 *       the whole or none.
-	 */
+	* We don't have a nice <const> && <var> or <var> && <const> 
+	* situation here. <const> && <const> would probably get evaluated
+	* away by PgSQL earlier on. <func> && <const> is harder, and the
+	* case we get often is <const> && ST_Expand(<var>), which does 
+	* actually have a subtly different selectivity than a bae
+	* <const> && <var> call. It's calculatable though, by expanding
+	* every cell in the histgram appropriately.
+	* 
+	* Discussion: http://trac.osgeo.org/postgis/ticket/1828
+	*
+	* To do? Do variable selectivity based on the <func> node.
+	*/
 	if ( ! IsA(self, Var) )
 	{
-		POSTGIS_DEBUG(3, " no variable argument ? - returning default selectivity");
-
-		PG_RETURN_FLOAT8(DEFAULT_GEOMETRY_SEL);
+		POSTGIS_DEBUG(3, " no bare variable argument ? - returning a moderate selectivity");
+//		PG_RETURN_FLOAT8(DEFAULT_GEOMETRY_SEL);
+		PG_RETURN_FLOAT8(0.33333);
 	}
 
 	/*
@@ -710,7 +743,7 @@ Datum geometry_gist_sel_2d(PG_FUNCTION_ARGS)
 
 	relid = getrelid(self->varno, root->parse->rtable);
 
-	stats_tuple = SearchSysCache(STATRELATT, ObjectIdGetDatum(relid), Int16GetDatum(self->varattno), 0, 0);
+	stats_tuple = SearchSysCache2(STATRELATT, ObjectIdGetDatum(relid), Int16GetDatum(self->varattno));
 	if ( ! stats_tuple )
 	{
 		POSTGIS_DEBUG(3, " No statistics, returning default estimate");
@@ -792,13 +825,13 @@ compute_geometry_stats(VacAttrStats *stats, AnalyzeAttrFetchFunc fetchfunc,
 	double cell_area;
 	double cell_width;
 	double cell_height;
-#if USE_STANDARD_DEVIATION
+
 	/* for standard deviation */
 	double avgLOWx, avgLOWy, avgHIGx, avgHIGy;
 	double sumLOWx=0, sumLOWy=0, sumHIGx=0, sumHIGy=0;
 	double sdLOWx=0, sdLOWy=0, sdHIGx=0, sdHIGy=0;
 	GBOX *newhistobox=NULL;
-#endif
+
 	double geow, geoh; /* width and height of histogram */
 	int histocells;
 	int cols, rows; /* histogram grid size */
@@ -904,10 +937,9 @@ compute_geometry_stats(VacAttrStats *stats, AnalyzeAttrFetchFunc fetchfunc,
 		}
 
 		/** TODO: ask if we need geom or bvol size for stawidth */
-		total_width += geom->size;
+		total_width += VARSIZE(geom);
 		total_boxes_area += (box.xmax-box.xmin)*(box.ymax-box.ymin);
 
-#if USE_STANDARD_DEVIATION
 		/*
 		 * Add bvol coordinates to sum for standard deviation
 		 * computation.
@@ -916,7 +948,6 @@ compute_geometry_stats(VacAttrStats *stats, AnalyzeAttrFetchFunc fetchfunc,
 		sumLOWy += box.ymin;
 		sumHIGx += box.xmax;
 		sumHIGy += box.ymax;
-#endif
 
 		notnull_cnt++;
 
@@ -932,7 +963,6 @@ compute_geometry_stats(VacAttrStats *stats, AnalyzeAttrFetchFunc fetchfunc,
 		return;
 	}
 
-#if USE_STANDARD_DEVIATION
 
 	POSTGIS_DEBUGF(3, " sample_extent: xmin,ymin: %f,%f",
 	               sample_extent->xmin, sample_extent->ymin);
@@ -1034,18 +1064,6 @@ compute_geometry_stats(VacAttrStats *stats, AnalyzeAttrFetchFunc fetchfunc,
 		histobox.xmax = newhistobox->xmax;
 	if ( histobox.ymax > newhistobox->ymax )
 		histobox.ymax = newhistobox->ymax;
-
-
-#else /* ! USE_STANDARD_DEVIATION */
-
-	/*
-	* Set histogram extent box
-	*/
-	histobox.xmin = sample_extent->xmin;
-	histobox.ymin = sample_extent->ymin;
-	histobox.xmax = sample_extent->xmax;
-	histobox.ymax = sample_extent->ymax;
-#endif /* USE_STANDARD_DEVIATION */
 
 
 	POSTGIS_DEBUGF(3, " histogram_extent: xmin,ymin: %f,%f",

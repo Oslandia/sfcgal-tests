@@ -1,5 +1,5 @@
 /*
- * $Id: raster2pgsql.h 9436 2012-03-09 19:00:25Z dustymugs $
+ * $Id: raster2pgsql.h 10829 2012-12-14 20:26:05Z dustymugs $
  *
  * PostGIS Raster loader
  * http://trac.osgeo.org/postgis/wiki/WKTRaster
@@ -56,7 +56,16 @@
 #define MINOVFACTOR 2
 #define MAXOVFACTOR 1000
 
-#define RCSID "$Id: raster2pgsql.h 9436 2012-03-09 19:00:25Z dustymugs $"
+/*
+	maximum tile size
+	based upon maximum field size as defined for PostgreSQl
+	http://www.postgresql.org/about/
+
+	1 GB = 1024 x 1024 x 1024
+*/
+#define MAXTILESIZE 1073741824
+
+#define RCSID "$Id: raster2pgsql.h 10829 2012-12-14 20:26:05Z dustymugs $"
 
 typedef struct raster_loader_config {
 	/* raster filename */
@@ -93,6 +102,9 @@ typedef struct raster_loader_config {
 
 	/* tile size */
 	int tile_size[2];
+
+	/* pad tiles */
+	int pad_tile;
 
 	/* register raster as of out-of-db, 1 = yes, 0 = no (default) */
 	int outdb;

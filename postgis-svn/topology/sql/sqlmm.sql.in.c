@@ -13,7 +13,7 @@
 --  
 -- 
 
-/*#define POSTGIS_TOPOLOGY_DEBUG 1*/
+/* #define POSTGIS_TOPOLOGY_DEBUG 1 */
 
 --={ ----------------------------------------------------------------
 --  SQL/MM block
@@ -308,44 +308,23 @@ BEGIN
 
   -- Create new edge {
   rec := e1rec;
-  rec.geom = ST_LineMerge(ST_Collect(e1rec.geom, e2rec.geom));
   IF caseno = 1 THEN -- e1.end = e2.start
-    IF NOT ST_Equals(ST_StartPoint(rec.geom), ST_StartPoint(e1rec.geom)) THEN
-#ifdef POSTGIS_TOPOLOGY_DEBUG
-      RAISE DEBUG 'caseno=1: LineMerge did not maintain startpoint';
-#endif
-      rec.geom = ST_Reverse(rec.geom);
-    END IF;
+    rec.geom = ST_MakeLine(e1rec.geom, e2rec.geom);
     rec.end_node = e2rec.end_node;
     rec.next_left_edge = e2rec.next_left_edge;
     e2sign = 1;
   ELSIF caseno = 2 THEN -- e1.end = e2.end
-    IF NOT ST_Equals(ST_StartPoint(rec.geom), ST_StartPoint(e1rec.geom)) THEN
-#ifdef POSTGIS_TOPOLOGY_DEBUG
-      RAISE DEBUG 'caseno=2: LineMerge did not maintain startpoint';
-#endif
-      rec.geom = ST_Reverse(rec.geom);
-    END IF;
+    rec.geom = ST_MakeLine(e1rec.geom, st_reverse(e2rec.geom));
     rec.end_node = e2rec.start_node;
     rec.next_left_edge = e2rec.next_right_edge;
     e2sign = -1;
   ELSIF caseno = 3 THEN -- e1.start = e2.start
-    IF NOT ST_Equals(ST_EndPoint(rec.geom), ST_EndPoint(e1rec.geom)) THEN
-#ifdef POSTGIS_TOPOLOGY_DEBUG
-      RAISE DEBUG 'caseno=4: LineMerge did not maintain endpoint';
-#endif
-      rec.geom = ST_Reverse(rec.geom);
-    END IF;
+    rec.geom = ST_MakeLine(st_reverse(e2rec.geom), e1rec.geom);
     rec.start_node = e2rec.end_node;
     rec.next_right_edge = e2rec.next_left_edge;
     e2sign = -1;
   ELSIF caseno = 4 THEN -- e1.start = e2.end
-    IF NOT ST_Equals(ST_EndPoint(rec.geom), ST_EndPoint(e1rec.geom)) THEN
-#ifdef POSTGIS_TOPOLOGY_DEBUG
-      RAISE DEBUG 'caseno=4: LineMerge did not maintain endpoint';
-#endif
-      rec.geom = ST_Reverse(rec.geom);
-    END IF;
+    rec.geom = ST_MakeLine(e2rec.geom, e1rec.geom);
     rec.start_node = e2rec.start_node;
     rec.next_right_edge = e2rec.next_right_edge;
     e2sign = 1;
@@ -622,44 +601,23 @@ BEGIN
 
   -- Update data of the first edge {
   rec := e1rec;
-  rec.geom = ST_LineMerge(ST_Collect(e1rec.geom, e2rec.geom));
   IF caseno = 1 THEN -- e1.end = e2.start
-    IF NOT ST_Equals(ST_StartPoint(rec.geom), ST_StartPoint(e1rec.geom)) THEN
-#ifdef POSTGIS_TOPOLOGY_DEBUG
-      RAISE DEBUG 'caseno=1: LineMerge did not maintain startpoint';
-#endif
-      rec.geom = ST_Reverse(rec.geom);
-    END IF;
+    rec.geom = ST_MakeLine(e1rec.geom, e2rec.geom);
     rec.end_node = e2rec.end_node;
     rec.next_left_edge = e2rec.next_left_edge;
     e2sign = 1;
   ELSIF caseno = 2 THEN -- e1.end = e2.end
-    IF NOT ST_Equals(ST_StartPoint(rec.geom), ST_StartPoint(e1rec.geom)) THEN
-#ifdef POSTGIS_TOPOLOGY_DEBUG
-      RAISE DEBUG 'caseno=2: LineMerge did not maintain startpoint';
-#endif
-      rec.geom = ST_Reverse(rec.geom);
-    END IF;
+    rec.geom = ST_MakeLine(e1rec.geom, st_reverse(e2rec.geom));
     rec.end_node = e2rec.start_node;
     rec.next_left_edge = e2rec.next_right_edge;
     e2sign = -1;
   ELSIF caseno = 3 THEN -- e1.start = e2.start
-    IF NOT ST_Equals(ST_EndPoint(rec.geom), ST_EndPoint(e1rec.geom)) THEN
-#ifdef POSTGIS_TOPOLOGY_DEBUG
-      RAISE DEBUG 'caseno=4: LineMerge did not maintain endpoint';
-#endif
-      rec.geom = ST_Reverse(rec.geom);
-    END IF;
+    rec.geom = ST_MakeLine(st_reverse(e2rec.geom), e1rec.geom);
     rec.start_node = e2rec.end_node;
     rec.next_right_edge = e2rec.next_left_edge;
     e2sign = -1;
   ELSIF caseno = 4 THEN -- e1.start = e2.end
-    IF NOT ST_Equals(ST_EndPoint(rec.geom), ST_EndPoint(e1rec.geom)) THEN
-#ifdef POSTGIS_TOPOLOGY_DEBUG
-      RAISE DEBUG 'caseno=4: LineMerge did not maintain endpoint';
-#endif
-      rec.geom = ST_Reverse(rec.geom);
-    END IF;
+    rec.geom = ST_MakeLine(e2rec.geom, e1rec.geom);
     rec.start_node = e2rec.start_node;
     rec.next_right_edge = e2rec.next_right_edge;
     e2sign = 1;
@@ -733,6 +691,83 @@ $$
 LANGUAGE 'plpgsql' VOLATILE;
 --} ST_ModEdgeHeal
 
+-- {
+-- _ST_RemEdgeCheck - check that the given edge is not needed
+--                    by the definition of any TopoGeometry
+--
+CREATE OR REPLACE FUNCTION topology._ST_RemEdgeCheck(tname varchar, tid integer, eid integer, lf integer, rf integer)
+RETURNS VOID
+AS
+$$
+DECLARE
+  sql text;
+  fidary int[];
+  rec RECORD;
+BEGIN
+  -- Check that no TopoGeometry references the edge being removed
+  sql := 'SELECT r.topogeo_id, r.layer_id'
+      || ', l.schema_name, l.table_name, l.feature_column '
+      || 'FROM topology.layer l INNER JOIN '
+      || quote_ident(tname)
+      || '.relation r ON (l.layer_id = r.layer_id) '
+      || 'WHERE l.level = 0 AND l.feature_type = 2 '
+      || ' AND l.topology_id = ' || tid
+      || ' AND abs(r.element_id) = ' || eid ;
+#ifdef POSTGIS_TOPOLOGY_DEBUG
+  RAISE DEBUG 'Checking TopoGeometry definitions: %', sql;
+#endif
+  FOR rec IN EXECUTE sql LOOP
+    RAISE EXCEPTION 'TopoGeom % in layer % (%.%.%) cannot be represented dropping edge %',
+            rec.topogeo_id, rec.layer_id,
+            rec.schema_name, rec.table_name, rec.feature_column,
+            eid;
+  END LOOP;
+
+  IF lf != rf THEN -- {
+
+    RAISE NOTICE 'Deletion of edge % joins faces % and %',
+                    eid, lf, rf;
+
+    -- check if any topo_geom is defined only by one of the
+    -- joined faces. In such case there would be no way to adapt
+    -- the definition in case of healing, so we'd have to bail out
+    -- 
+    fidary = ARRAY[lf, rf];
+    sql := 'SELECT t.* from ('
+      || 'SELECT r.topogeo_id, r.layer_id'
+      || ', l.schema_name, l.table_name, l.feature_column'
+      || ', array_agg(r.element_id) as elems '
+      || 'FROM topology.layer l INNER JOIN '
+      || quote_ident(tname)
+      || '.relation r ON (l.layer_id = r.layer_id) '
+      || 'WHERE l.level = 0 AND l.feature_type = 3 '
+      || ' AND l.topology_id = ' || tid
+      || ' AND r.element_id = ANY (' || quote_literal(fidary)
+      || ') group by r.topogeo_id, r.layer_id, l.schema_name, l.table_name, '
+      || ' l.feature_column ) t';
+
+    -- No surface can be defined by universal face 
+    IF lf != 0 AND rf != 0 THEN -- {
+      sql := sql || ' WHERE NOT t.elems @> ' || quote_literal(fidary);
+    END IF; -- }
+
+#ifdef POSTGIS_TOPOLOGY_DEBUG
+    RAISE DEBUG 'SQL: %', sql;
+#endif
+
+    FOR rec IN EXECUTE sql LOOP
+      RAISE EXCEPTION 'TopoGeom % in layer % (%.%.%) cannot be represented healing faces % and %',
+            rec.topogeo_id, rec.layer_id,
+            rec.schema_name, rec.table_name, rec.feature_column,
+            rf, lf;
+    END LOOP;
+
+  END IF; -- } two faces healed...
+END
+$$
+LANGUAGE 'plpgsql' VOLATILE;
+--} _ST_RemEdgeCheck
+
 --{
 -- Topo-Geo and Topo-Net 3: Routine Details
 -- X.3.14
@@ -793,24 +828,9 @@ BEGIN
           toponame;
   END;
 
+  -- NOT IN THE SPECS:
   -- Check that no TopoGeometry references the edge being removed
-  sql := 'SELECT r.topogeo_id, r.layer_id'
-      || ', l.schema_name, l.table_name, l.feature_column '
-      || 'FROM topology.layer l INNER JOIN '
-      || quote_ident(toponame)
-      || '.relation r ON (l.layer_id = r.layer_id) '
-      || 'WHERE l.level = 0 AND l.feature_type = 2 '
-      || ' AND l.topology_id = ' || topoid
-      || ' AND abs(r.element_id) = ' || e1id ;
-#ifdef POSTGIS_TOPOLOGY_DEBUG
-  RAISE DEBUG 'Checking TopoGeometry definitions: %', sql;
-#endif
-  FOR rec IN EXECUTE sql LOOP
-    RAISE EXCEPTION 'TopoGeom % in layer % (%.%.%) cannot be represented dropping edge %',
-            rec.topogeo_id, rec.layer_id,
-            rec.schema_name, rec.table_name, rec.feature_column,
-            e1id;
-  END LOOP;
+  PERFORM topology._ST_RemEdgeCheck(toponame, topoid, e1id, e1rec.left_face, e1rec.right_face);
 
   -- Update next_left_edge and next_right_edge face
   -- for all edges bounding the new face
@@ -896,54 +916,10 @@ BEGIN
 
   IF e1rec.left_face = e1rec.right_face THEN -- {
 
-    RAISE NOTICE 'Deletion of edge % affects no face',
-                    e1rec.edge_id;
-
     newfaceid := e1rec.left_face; -- TODO: or what should we return ?
     newfacecreated := false;
 
   ELSE -- }{
-
-    RAISE NOTICE 'Deletion of edge % joins faces % and %',
-                    e1rec.edge_id, e1rec.left_face, e1rec.right_face;
-
-    -- NOT IN THE SPECS:
-    -- check if any topo_geom is defined only by one of the
-    -- joined faces. In such case there would be no way to adapt
-    -- the definition in case of healing, so we'd have to bail out
-    --
-    -- TODO: use an internal function and share with ST_RemEdgeNewFace
-    --
-    -- 
-    fidary = ARRAY[e1rec.left_face, e1rec.right_face];
-    sql := 'SELECT t.* from ('
-      || 'SELECT r.topogeo_id, r.layer_id'
-      || ', l.schema_name, l.table_name, l.feature_column'
-      || ', array_agg(r.element_id) as elems '
-      || 'FROM topology.layer l INNER JOIN '
-      || quote_ident(toponame)
-      || '.relation r ON (l.layer_id = r.layer_id) '
-      || 'WHERE l.level = 0 AND l.feature_type = 3 '
-      || ' AND l.topology_id = ' || topoid
-      || ' AND r.element_id = ANY (' || quote_literal(fidary)
-      || ') group by r.topogeo_id, r.layer_id, l.schema_name, l.table_name, '
-      || ' l.feature_column ) t';
-
-    -- No surface can be defined by universal face 
-    IF e1rec.left_face != 0 AND e1rec.right_face != 0 THEN -- {
-      sql := sql || ' WHERE NOT t.elems @> ' || quote_literal(fidary);
-    END IF; -- }
-
-#ifdef POSTGIS_TOPOLOGY_DEBUG
-    RAISE DEBUG 'SQL: %', sql;
-#endif
-
-    FOR rec IN EXECUTE sql LOOP
-      RAISE EXCEPTION 'TopoGeom % in layer % (%.%.%) cannot be represented healing faces % and %',
-            rec.topogeo_id, rec.layer_id,
-            rec.schema_name, rec.table_name, rec.feature_column,
-            e1rec.right_face, e1rec.left_face;
-    END LOOP;
 
     IF e1rec.left_face = 0 OR e1rec.right_face = 0 THEN -- {
 
@@ -1165,24 +1141,9 @@ BEGIN
           toponame;
   END;
 
+  -- NOT IN THE SPECS:
   -- Check that no TopoGeometry references the edge being removed
-  sql := 'SELECT r.topogeo_id, r.layer_id'
-      || ', l.schema_name, l.table_name, l.feature_column '
-      || 'FROM topology.layer l INNER JOIN '
-      || quote_ident(toponame)
-      || '.relation r ON (l.layer_id = r.layer_id) '
-      || 'WHERE l.level = 0 AND l.feature_type = 2 '
-      || ' AND l.topology_id = ' || topoid
-      || ' AND abs(r.element_id) = ' || e1id ;
-#ifdef POSTGIS_TOPOLOGY_DEBUG
-  RAISE DEBUG 'Checking TopoGeometry definitions: %', sql;
-#endif
-  FOR rec IN EXECUTE sql LOOP
-    RAISE EXCEPTION 'TopoGeom % in layer % (%.%.%) cannot be represented dropping edge %',
-            rec.topogeo_id, rec.layer_id,
-            rec.schema_name, rec.table_name, rec.feature_column,
-            e1id;
-  END LOOP;
+  PERFORM topology._ST_RemEdgeCheck(toponame, topoid, e1id, e1rec.left_face, e1rec.right_face);
 
   -- Update next_left_edge and next_right_edge face
   -- for all edges bounding the new face
@@ -1268,52 +1229,9 @@ BEGIN
 
   IF e1rec.left_face = e1rec.right_face THEN -- {
 
-    RAISE NOTICE 'Deletion of edge % affects no face',
-                    e1rec.edge_id;
-
     floodfaceid = e1rec.left_face; 
 
   ELSE -- }{
-
-    RAISE NOTICE 'Deletion of edge % joins faces % and %',
-                    e1rec.edge_id, e1rec.left_face, e1rec.right_face;
-
-    -- NOT IN THE SPECS:
-    -- check if any topo_geom is defined only by one of the
-    -- joined faces. In such case there would be no way to adapt
-    -- the definition in case of healing, so we'd have to bail out
-    --
-    -- TODO: use an internal function and share with ST_RemEdgeNewFace
-    --
-    fidary = ARRAY[e1rec.left_face, e1rec.right_face];
-    sql := 'SELECT t.* from ('
-      || 'SELECT r.topogeo_id, r.layer_id'
-      || ', l.schema_name, l.table_name, l.feature_column'
-      || ', array_agg(r.element_id) as elems '
-      || 'FROM topology.layer l INNER JOIN '
-      || quote_ident(toponame)
-      || '.relation r ON (l.layer_id = r.layer_id) '
-      || 'WHERE l.level = 0 AND l.feature_type = 3 '
-      || ' AND l.topology_id = ' || topoid
-      || ' AND r.element_id = ANY (' || quote_literal(fidary) 
-      || ') group by r.topogeo_id, r.layer_id, l.schema_name, l.table_name, '
-      || ' l.feature_column ) t';
-
-    -- No surface can be defined by universal face 
-    IF NOT 0 = ANY ( fidary ) THEN -- {
-      sql := sql || ' WHERE NOT t.elems @> ' || quote_literal(fidary);
-    END IF; -- }
-
-#ifdef POSTGIS_TOPOLOGY_DEBUG
-    RAISE DEBUG 'SQL: %', sql;
-#endif
-
-    FOR rec IN EXECUTE sql LOOP
-      RAISE EXCEPTION 'TopoGeom % in layer % (%.%.%) cannot be represented healing faces % and %',
-            rec.topogeo_id, rec.layer_id,
-            rec.schema_name, rec.table_name, rec.feature_column,
-            e1rec.right_face, e1rec.left_face;
-    END LOOP;
 
     IF e1rec.left_face = 0 OR e1rec.right_face = 0 THEN -- {
 
@@ -2627,10 +2545,10 @@ CREATE OR REPLACE FUNCTION topology.ST_ChangeEdgeGeom(atopology varchar, anedge 
 $$
 DECLARE
   rec RECORD;
+  rng_info RECORD; -- movement range info
   oldedge RECORD;
   range GEOMETRY; -- movement range
   tmp1 GEOMETRY;
-  tmp2 GEOMETRY;
   snode_info RECORD;
   enode_info RECORD;
   sql TEXT;
@@ -2726,7 +2644,9 @@ BEGIN
     || quote_ident(atopology)
     || '.node WHERE geom && '
     || quote_literal(acurve::text)
-    || '::geometry'
+    || '::geometry AND node_id NOT IN ('
+    || oldedge.start_node || ',' || oldedge.end_node
+    || ')'
   LOOP
     IF ST_RelateMatch(rec.relate, 'T********') THEN
       RAISE EXCEPTION 'SQL/MM Spatial exception - geometry crosses a node';
@@ -2776,51 +2696,80 @@ BEGIN
   -- Check that the "motion range" doesn't include any node 
   --{
 
-  tmp1 := ST_MakeLine(ST_EndPoint(oldedge.geom), ST_StartPoint(oldedge.geom));
-#ifdef POSTGIS_TOPOLOGY_DEBUG
-  RAISE DEBUG 'end-to-start: %', ST_AsText(tmp1);
-#endif
-
-  tmp2 := ST_MakeLine(oldedge.geom, tmp1);
-  IF ST_NumPoints(tmp2) < 4 THEN
-    tmp2 := ST_AddPoint(tmp2, ST_StartPoint(oldedge.geom));
-  END IF;
-#ifdef POSTGIS_TOPOLOGY_DEBUG
-  RAISE DEBUG 'Old-ring: %', ST_AsText(tmp2);
-#endif
-  tmp2 := ST_CollectionExtract(ST_MakeValid(ST_MakePolygon(tmp2)), 3);
-#ifdef POSTGIS_TOPOLOGY_DEBUG
-  RAISE DEBUG 'Old-ring (poly): %', ST_AsText(tmp2);
-#endif
-
-  range := ST_MakeLine(acurve, tmp1);
-  IF ST_NumPoints(range) < 4 THEN
-    range := ST_AddPoint(range, ST_StartPoint(oldedge.geom));
-  END IF;
-#ifdef POSTGIS_TOPOLOGY_DEBUG
-  RAISE DEBUG 'New-ring: %', ST_AsText(range);
-#endif
-  range := ST_CollectionExtract(ST_MakeValid(ST_MakePolygon(range)), 3);
-#ifdef POSTGIS_TOPOLOGY_DEBUG
-  RAISE DEBUG 'New-ring (poly): %', ST_AsText(range);
-#endif
-
-  range := ST_SymDifference(range, tmp2);
-#ifdef POSTGIS_TOPOLOGY_DEBUG
-  RAISE DEBUG 'Range motion: %', ST_AsText(range);
-#endif
-
-  sql := 'SELECT node_id, geom FROM '
+  sql := 'SELECT ST_Collect(geom) as nodes, '
+    || 'null::geometry as r1, null::geometry as r2 FROM '
     || quote_ident(atopology)
-    || '.node WHERE ST_Contains('
-    || quote_literal(range::text)
-    || '::geometry, geom) LIMIT 1';
+    || '.node WHERE geom && '
+    || quote_literal(ST_Collect(ST_Envelope(oldedge.geom),
+                                ST_Envelope(acurve))::text)
+    || '::geometry AND node_id NOT IN ( '
+    || oldedge.start_node || ',' || oldedge.end_node || ')';
 #ifdef POSTGIS_TOPOLOGY_DEBUG
   RAISE DEBUG '%', sql;
 #endif
-  FOR rec IN EXECUTE sql LOOP -- {
-    RAISE EXCEPTION 'Edge motion collision at %', ST_AsText(rec.geom);
-  END LOOP; -- }
+  EXECUTE sql INTO rng_info;
+
+  -- There's no collision if there's no nodes in the combined
+  -- bbox of old and new edges.
+  --
+  IF NOT ST_IsEmpty(rng_info.nodes) THEN -- {
+
+#ifdef POSTGIS_TOPOLOGY_DEBUG
+    RAISE DEBUG '% nodes in the edge movement range bbox: %',
+                              ST_NumGeometries(rng_info.nodes),
+                              ST_AsText(rng_info.nodes)
+                              ;
+#endif
+
+    tmp1 := ST_MakeLine(ST_EndPoint(oldedge.geom), ST_StartPoint(oldedge.geom));
+#ifdef POSTGIS_TOPOLOGY_DEBUG
+    RAISE DEBUG 'end-to-start: %', ST_AsText(tmp1);
+#endif
+
+    rng_info.r1 := ST_MakeLine(oldedge.geom, tmp1);
+    IF ST_NumPoints(rng_info.r1) < 4 THEN
+      rng_info.r1 := ST_AddPoint(rng_info.r1, ST_StartPoint(oldedge.geom));
+    END IF;
+#ifdef POSTGIS_TOPOLOGY_DEBUG
+    RAISE DEBUG 'Old-ring: %', ST_AsText(rng_info.r1);
+#endif
+    rng_info.r1 := ST_CollectionExtract(
+                       ST_MakeValid(ST_MakePolygon(rng_info.r1)), 3);
+#ifdef POSTGIS_TOPOLOGY_DEBUG
+    RAISE DEBUG 'Old-ring (poly): %', ST_AsText(rng_info.r1);
+#endif
+
+    rng_info.r2 := ST_MakeLine(acurve, tmp1);
+    IF ST_NumPoints(rng_info.r2) < 4 THEN
+      rng_info.r2 := ST_AddPoint(rng_info.r2, ST_StartPoint(oldedge.geom));
+    END IF;
+#ifdef POSTGIS_TOPOLOGY_DEBUG
+    RAISE DEBUG 'New-ring: %', ST_AsText(rng_info.r2);
+#endif
+    rng_info.r2 := ST_CollectionExtract(
+                       ST_MakeValid(ST_MakePolygon(rng_info.r2)), 3);
+#ifdef POSTGIS_TOPOLOGY_DEBUG
+    RAISE DEBUG 'New-ring (poly): %', ST_AsText(rng_info.r2);
+#endif
+
+    FOR rec IN WITH
+      nodes AS ( SELECT * FROM ST_Dump(rng_info.nodes) ),
+      inr1 AS ( SELECT path[1] FROM nodes WHERE ST_Contains(rng_info.r1, geom) ),
+      inr2 AS ( SELECT path[1] FROM nodes WHERE ST_Contains(rng_info.r2, geom) )
+      ( SELECT * FROM inr1
+          EXCEPT
+        SELECT * FROM inr2
+      ) UNION 
+      ( SELECT * FROM inr2
+          EXCEPT
+        SELECT * FROM inr1
+      )
+    LOOP
+      RAISE EXCEPTION 'Edge motion collision at %',
+                     ST_AsText(ST_GeometryN(rng_info.nodes, rec.path));
+    END LOOP;
+
+  END IF; -- }
 
   --} motion range checking end
 
@@ -3075,7 +3024,7 @@ BEGIN
     ishole := false;
   END IF; -- }
 
-  -- Update edges having new face on the left
+  -- Update edges bounding the old face
   sql := 'UPDATE '
     || quote_ident(atopology)
     || '.edge_data SET left_face = CASE WHEN left_face = '
@@ -3090,9 +3039,11 @@ BEGIN
        )::text )
     || ') AND ';
   IF ishole THEN sql := sql || 'NOT '; END IF;
-  sql := sql || 'ST_Contains(' || quote_literal(fan.shell::text) || '::geometry, geom)';
+  sql := sql || 'ST_Contains(' || quote_literal(fan.shell::text)
+    -- We only need to check a single point, but must not be an endpoint
+    || '::geometry, ST_Line_Interpolate_Point(geom, 0.2))';
 #ifdef POSTGIS_TOPOLOGY_DEBUG
-  RAISE DEBUG 'Updating edges binding old face';
+  RAISE DEBUG 'Updating edges bounding the old face';
 #endif
   EXECUTE sql;
 

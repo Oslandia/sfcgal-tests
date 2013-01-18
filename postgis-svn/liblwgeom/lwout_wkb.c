@@ -332,30 +332,38 @@ static size_t ptarray_to_wkb_size(const POINTARRAY *pa, uint8_t variant)
 static uint8_t* ptarray_to_wkb_buf(const POINTARRAY *pa, uint8_t *buf, uint8_t variant)
 {
 	int dims = 2;
+	int pa_dims = FLAGS_NDIMS(pa->flags);
 	int i, j;
 	double *dbl_ptr;
 
 	/* SFSQL is always 2-d. Extended and ISO use all available dimensions */
 	if ( (variant & WKB_ISO) || (variant & WKB_EXTENDED) )
-		dims = FLAGS_NDIMS(pa->flags);
+		dims = pa_dims;
 
 	/* Set the number of points (if it's not a POINT type) */
 	if ( ! ( variant & WKB_NO_NPOINTS ) )
 		buf = integer_to_wkb_buf(pa->npoints, buf, variant);
 
-	/* Set the ordinates. */
-	/* TODO: Ensure that getPoint_internal is always aligned so
-	         this doesn't fail on RiSC architectures */
-	/* TODO: Make this faster by bulk copying the coordinates when
-	         the output endian/dims match the internal endian/dims */
-	for ( i = 0; i < pa->npoints; i++ )
+	/* Bulk copy the coordinates when: dimensionality matches, output format */
+	/* is not hex, and output endian matches internal endian. */
+	if ( (dims == pa_dims) && ! wkb_swap_bytes(variant) && ! (variant & WKB_HEX)  )
 	{
-		LWDEBUGF(4, "Writing point #%d", i);
-		dbl_ptr = (double*)getPoint_internal(pa, i);
-		for ( j = 0; j < dims; j++ )
+		size_t size = pa->npoints * dims * WKB_DOUBLE_SIZE;
+		memcpy(buf, getPoint_internal(pa, 0), size);
+		buf += size;
+	}
+	/* Copy coordinates one-by-one otherwise */
+	else 
+	{
+		for ( i = 0; i < pa->npoints; i++ )
 		{
-			LWDEBUGF(4, "Writing dimension #%d (buf = %p)", j, buf);
-			buf = double_to_wkb_buf(dbl_ptr[j], buf, variant);
+			LWDEBUGF(4, "Writing point #%d", i);
+			dbl_ptr = (double*)getPoint_internal(pa, i);
+			for ( j = 0; j < dims; j++ )
+			{
+				LWDEBUGF(4, "Writing dimension #%d (buf = %p)", j, buf);
+				buf = double_to_wkb_buf(dbl_ptr[j], buf, variant);
+			}
 		}
 	}
 	LWDEBUGF(4, "Done (buf = %p)", buf);

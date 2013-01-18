@@ -1,5 +1,5 @@
 /**********************************************************************
- * $Id: lwhomogenize.c 9324 2012-02-27 22:08:12Z pramsey $
+ * $Id: lwhomogenize.c 10896 2012-12-21 10:53:12Z strk $
  *
  * PostGIS - Spatial Types for PostgreSQL
  * http://postgis.refractions.net
@@ -139,12 +139,13 @@ lwcollection_homogenize(const LWCOLLECTION *col)
 		if ( outcol->ngeoms == 1 )
 		{
 			outgeom = outcol->geoms[0];
-			lwfree(outcol);
+			outcol->ngeoms=0; lwcollection_free(outcol);
 		}
 		else
 		{
 			outgeom = lwcollection_as_lwgeom(outcol);
 		}
+		outgeom->srid = col->srid;
 	}
 	/* Bah, more than out type, return anonymous collection */
 	else if ( ntypes > 1 )
@@ -160,7 +161,7 @@ lwcollection_homogenize(const LWCOLLECTION *col)
 				if ( bcol->ngeoms == 1 )
 				{
 					lwcollection_add_lwgeom(outcol, bcol->geoms[0]);
-					lwfree(bcol);
+					bcol->ngeoms=0; lwcollection_free(bcol);
 				}
 				else 
 				{
@@ -170,7 +171,7 @@ lwcollection_homogenize(const LWCOLLECTION *col)
 		}
 		outgeom = lwcollection_as_lwgeom(outcol);
 	}
-	
+
 	return outgeom;
 }
 

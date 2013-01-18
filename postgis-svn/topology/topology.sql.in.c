@@ -1,6 +1,6 @@
 -- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 -- 
--- $Id: topology.sql.in.c 9904 2012-06-12 17:28:58Z strk $
+-- $Id: topology.sql.in.c 10808 2012-12-06 23:02:23Z strk $
 --
 -- PostGIS - Spatial Types for PostgreSQL
 -- http://postgis.refractions.net
@@ -1067,11 +1067,9 @@ AS
 $$
 DECLARE
   toponame varchar;
-  ret topology.TopoElementArray;
 BEGIN
   toponame = topology.GetTopologyName(tg.topology_id);
-  ret = topology.GetTopoGeomElementArray(toponame,tg.layer_id,tg.id);
-  RETURN ret;
+  RETURN topology.GetTopoGeomElementArray(toponame, tg.layer_id, tg.id);
 END;
 $$
 LANGUAGE 'plpgsql' STABLE STRICT;
@@ -1857,6 +1855,19 @@ BEGIN
     || quote_ident(atopology)
     || '.edge_data (right_face);';
 
+  ------- Indexes on start_node and end_node of edge_data
+  ------- NOTE: this indexes speed up node deletion
+  -------       by a factor of 1000 !
+  -------       See http://trac.osgeo.org/postgis/ticket/2082
+  EXECUTE 'CREATE INDEX edge_start_node_idx ON '
+    || quote_ident(atopology)
+    || '.edge_data (start_node);';
+  EXECUTE 'CREATE INDEX edge_end_node_idx ON '
+    || quote_ident(atopology)
+    || '.edge_data (end_node);';
+
+  -- TODO: consider also adding an index on node.containing_face 
+
   ------- Add record to the "topology" metadata table
   EXECUTE 'INSERT INTO topology.topology '
     || '(id, name, srid, precision, hasZ) VALUES ('
@@ -1972,6 +1983,7 @@ LANGUAGE 'plpgsql' VOLATILE STRICT;
 
 --  TopoGeometry
 #include "sql/topogeometry/type.sql.in.c"
+#include "sql/topogeometry/cleartopogeom.sql.in.c"
 #include "sql/topogeometry/totopogeom.sql.in.c"
 
 --  GML
