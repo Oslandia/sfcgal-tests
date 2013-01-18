@@ -6,6 +6,7 @@ from matplotlib.backends.backend_pdf import PdfPages
 import subprocess
 import sys
 import time
+import os
 from optparse import OptionParser
 
 class PgBench(object):
@@ -16,48 +17,78 @@ class PgBench(object):
         self.n_pts = n_pts
         self.quiet = quiet
 
-    def call_sql( self, query, out_name = '' ):
-        fmt_query = query % { 'n_id' : self.n_objs, 'n_pts' : self.n_pts, 'out_name' : out_name }
+    def call_sql( self, query, measure_mem = False ):
+        fmt_query = query % { 'n_id' : self.n_objs, 'n_pts' : self.n_pts }
         start_time = time.time()
-        p = subprocess.Popen( ['psql', '-q', '-t', '-d', self.db_name], stdin = subprocess.PIPE, stdout = subprocess.PIPE, stderr = sys.stderr )
-        result=p.communicate( fmt_query )
+        p = subprocess.Popen( ['psql', '-q', '-t', '-d', self.db_name ], stdin = subprocess.PIPE, stdout = subprocess.PIPE, stderr = sys.stderr )
+        if measure_mem:
+            p.stdin.write( "select pg_backend_pid();\n" )
+            serverpid = int(p.stdout.readline())
+            p.stdout.readline()
+
+        p.stdin.write( fmt_query )
+        p.stdin.close()
+        maxmem = 0
+        while measure_mem and p.poll() is None:
+            m = os.popen( "ps -p %d -o rss=" % serverpid ).read()
+            if len(m) > 0 and int(m) > maxmem:
+                maxmem = int(m)
+                time.sleep(0.1)
+
+        result = p.stdout.readline()
         duration = time.time() - start_time
-        return [duration, result]
+        return [duration, maxmem, result]
+
+    def prepare_query( self, query ):
+        self.call_sql( "drop table if exists sfcgal.geoms; create table sfcgal.geoms as " + query)
+
+    def bench_serialization( self, query ):
+
+        cpu = []
+        mem = []
+        for q in query:
+            r = self.call_sql( q, True )
+            cpu.append( r[0] )
+            mem.append( r[1] )
+        print cpu, mem
+        return [ cpu, mem ]
+
+    def bench_operation( self, name, query ):
+        if not self.quiet:
+            print "==== %s ====" % name
+            
+        geos = self.call_sql( 'set search_path=public;' + query, 'geos_' + name  )
+        geos_result = float(geos[2])
+        if not self.quiet:
+            print "GEOS:\t%.3fs result: %.2f" % (geos[0], geos_result)
+                
+        # use 'SET search_path' to override the default st_intersects
+        sfcgal = self.call_sql( 'set search_path=sfcgal,public;' + query, 'sfcgal_' + name )
+        sfcgal_result = float(sfcgal[2])
+        
+        if not self.quiet:
+            print "SFCGAL:\t%.3fs result: %.2f" % (sfcgal[0], sfcgal_result)
+        if self.quiet:
+            print "%d;%.3f;%.2f;%.3f;%.2f" % (self.n_pts, geos[0], geos_result, sfcgal[0], sfcgal_result)
+
+        return [ geos[0], sfcgal[0] ]
 
     def bench_queries( self, queries ):
         results = {}
+        rtype = 'o'
         for (name, query) in queries.items():
 
-            prepare_query = query[0]
-            self.call_sql( "drop table if exists sfcgal.geoms; create table sfcgal.geoms as " + prepare_query)
+            self.prepare_query( query[0] )
 
-            request = query[1]
-            # if it's an array, it is a special query
-            if isinstance( request, list ):
-                for q in request:
-                    r = self.call_sql( q )
-                    print r
+            if isinstance( query[1], list ):
+                # it is an array, special query
+                rtype = 's'
+                results[ name ] = self.bench_serialization( query[1] )
             else:
-                if not self.quiet:
-                    print "==== %s ====" % name
+                rtype = 'o'
+                results[ name ] = self.bench_operation( name, query[1] )
 
-                geos = self.call_sql( 'set search_path=public;' + request, 'geos_' + name  )
-                geos_result = float(geos[1][0][1:-2])
-                if not self.quiet:
-                    print "GEOS:\t%.3fs result: %.2f" % (geos[0], geos_result)
-                
-                # use 'SET search_path' to override the default st_intersects
-                sfcgal = self.call_sql( 'set search_path=sfcgal,public;' + request, 'sfcgal_' + name )
-                sfcgal_result = float(sfcgal[1][0][1:-2])
-
-                if not self.quiet:
-                    print "SFCGAL:\t%.3fs result: %.2f" % (sfcgal[0], sfcgal_result)
-                if self.quiet:
-                    print "%d;%.3f;%.2f;%.3f;%.2f" % (self.n_pts, geos[0], geos_result, sfcgal[0], sfcgal_result)
-
-                results[ name ] = [ geos[0], sfcgal[0] ]
-
-        return results
+        return rtype, results
 
 # generate a star-shaped polygon based on random points around a circle
 prepare_query="""
@@ -228,12 +259,6 @@ select sum(ST_area(geom1)) from sfcgal.geoms;
 """
 
 convexhull_query="""
--- uncomment this if you want to store the result
---drop table if exists sfcgal.%(out_name)s;
---create table sfcgal.%(out_name)s as
---select id, st_convexhull(geom) as geom from sfcgal.points;
---select sum(st_npoints(geom)) from sfcgal.%(out_name)s;
-
 select sum(st_npoints(st_convexhull(geom1))) from sfcgal.geoms;
 """
 
@@ -278,8 +303,8 @@ from sfcgal.geoms;
 
 serialization2_query="""
 select sum(case when
-sfcgal.exact_st_intersects(
-  sfcgal.exact_st_intersection( sfcgal.st_exactgeomfromtext(st_astext(geom1)), sfcgal.st_exactgeomfromtext(st_astext(geom2)) ),
+sfcgal.st_intersects(
+  sfcgal.st_intersection( sfcgal.st_exactgeomfromtext(st_astext(geom1)), sfcgal.st_exactgeomfromtext(st_astext(geom2)) ),
   sfcgal.st_exactgeomfromtext(st_astext(geom1))
 )
 then 1 else 0 end)
@@ -288,8 +313,8 @@ from sfcgal.geoms;
 
 serialization3_query="""
 select sum(case when
-sfcgal.ref_st_intersects(
-  sfcgal.ref_st_intersection( sfcgal.st_refgeomfromtext(st_astext(geom1)), sfcgal.st_refgeomfromtext(st_astext(geom2)) ),
+sfcgal.st_intersects(
+  sfcgal.st_intersection( sfcgal.st_refgeomfromtext(st_astext(geom1)), sfcgal.st_refgeomfromtext(st_astext(geom2)) ),
   sfcgal.st_refgeomfromtext(st_astext(geom1))
 )
 then 1 else 0 end)
@@ -389,7 +414,7 @@ for n_pts in options.n_pts:
 
     bench.call_sql( prepare_query )
 
-    lresults = bench.bench_queries( selqueries )
+    ltype, lresults = bench.bench_queries( selqueries )
 
     # extract results
     for query, r in lresults.items():
@@ -407,22 +432,65 @@ if options.report_file:
     print "Generating report %s" % options.report_file
     pdf = PdfPages( options.report_file )
     for q, v in results.items():
-        X = options.n_pts
-        plt.clf()
-        plt.xlabel( "# of points" )
-        plt.ylabel( "Time (s)" )
+        if ltype == 'o':
+            X = options.n_pts
+            plt.clf()
+            plt.xlabel( "# of points" )
+            plt.ylabel( "Time (s)" )
+            
+            plt.title( q )
+            # GEOS
+            plt.plot( X, v[0], marker='o', label='GEOS' )
+            # SFCGAL
+            plt.plot( X, v[1], marker='o', label='SFCGAL' )
+            plt.legend(loc='upper left')
+            pdf.savefig()
 
-        plt.title( q )
-        # GEOS
-        plt.plot( X, v[0], marker='o', label='GEOS' )
-        # SFCGAL
-        plt.plot( X, v[1], marker='o', label='SFCGAL' )
-        plt.legend(loc='upper left')
-        pdf.savefig()
+            # text report
+            print "== %s == " % q
+            print "# pts\t",';'.join( str(x) for x in X )
+            print "GEOS:\t", ';'.join( str(x) for x in v[0] )
+            print "SFCGAL:\t", ';'.join( str(x) for x in v[1] )
+        elif ltype == 's':
+            X = options.n_pts
 
-        # text report
-        print "== %s == " % q
-        print "# pts\t",';'.join( str(x) for x in X )
-        print "GEOS:\t", ';'.join( str(x) for x in v[0] )
-        print "SFCGAL:\t", ';'.join( str(x) for x in v[1] )
+            cpu = v[0]
+            mem = v[1]
+            cpuY = [[],[],[]]
+            memY = [[],[],[]]
+            for j in range(0,3):
+                cpuY[j] = []
+                memY[j] = []
+                for i in range(0,len(X)):
+                    cpuY[j].append(cpu[i][j])
+                    memY[j].append(mem[i][j])
+
+            plt.clf()
+            plt.xlabel( "# of points" )
+            plt.ylabel( "Time (s)" )
+            
+            plt.title( q )
+            # native
+            plt.plot( X, cpuY[0], marker='o', label='Native' )
+            # SFCGAL
+            plt.plot( X, cpuY[1], marker='o', label='SFCGAL' )
+            # Referenced
+            plt.plot( X, cpuY[2], marker='o', label='Referenced' )
+            plt.legend(loc='upper left')
+            pdf.savefig()
+            
+            plt.clf()
+            plt.xlabel( "# of points" )
+            plt.ylabel( "kB" )
+            
+            plt.title( q + ", memory usage" )
+            # native
+            plt.plot( X, memY[0], marker='o', label='Native' )
+            # SFCGAL
+            plt.plot( X, memY[1], marker='o', label='SFCGAL' )
+            # Referenced
+            plt.plot( X, memY[2], marker='o', label='Referenced' )
+            plt.legend(loc='upper left')
+            pdf.savefig()
+
     pdf.close()

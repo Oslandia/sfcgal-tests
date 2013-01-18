@@ -16,7 +16,11 @@ done
 for point in $points; do
     npoints="$npoints -p $point"
 done
-cmd="python ./sfcgal_bench.py -r $reportfile $npoints $nalgos -n $ngeoms"
+
+cmd="python ./sfcgal_bench.py -r ${reportfile}.pdf $npoints $nalgos -n $ngeoms"
 echo $cmd
 $cmd
+
+# serialization report
+python ./sfcgal_bench.py -r ${reportfile}_serialization.pdf $npoints -n $ngeoms -x unserialization -x serialization
 
