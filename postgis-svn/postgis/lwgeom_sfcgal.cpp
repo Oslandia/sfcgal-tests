@@ -48,12 +48,15 @@ extern "C" {
 #include "lwgeom_sfcgal.h"
 #include "lwgeom_sfcgal_wrapper.h"
 
+/**
+ * Conversion from GSERIALIZED* to SFCGAL::PreparedGeometry
+ */
 std::auto_ptr<SFCGAL::PreparedGeometry> POSTGIS2SFCGALp(GSERIALIZED *pglwgeom)
 {
 	LWGEOM *lwgeom = lwgeom_from_gserialized(pglwgeom);
 	if ( ! lwgeom )
 	{
-		throw std::runtime_error("POSTGIS2SFCGAL: unable to deserialize input");
+		throw std::runtime_error("POSTGIS2SFCGALp: unable to deserialize input");
 	}
 	std::auto_ptr<SFCGAL::PreparedGeometry> g(new SFCGAL::PreparedGeometry(LWGEOM2SFCGAL(lwgeom), gserialized_get_srid(pglwgeom)) );
 	lwgeom_free(lwgeom);
@@ -61,8 +64,9 @@ std::auto_ptr<SFCGAL::PreparedGeometry> POSTGIS2SFCGALp(GSERIALIZED *pglwgeom)
 }
 
 
-//
-// Obsolete
+/**
+ * Conversion from GSERIALIZED* to SFCGAL::Geometry
+ */
 std::auto_ptr<SFCGAL::Geometry> POSTGIS2SFCGAL(GSERIALIZED *pglwgeom)
 {
 	LWGEOM *lwgeom = lwgeom_from_gserialized(pglwgeom);
@@ -75,6 +79,9 @@ std::auto_ptr<SFCGAL::Geometry> POSTGIS2SFCGAL(GSERIALIZED *pglwgeom)
 	return g;
 }
 
+/**
+ * Conversion from SFCGAL::Geometry to GSERIALIZED*
+ */
 GSERIALIZED* SFCGAL2POSTGIS(const SFCGAL::Geometry& geom, bool force3D, int SRID )
 {
 	LWGEOM* lwgeom = SFCGAL2LWGEOM( &geom, force3D, SRID );
@@ -86,18 +93,20 @@ GSERIALIZED* SFCGAL2POSTGIS(const SFCGAL::Geometry& geom, bool force3D, int SRID
 	GSERIALIZED* result = geometry_serialize(lwgeom);
 	lwgeom_free(lwgeom);
 
-	//	lwnotice( "SFCGAL2POSTGIS result: %p SFCGAL::Geometry: %p (%d)", result, &geom, geom.geometryTypeId() );
 	return result;
 }
 
+/**
+ * Conversion from SFCGAL::PreparedGeometry to GSERIALIZED*
+ */
 GSERIALIZED* SFCGAL2POSTGIS( const SFCGAL::PreparedGeometry& geom, bool force3D )
 {
 	return SFCGAL2POSTGIS( geom.geometry(), force3D, geom.SRID() );
 }
 
-///
-///
-/// Conversion from WKT to GSERIALIZED
+/**
+ * Conversion from WKT to GSERIALIZED
+ */
 extern "C" {
 	PG_FUNCTION_INFO_V1(sfcgal_from_text);
 }
@@ -128,7 +137,6 @@ extern "C" Datum sfcgal_from_text(PG_FUNCTION_ARGS)
  */
 
 // Type index, unique for each type
-#define WRAPPER_TYPE_Geometry 0
 // How to extract a ith argument of type Geometry
 #define WRAPPER_INPUT_Geometry( i )					\
 	GSERIALIZED* BOOST_PP_CAT(input, i);				\

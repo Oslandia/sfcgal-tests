@@ -363,7 +363,6 @@ extern "C" Datum sfcgal_geom_from_ref(PG_FUNCTION_ARGS)
  * Macros for ref geometry argument wrapping
  *
  */
-#define WRAPPER_TYPE_refGeometry 1
 #define WRAPPER_INPUT_refGeometry( i ) \
 	SFCGAL::PreparedGeometry* BOOST_PP_CAT( input, i ) = get_geometry_arg_secure( fcinfo, i ); \
 	if ( ! BOOST_PP_CAT( input, i ) ) { \

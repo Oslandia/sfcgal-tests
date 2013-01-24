@@ -19,7 +19,6 @@
 /**
  * bool argument wrapper
  */
-#define WRAPPER_TYPE_bool 3
 #define WRAPPER_CONVERT_RESULT_bool()
 #define WRAPPER_RETURN_bool()			\
 	PG_RETURN_BOOL( result )
@@ -32,7 +31,6 @@
 /**
  * bool argument wrapper
  */
-#define WRAPPER_TYPE_double 4
 #define WRAPPER_INPUT_double( i )				\
 	double BOOST_PP_CAT(input, i) = PG_GETARG_FLOAT8(i);
 #define WRAPPER_ACCESS_INPUT_double( i )  \
@@ -46,8 +44,6 @@
 #define WRAPPER_DECLARE_RETURN_VAR_double() \
 	double result
 
-#define _WR_TYPE_IDX( name ) \
-	BOOST_PP_CAT( WRAPPER_TYPE_, name )
 // convert an argument to a variable
 // adds * if it's a Geometry
 #define _WR_DEREFERENCE_ARG( type, i )		\

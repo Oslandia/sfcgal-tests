@@ -177,7 +177,6 @@ extern "C" Datum sfcgal_geom_from_exact(PG_FUNCTION_ARGS)
  *
  */
 
-#define WRAPPER_TYPE_exactGeometry 2
 #define WRAPPER_INPUT_exactGeometry( i ) \
 	std::auto_ptr<SFCGAL::PreparedGeometry> BOOST_PP_CAT( input, i )  = unserializeExactGeometry( (ExactGeometry*)PG_DETOAST_DATUM(PG_GETARG_DATUM(i)) );
 

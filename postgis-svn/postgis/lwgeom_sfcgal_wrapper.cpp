@@ -31,12 +31,14 @@ bool _sfcgal_pointing_up( const SFCGAL::Geometry& g )
 	}
 	return g.as<SFCGAL::Polygon>().isCounterClockWiseOriented();
 }
+
 std::auto_ptr<SFCGAL::Geometry> _sfcgal_triangulate( const SFCGAL::Geometry& g )
 {
 	SFCGAL::TriangulatedSurface* surf = new SFCGAL::TriangulatedSurface;
 	SFCGAL::algorithm::triangulate( g, *surf );
 	return std::auto_ptr<SFCGAL::Geometry>( surf );
 }
+
 std::auto_ptr<SFCGAL::Geometry> _sfcgal_triangulate2D( const SFCGAL::Geometry& g )
 {
 	SFCGAL::TriangulatedSurface* surf = new SFCGAL::TriangulatedSurface;
