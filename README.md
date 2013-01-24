@@ -6,11 +6,28 @@ PostGIS branch that uses CGAL for spatial processing.
 Compilation
 -----------
 
-Run ./autogen.sh then
-./configure --with-cgaldir=... --with-sfcgaldir=...
+It depends on [SFCGAL](https://github.com/Oslandia/SFCGAL) which must have been installed before. SFCGAL must have been compiled into a dynamic library. Set the cmake option 'SFCGAL_USE_STATIC_LIBS' to OFF for that.
+
+Run
+<pre>
+./autogen.sh
+./configure --with-sfcgal --with-cgaldir=... --with-sfcgaldir=...
+</pre>
 (see ./configure --help)
 
+then
+<pre>
 make && sudo make install
+</pre>
+
+Features
+--------
+
+This PostGIS branch adds the following things:
+* a new 'scfcgal' schema. New ST_xxx() functions are created inside this new schema, they use the same signature as the native PostGIS ones, when possible (ST_Intersection, ST_Intersects, etc.)
+* a new 'exact_geometry' type. This type can carry exact coordinates and is passed from functions to functions by serialization / deserialization. SFCGAL functions are all overloaded with arguments of this type.
+* a new 'ref_geometry' type. This type can also carry exact coordinates and is passed from functions to functions using memory pointers. SFCGAL functions are all overloaded with arguments of this type.
+* an extended WKT syntax for exact coordinates, both for reading and writing.
 
 Usage
 -----
@@ -40,4 +57,5 @@ Benchmarking scripts
 --------------------
 
 See bench/sfcgal_bench.py
+
 Current results can be found in bench/report.pdf and bench.report_serialization.pdf
