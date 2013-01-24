@@ -28,6 +28,10 @@
 
 #define SRID_USR_MAX @SRID_USR_MAX@
 
+#if @POSTGIS_SFCGAL@
+#define POSTGIS_SFCGAL
+#endif
+
 #endif /* _LWPGIS_DEFINES */
 
 

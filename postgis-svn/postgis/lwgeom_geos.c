@@ -2538,7 +2538,6 @@ Datum crosses(PG_FUNCTION_ARGS)
 	PG_RETURN_BOOL(result);
 }
 
-//#ifndef POSTGIS_WITH_SFCGAL
 PG_FUNCTION_INFO_V1(intersects);
 Datum intersects(PG_FUNCTION_ARGS)
 {

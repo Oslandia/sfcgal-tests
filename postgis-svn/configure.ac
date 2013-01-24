@@ -609,6 +609,18 @@ dnl SFCGAL library support
 dnl ===========================================================================
 
 dnl ===========================================================================
+dnl
+dnl Selection of the geometric backend.
+dnl Geos is still needed for now.
+dnl
+dnl ===========================================================================
+
+AC_ARG_WITH([sfcgal], AC_HELP_STRING([--with-sfcgal], [add SFCGAL types]), 
+	[POSTGIS_SFCGAL=1], [POSTGIS_SFCGAL=0])
+
+AC_SUBST([POSTGIS_SFCGAL])
+
+dnl ===========================================================================
 dnl CGAL library
 dnl ===========================================================================
 
@@ -651,21 +663,18 @@ AC_SUBST([SFCGAL_CPPFLAGS])
 AC_SUBST([SFCGAL_LDFLAGS])
 
 dnl ===========================================================================
-dnl
-dnl Selection of the geometric backend.
-dnl Geos is still needed for now.
-dnl
+dnl SFCGAL compilation mode
 dnl ===========================================================================
 
 AC_ARG_ENABLE([debug-sfcgal], AC_HELP_STRING([--enable-debug-sfcgal], [Use SFCGAL in debug mode]), 
 	[SFCGAL_MODE=Debug], [SFCGAL_MODE=Release]) 
 
 if test "x$SFCGAL_MODE" = "xDebug"; then
-   SFCGAL_CPPFLAGS+=" -DPOSTGIS_WITH_SFCGAL -frounding-math"
+   SFCGAL_CPPFLAGS+=" -frounding-math"
    POSTGIS_SFCGAL_OBJS="lwgeom_sfcgal.o"
    SFCGAL_LDFLAGS+=" -lSFCGALd"
 else
-   SFCGAL_CPPFLAGS+=" -DPOSTGIS_WITH_SFCGAL -frounding-math"
+   SFCGAL_CPPFLAGS+=" -frounding-math"
    POSTGIS_SFCGAL_OBJS="lwgeom_sfcgal.o"
    SFCGAL_LDFLAGS+=" -lSFCGAL"
 fi
@@ -1222,9 +1231,6 @@ if test "x$RASTER" = "xraster"; then
     AC_MSG_RESULT([  GDAL config:          ${GDAL_CONFIG}])
     AC_MSG_RESULT([  GDAL version:         ${GDAL_FULL_VERSION}])
 fi
-AC_MSG_RESULT([  CGAL directory:       ${CGALDIR}])
-AC_MSG_RESULT([  SFCGAL directory:     ${SFCGALDIR}])
-AC_MSG_RESULT([  SFCGAL mode:          ${SFCGAL_MODE}])
 AC_MSG_RESULT([  PostgreSQL config:    ${PGCONFIG}])
 AC_MSG_RESULT([  PostgreSQL version:   ${PGSQL_FULL_VERSION}])
 AC_MSG_RESULT([  PROJ4 version:        ${POSTGIS_PROJ_VERSION}])
@@ -1245,6 +1251,14 @@ if test "x$TOPOLOGY" = "xtopology"; then
     AC_MSG_RESULT([  PostGIS Topology:     enabled])
 else
     AC_MSG_RESULT([  PostGIS Topology:     disabled])
+fi
+if test "x$POSTGIS_SFCGAL" = "x1"; then
+    AC_MSG_RESULT([  SFCGAL support:       yes])
+    AC_MSG_RESULT([  CGAL directory:       ${CGALDIR}])
+    AC_MSG_RESULT([  SFCGAL directory:     ${SFCGALDIR}])
+    AC_MSG_RESULT([  SFCGAL mode:          ${SFCGAL_MODE}])
+else
+    AC_MSG_RESULT([  SFCGAL support:       no])
 fi
 AC_MSG_RESULT()
 AC_MSG_RESULT([ -------- Documentation Generation -------- ])

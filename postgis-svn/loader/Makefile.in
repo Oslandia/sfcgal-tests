@@ -27,7 +27,10 @@ top_builddir = @top_builddir@
 SHELL = @SHELL@
 INSTALL = $(SHELL) ../install-sh
 LIBTOOL = @LIBTOOL@
-SFCGAL_LDFLAGS=@SFCGAL_LDFLAGS@
+
+ifeq (@POSTGIS_SFCGAL@,1)
+SFCGAL_LDFLAGS = @SFCGAL_LDFLAGS@
+endif
 
 # Filenames with extension as determined by the OS
 PGSQL2SHP-CLI=pgsql2shp@EXESUFFIX@
