@@ -471,11 +471,11 @@ if options.report_file:
             
             plt.title( q )
             # native
-            plt.plot( X, cpuY[0], marker='o', label='Native' )
+            plt.plot( X, cpuY[0], marker='o', label='Native inexact' )
             # SFCGAL
-            plt.plot( X, cpuY[1], marker='o', label='SFCGAL' )
+            plt.plot( X, cpuY[1], marker='o', label='Serialized exact' )
             # Referenced
-            plt.plot( X, cpuY[2], marker='o', label='Referenced' )
+            plt.plot( X, cpuY[2], marker='o', label='Referenced exact' )
             plt.legend(loc='upper left')
             pdf.savefig()
             
@@ -485,11 +485,11 @@ if options.report_file:
             
             plt.title( q + ", memory usage" )
             # native
-            plt.plot( X, memY[0], marker='o', label='Native' )
+            plt.plot( X, memY[0], marker='o', label='Native inexact' )
             # SFCGAL
-            plt.plot( X, memY[1], marker='o', label='SFCGAL' )
+            plt.plot( X, memY[1], marker='o', label='Serialized exact' )
             # Referenced
-            plt.plot( X, memY[2], marker='o', label='Referenced' )
+            plt.plot( X, memY[2], marker='o', label='Referenced exact' )
             plt.legend(loc='upper left')
             pdf.savefig()
 
