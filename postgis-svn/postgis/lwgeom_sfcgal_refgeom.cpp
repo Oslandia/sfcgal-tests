@@ -107,7 +107,7 @@ public:
 	 * Save a reference to the given Geometry.
 	 * It is associated with a MemoryContext with a proper life cycle.
 	 */
-	static void reference( FunctionCallInfo fcinfo, SFCGAL::PreparedGeometry* geometry )
+	static void reference( SFCGAL::PreparedGeometry* geometry )
 	{
 		//
 		// Find the memory context used to store SFCGAL::Geometry*
@@ -231,9 +231,9 @@ static SFCGAL::PreparedGeometry* get_geometry_arg_secure( FunctionCallInfo fcinf
 /**
  * Prepare a Geometry for return
  */
-Datum prepare_for_return( FunctionCallInfo fcinfo, SFCGAL::PreparedGeometry* geo )
+Datum prepare_for_return( SFCGAL::PreparedGeometry* geo )
 {
-	GeometryPool::reference( fcinfo, geo );
+	GeometryPool::reference( geo );
 
 	// allocate space for a pointer
 	void** p = (void**)palloc( sizeof(void*) );
@@ -264,7 +264,7 @@ extern "C" Datum sfcgal_ref_in(PG_FUNCTION_ARGS)
 		PG_RETURN_NULL();
 	}
 
-	return prepare_for_return( fcinfo, g.release() );
+	return prepare_for_return( g.release() );
 }
 
 /**
@@ -287,7 +287,7 @@ extern "C" Datum sfcgal_ref_from_text(PG_FUNCTION_ARGS)
 		PG_RETURN_NULL();
 	}
 
-	return prepare_for_return( fcinfo, g.release() );
+	return prepare_for_return( g.release() );
 }
 
 /**
@@ -340,7 +340,7 @@ extern "C" Datum sfcgal_ref_from_geom(PG_FUNCTION_ARGS)
 		PG_RETURN_NULL();
 	}
 	
-	return prepare_for_return( fcinfo, g1.release() );
+	return prepare_for_return( g1.release() );
 }
 
 
@@ -381,7 +381,7 @@ extern "C" Datum sfcgal_geom_from_ref(PG_FUNCTION_ARGS)
 #define SFCGAL_TYPE_refGeometry_WRAPPER_CONVERT_RESULT()   /* */
 #define SFCGAL_TYPE_refGeometry_WRAPPER_RETURN()			\
 	SFCGAL::PreparedGeometry* geo = new SFCGAL::PreparedGeometry( result, input0->SRID() ); \
-	return prepare_for_return( fcinfo, geo );
+	return prepare_for_return( geo );
 
 #define SFCGAL_TYPE_refGeometry_WRAPPER_TO_CSTR( i )		\
 	"%s", BOOST_PP_CAT( input, i ) ->asEWKT().c_str()
