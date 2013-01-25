@@ -1,7 +1,7 @@
 ---------------------------------------------------------------------------
 --
 -- PostGIS - Exact geometry types for PostgreSQL
--- Copyright 2012-2013 Oslandia <hugo.mercier@oslandia.com>
+-- Copyright 2012-2013 Oslandia <contact@oslandia.com>
 --
 -- This is free software; you can redistribute and/or modify it under
 -- the terms of the GNU General Public Licence. See the COPYING file.

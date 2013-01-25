@@ -1,3 +1,17 @@
+/**********************************************************************
+ *
+ * PostGIS - Spatial Types for PostgreSQL
+ * http://postgis.refractions.net
+ *
+ * Wrapper around SFCGAL for 3D and exact geometries
+ *
+ * Copyright 2012-2013 Oslandia <contact@oslandia.com>
+ *
+ * This is free software; you can redistribute and/or modify it under
+ * the terms of the GNU General Public Licence. See the COPYING file.
+ *
+ **********************************************************************/
+
 #include <stdexcept>
 #include <vector>
 #include <string>
