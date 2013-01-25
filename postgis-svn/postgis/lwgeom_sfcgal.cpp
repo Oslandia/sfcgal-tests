@@ -138,7 +138,7 @@ extern "C" Datum sfcgal_from_text(PG_FUNCTION_ARGS)
 
 // Type index, unique for each type
 // How to extract a ith argument of type Geometry
-#define WRAPPER_INPUT_Geometry( i )					\
+#define SFCGAL_TYPE_Geometry_WRAPPER_INPUT( i )				\
 	GSERIALIZED* BOOST_PP_CAT(input, i);				\
 	BOOST_PP_CAT(input,i) = (GSERIALIZED*)PG_DETOAST_DATUM(PG_GETARG_DATUM(i)); \
 	std::auto_ptr<SFCGAL::Geometry> BOOST_PP_CAT(geom,i);		\
@@ -151,10 +151,10 @@ extern "C" Datum sfcgal_from_text(PG_FUNCTION_ARGS)
 		PG_RETURN_NULL();					\
 	}
 // Use dereference for std::auto_ptr<Geometry>
-#define WRAPPER_ACCESS_INPUT_Geometry( i )  \
+#define SFCGAL_TYPE_Geometry_WRAPPER_ACCESS_INPUT( i )  \
 	* BOOST_PP_CAT( geom, i )
 
-#define WRAPPER_CONVERT_RESULT_Geometry()					\
+#define SFCGAL_TYPE_Geometry_WRAPPER_CONVERT_RESULT()			\
 	GSERIALIZED* gresult;						\
 	if ( result.get() ) {						\
 		try {							\
@@ -166,36 +166,36 @@ extern "C" Datum sfcgal_from_text(PG_FUNCTION_ARGS)
 		}							\
 	}
 
-#define WRAPPER_RETURN_Geometry() \
+#define SFCGAL_TYPE_Geometry_WRAPPER_RETURN()	\
 	PG_RETURN_POINTER( gresult )
 
-#define WRAPPER_TO_CSTR_Geometry( i )				\
+#define SFCGAL_TYPE_Geometry_WRAPPER_TO_CSTR( i )	\
 	"%s", BOOST_PP_CAT( geom, i )->asText().c_str()
 
-#define WRAPPER_FREE_INPUT_Geometry( i )		\
+#define SFCGAL_TYPE_Geometry_WRAPPER_FREE_INPUT( i )	\
 	PG_FREE_IF_COPY( BOOST_PP_CAT( input, i ), i )
 
-#define WRAPPER_DECLARE_RETURN_VAR_Geometry() \
+#define SFCGAL_TYPE_Geometry_WRAPPER_DECLARE_RETURN_VAR()	\
 	std::auto_ptr<SFCGAL::Geometry> result
 
-WRAPPER_DECLARE_SFCGAL_FUNCTION( intersects, SFCGAL::algorithm::intersects, bool, (Geometry)(Geometry) )
-WRAPPER_DECLARE_SFCGAL_FUNCTION( intersects3D, SFCGAL::algorithm::intersects3D, bool, (Geometry)(Geometry) )
-WRAPPER_DECLARE_SFCGAL_FUNCTION( intersection, SFCGAL::algorithm::intersection, Geometry, (Geometry)(Geometry) )
-WRAPPER_DECLARE_SFCGAL_FUNCTION( intersection3D, SFCGAL::algorithm::intersection3D, Geometry, (Geometry)(Geometry) )
-WRAPPER_DECLARE_SFCGAL_FUNCTION( convexhull, SFCGAL::algorithm::convexHull, Geometry, (Geometry) )
-WRAPPER_DECLARE_SFCGAL_FUNCTION( convexhull3D, SFCGAL::algorithm::convexHull3D, Geometry, (Geometry) )
-WRAPPER_DECLARE_SFCGAL_FUNCTION( area, SFCGAL::algorithm::area2D, double, (Geometry) )
-WRAPPER_DECLARE_SFCGAL_FUNCTION( area3D, SFCGAL::algorithm::area3D, double, (Geometry) )
-WRAPPER_DECLARE_SFCGAL_FUNCTION( hasplane, _sfcgal_hasplane, bool, (Geometry) )
-WRAPPER_DECLARE_SFCGAL_FUNCTION( pointing_up, _sfcgal_pointing_up, bool, (Geometry) )
-WRAPPER_DECLARE_SFCGAL_FUNCTION( triangulate, _sfcgal_triangulate, Geometry, (Geometry) )
-WRAPPER_DECLARE_SFCGAL_FUNCTION( triangulate2D, _sfcgal_triangulate2D, Geometry, (Geometry) )
-WRAPPER_DECLARE_SFCGAL_FUNCTION( extrude, _sfcgal_extrude, Geometry, (Geometry)(double)(double)(double) )
-WRAPPER_DECLARE_SFCGAL_FUNCTION( make_solid, _sfcgal_make_solid, Geometry, (Geometry) )
-WRAPPER_DECLARE_SFCGAL_FUNCTION( force_z_up, _sfcgal_force_z_up, Geometry, (Geometry) )
-WRAPPER_DECLARE_SFCGAL_FUNCTION( distance, SFCGAL::algorithm::distance, double, (Geometry)(Geometry) )
-WRAPPER_DECLARE_SFCGAL_FUNCTION( distance3D, SFCGAL::algorithm::distance3D, double, (Geometry)(Geometry) )
-WRAPPER_DECLARE_SFCGAL_FUNCTION( copy, _sfcgal_copy, Geometry, (Geometry) )
+SFCGAL_WRAPPER_DECLARE_FUNCTION( intersects, SFCGAL::algorithm::intersects, bool, (Geometry)(Geometry) )
+SFCGAL_WRAPPER_DECLARE_FUNCTION( intersects3D, SFCGAL::algorithm::intersects3D, bool, (Geometry)(Geometry) )
+SFCGAL_WRAPPER_DECLARE_FUNCTION( intersection, SFCGAL::algorithm::intersection, Geometry, (Geometry)(Geometry) )
+SFCGAL_WRAPPER_DECLARE_FUNCTION( intersection3D, SFCGAL::algorithm::intersection3D, Geometry, (Geometry)(Geometry) )
+SFCGAL_WRAPPER_DECLARE_FUNCTION( convexhull, SFCGAL::algorithm::convexHull, Geometry, (Geometry) )
+SFCGAL_WRAPPER_DECLARE_FUNCTION( convexhull3D, SFCGAL::algorithm::convexHull3D, Geometry, (Geometry) )
+SFCGAL_WRAPPER_DECLARE_FUNCTION( area, SFCGAL::algorithm::area2D, double, (Geometry) )
+SFCGAL_WRAPPER_DECLARE_FUNCTION( area3D, SFCGAL::algorithm::area3D, double, (Geometry) )
+SFCGAL_WRAPPER_DECLARE_FUNCTION( hasplane, _sfcgal_hasplane, bool, (Geometry) )
+SFCGAL_WRAPPER_DECLARE_FUNCTION( pointing_up, _sfcgal_pointing_up, bool, (Geometry) )
+SFCGAL_WRAPPER_DECLARE_FUNCTION( triangulate, _sfcgal_triangulate, Geometry, (Geometry) )
+SFCGAL_WRAPPER_DECLARE_FUNCTION( triangulate2D, _sfcgal_triangulate2D, Geometry, (Geometry) )
+SFCGAL_WRAPPER_DECLARE_FUNCTION( extrude, _sfcgal_extrude, Geometry, (Geometry)(double)(double)(double) )
+SFCGAL_WRAPPER_DECLARE_FUNCTION( make_solid, _sfcgal_make_solid, Geometry, (Geometry) )
+SFCGAL_WRAPPER_DECLARE_FUNCTION( force_z_up, _sfcgal_force_z_up, Geometry, (Geometry) )
+SFCGAL_WRAPPER_DECLARE_FUNCTION( distance, SFCGAL::algorithm::distance, double, (Geometry)(Geometry) )
+SFCGAL_WRAPPER_DECLARE_FUNCTION( distance3D, SFCGAL::algorithm::distance3D, double, (Geometry)(Geometry) )
+SFCGAL_WRAPPER_DECLARE_FUNCTION( copy, _sfcgal_copy, Geometry, (Geometry) )
 
 extern "C" {
 	PG_FUNCTION_INFO_V1(sfcgal_collection_extract);

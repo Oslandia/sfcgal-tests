@@ -367,42 +367,41 @@ extern "C" Datum sfcgal_geom_from_ref(PG_FUNCTION_ARGS)
  * Macros for ref geometry argument wrapping
  *
  */
-#define WRAPPER_INPUT_refGeometry( i ) \
+#define SFCGAL_TYPE_refGeometry_WRAPPER_INPUT( i )			\
 	SFCGAL::PreparedGeometry* BOOST_PP_CAT( input, i ) = get_geometry_arg_secure( fcinfo, i ); \
-	if ( ! BOOST_PP_CAT( input, i ) ) { \
-		PG_RETURN_NULL();	    \
+	if ( ! BOOST_PP_CAT( input, i ) ) {				\
+		PG_RETURN_NULL();					\
 	}
 
-#define WRAPPER_ACCESS_INPUT_refGeometry( i )  \
+#define SFCGAL_TYPE_refGeometry_WRAPPER_ACCESS_INPUT( i )	\
 	BOOST_PP_CAT( input, i )->geometry()
 
-#define WRAPPER_FREE_INPUT_refGeometry( i )  /* */
-#define WRAPPER_DECLARE_RETURN_VAR_refGeometry() \
-	std::auto_ptr<SFCGAL::Geometry> result
-#define WRAPPER_CONVERT_RESULT_refGeometry()   /* */
-#define WRAPPER_RETURN_refGeometry() \
+#define SFCGAL_TYPE_refGeometry_WRAPPER_FREE_INPUT( i )  /* */
+#define SFCGAL_TYPE_refGeometry_WRAPPER_DECLARE_RETURN_VAR() std::auto_ptr<SFCGAL::Geometry> result
+#define SFCGAL_TYPE_refGeometry_WRAPPER_CONVERT_RESULT()   /* */
+#define SFCGAL_TYPE_refGeometry_WRAPPER_RETURN()			\
 	SFCGAL::PreparedGeometry* geo = new SFCGAL::PreparedGeometry( result, input0->SRID() ); \
 	return prepare_for_return( fcinfo, geo );
 
-#define WRAPPER_TO_CSTR_refGeometry( i )   			\
+#define SFCGAL_TYPE_refGeometry_WRAPPER_TO_CSTR( i )		\
 	"%s", BOOST_PP_CAT( input, i ) ->asEWKT().c_str()
 
-WRAPPER_DECLARE_SFCGAL_FUNCTION( ref_intersects, SFCGAL::algorithm::intersects, bool, (refGeometry)(refGeometry) )
-WRAPPER_DECLARE_SFCGAL_FUNCTION( ref_intersects3D, SFCGAL::algorithm::intersects3D, bool, (refGeometry)(refGeometry) )
-WRAPPER_DECLARE_SFCGAL_FUNCTION( ref_intersection, SFCGAL::algorithm::intersection, refGeometry, (refGeometry)(refGeometry) )
-WRAPPER_DECLARE_SFCGAL_FUNCTION( ref_intersection3D, SFCGAL::algorithm::intersection3D, refGeometry, (refGeometry)(refGeometry) )
-WRAPPER_DECLARE_SFCGAL_FUNCTION( ref_convexhull, SFCGAL::algorithm::convexHull, refGeometry, (refGeometry) )
-WRAPPER_DECLARE_SFCGAL_FUNCTION( ref_convexhull3D, SFCGAL::algorithm::convexHull3D, refGeometry, (refGeometry) )
-WRAPPER_DECLARE_SFCGAL_FUNCTION( ref_area, SFCGAL::algorithm::area2D, double, (refGeometry) )
-WRAPPER_DECLARE_SFCGAL_FUNCTION( ref_area3D, SFCGAL::algorithm::area3D, double, (refGeometry) )
-WRAPPER_DECLARE_SFCGAL_FUNCTION( ref_hasplane, _sfcgal_hasplane, bool, (refGeometry) )
-WRAPPER_DECLARE_SFCGAL_FUNCTION( ref_pointing_up, _sfcgal_pointing_up, bool, (refGeometry) )
-WRAPPER_DECLARE_SFCGAL_FUNCTION( ref_triangulate, _sfcgal_triangulate, refGeometry, (refGeometry) )
-WRAPPER_DECLARE_SFCGAL_FUNCTION( ref_triangulate2D, _sfcgal_triangulate2D, refGeometry, (refGeometry) )
-WRAPPER_DECLARE_SFCGAL_FUNCTION( ref_extrude, _sfcgal_extrude, refGeometry, (refGeometry)(double)(double)(double) )
-WRAPPER_DECLARE_SFCGAL_FUNCTION( ref_make_solid, _sfcgal_make_solid, refGeometry, (refGeometry) )
-WRAPPER_DECLARE_SFCGAL_FUNCTION( ref_force_z_up, _sfcgal_force_z_up, refGeometry, (refGeometry) )
-WRAPPER_DECLARE_SFCGAL_FUNCTION( ref_distance, SFCGAL::algorithm::distance, double, (refGeometry)(refGeometry) )
-WRAPPER_DECLARE_SFCGAL_FUNCTION( ref_distance3D, SFCGAL::algorithm::distance3D, double, (refGeometry)(refGeometry) )
-WRAPPER_DECLARE_SFCGAL_FUNCTION( ref_copy, _sfcgal_copy, refGeometry, (refGeometry) )
+SFCGAL_WRAPPER_DECLARE_FUNCTION( ref_intersects, SFCGAL::algorithm::intersects, bool, (refGeometry)(refGeometry) )
+SFCGAL_WRAPPER_DECLARE_FUNCTION( ref_intersects3D, SFCGAL::algorithm::intersects3D, bool, (refGeometry)(refGeometry) )
+SFCGAL_WRAPPER_DECLARE_FUNCTION( ref_intersection, SFCGAL::algorithm::intersection, refGeometry, (refGeometry)(refGeometry) )
+SFCGAL_WRAPPER_DECLARE_FUNCTION( ref_intersection3D, SFCGAL::algorithm::intersection3D, refGeometry, (refGeometry)(refGeometry) )
+SFCGAL_WRAPPER_DECLARE_FUNCTION( ref_convexhull, SFCGAL::algorithm::convexHull, refGeometry, (refGeometry) )
+SFCGAL_WRAPPER_DECLARE_FUNCTION( ref_convexhull3D, SFCGAL::algorithm::convexHull3D, refGeometry, (refGeometry) )
+SFCGAL_WRAPPER_DECLARE_FUNCTION( ref_area, SFCGAL::algorithm::area2D, double, (refGeometry) )
+SFCGAL_WRAPPER_DECLARE_FUNCTION( ref_area3D, SFCGAL::algorithm::area3D, double, (refGeometry) )
+SFCGAL_WRAPPER_DECLARE_FUNCTION( ref_hasplane, _sfcgal_hasplane, bool, (refGeometry) )
+SFCGAL_WRAPPER_DECLARE_FUNCTION( ref_pointing_up, _sfcgal_pointing_up, bool, (refGeometry) )
+SFCGAL_WRAPPER_DECLARE_FUNCTION( ref_triangulate, _sfcgal_triangulate, refGeometry, (refGeometry) )
+SFCGAL_WRAPPER_DECLARE_FUNCTION( ref_triangulate2D, _sfcgal_triangulate2D, refGeometry, (refGeometry) )
+SFCGAL_WRAPPER_DECLARE_FUNCTION( ref_extrude, _sfcgal_extrude, refGeometry, (refGeometry)(double)(double)(double) )
+SFCGAL_WRAPPER_DECLARE_FUNCTION( ref_make_solid, _sfcgal_make_solid, refGeometry, (refGeometry) )
+SFCGAL_WRAPPER_DECLARE_FUNCTION( ref_force_z_up, _sfcgal_force_z_up, refGeometry, (refGeometry) )
+SFCGAL_WRAPPER_DECLARE_FUNCTION( ref_distance, SFCGAL::algorithm::distance, double, (refGeometry)(refGeometry) )
+SFCGAL_WRAPPER_DECLARE_FUNCTION( ref_distance3D, SFCGAL::algorithm::distance3D, double, (refGeometry)(refGeometry) )
+SFCGAL_WRAPPER_DECLARE_FUNCTION( ref_copy, _sfcgal_copy, refGeometry, (refGeometry) )
 

@@ -177,38 +177,38 @@ extern "C" Datum sfcgal_geom_from_exact(PG_FUNCTION_ARGS)
  *
  */
 
-#define WRAPPER_INPUT_exactGeometry( i ) \
+#define SFCGAL_TYPE_exactGeometry_WRAPPER_INPUT( i ) \
 	std::auto_ptr<SFCGAL::PreparedGeometry> BOOST_PP_CAT( input, i )  = unserializeExactGeometry( (ExactGeometry*)PG_DETOAST_DATUM(PG_GETARG_DATUM(i)) );
 
-#define WRAPPER_ACCESS_INPUT_exactGeometry( i )  \
+#define SFCGAL_TYPE_exactGeometry_WRAPPER_ACCESS_INPUT( i )  \
 	BOOST_PP_CAT( input, i )->geometry()
 
-#define WRAPPER_FREE_INPUT_exactGeometry( i )  /* */
-#define WRAPPER_CONVERT_RESULT_exactGeometry()   /* */
-#define WRAPPER_DECLARE_RETURN_VAR_exactGeometry() \
+#define SFCGAL_TYPE_exactGeometry_WRAPPER_FREE_INPUT( i )  /* */
+#define SFCGAL_TYPE_exactGeometry_WRAPPER_CONVERT_RESULT()   /* */
+#define SFCGAL_TYPE_exactGeometry_WRAPPER_DECLARE_RETURN_VAR() \
 	std::auto_ptr<SFCGAL::Geometry> result
-#define WRAPPER_RETURN_exactGeometry() \
+#define SFCGAL_TYPE_exactGeometry_WRAPPER_RETURN() \
 	SFCGAL::PreparedGeometry pgeom( result, input0->SRID() ); \
 	PG_RETURN_POINTER( serializeExactGeometry( pgeom ) );
 
-#define WRAPPER_TO_CSTR_exactGeometry( i )   			\
+#define SFCGAL_TYPE_exactGeometry_WRAPPER_TO_CSTR( i )   			\
 	"%s", BOOST_PP_CAT( input, i ) ->asEWKT().c_str()
 
-WRAPPER_DECLARE_SFCGAL_FUNCTION( exact_intersects, SFCGAL::algorithm::intersects, bool, (exactGeometry)(exactGeometry) )
-WRAPPER_DECLARE_SFCGAL_FUNCTION( exact_intersects3D, SFCGAL::algorithm::intersects3D, bool, (exactGeometry)(exactGeometry) )
-WRAPPER_DECLARE_SFCGAL_FUNCTION( exact_intersection, SFCGAL::algorithm::intersection, exactGeometry, (exactGeometry)(exactGeometry) )
-WRAPPER_DECLARE_SFCGAL_FUNCTION( exact_intersection3D, SFCGAL::algorithm::intersection3D, exactGeometry, (exactGeometry)(exactGeometry) )
-WRAPPER_DECLARE_SFCGAL_FUNCTION( exact_convexhull, SFCGAL::algorithm::convexHull, exactGeometry, (exactGeometry) )
-WRAPPER_DECLARE_SFCGAL_FUNCTION( exact_convexhull3D, SFCGAL::algorithm::convexHull3D, exactGeometry, (exactGeometry) )
-WRAPPER_DECLARE_SFCGAL_FUNCTION( exact_area, SFCGAL::algorithm::area2D, double, (exactGeometry) )
-WRAPPER_DECLARE_SFCGAL_FUNCTION( exact_area3D, SFCGAL::algorithm::area3D, double, (exactGeometry) )
-WRAPPER_DECLARE_SFCGAL_FUNCTION( exact_hasplane, _sfcgal_hasplane, bool, (exactGeometry) )
-WRAPPER_DECLARE_SFCGAL_FUNCTION( exact_pointing_up, _sfcgal_pointing_up, bool, (exactGeometry) )
-WRAPPER_DECLARE_SFCGAL_FUNCTION( exact_triangulate, _sfcgal_triangulate, exactGeometry, (exactGeometry) )
-WRAPPER_DECLARE_SFCGAL_FUNCTION( exact_triangulate2D, _sfcgal_triangulate2D, exactGeometry, (exactGeometry) )
-WRAPPER_DECLARE_SFCGAL_FUNCTION( exact_extrude, _sfcgal_extrude, exactGeometry, (exactGeometry)(double)(double)(double) )
-WRAPPER_DECLARE_SFCGAL_FUNCTION( exact_make_solid, _sfcgal_make_solid, exactGeometry, (exactGeometry) )
-WRAPPER_DECLARE_SFCGAL_FUNCTION( exact_force_z_up, _sfcgal_force_z_up, exactGeometry, (exactGeometry) )
-WRAPPER_DECLARE_SFCGAL_FUNCTION( exact_distance, SFCGAL::algorithm::distance, double, (exactGeometry)(exactGeometry) )
-WRAPPER_DECLARE_SFCGAL_FUNCTION( exact_distance3D, SFCGAL::algorithm::distance3D, double, (exactGeometry)(exactGeometry) )
-WRAPPER_DECLARE_SFCGAL_FUNCTION( exact_copy, _sfcgal_copy, exactGeometry, (exactGeometry) )
+SFCGAL_WRAPPER_DECLARE_FUNCTION( exact_intersects, SFCGAL::algorithm::intersects, bool, (exactGeometry)(exactGeometry) )
+SFCGAL_WRAPPER_DECLARE_FUNCTION( exact_intersects3D, SFCGAL::algorithm::intersects3D, bool, (exactGeometry)(exactGeometry) )
+SFCGAL_WRAPPER_DECLARE_FUNCTION( exact_intersection, SFCGAL::algorithm::intersection, exactGeometry, (exactGeometry)(exactGeometry) )
+SFCGAL_WRAPPER_DECLARE_FUNCTION( exact_intersection3D, SFCGAL::algorithm::intersection3D, exactGeometry, (exactGeometry)(exactGeometry) )
+SFCGAL_WRAPPER_DECLARE_FUNCTION( exact_convexhull, SFCGAL::algorithm::convexHull, exactGeometry, (exactGeometry) )
+SFCGAL_WRAPPER_DECLARE_FUNCTION( exact_convexhull3D, SFCGAL::algorithm::convexHull3D, exactGeometry, (exactGeometry) )
+SFCGAL_WRAPPER_DECLARE_FUNCTION( exact_area, SFCGAL::algorithm::area2D, double, (exactGeometry) )
+SFCGAL_WRAPPER_DECLARE_FUNCTION( exact_area3D, SFCGAL::algorithm::area3D, double, (exactGeometry) )
+SFCGAL_WRAPPER_DECLARE_FUNCTION( exact_hasplane, _sfcgal_hasplane, bool, (exactGeometry) )
+SFCGAL_WRAPPER_DECLARE_FUNCTION( exact_pointing_up, _sfcgal_pointing_up, bool, (exactGeometry) )
+SFCGAL_WRAPPER_DECLARE_FUNCTION( exact_triangulate, _sfcgal_triangulate, exactGeometry, (exactGeometry) )
+SFCGAL_WRAPPER_DECLARE_FUNCTION( exact_triangulate2D, _sfcgal_triangulate2D, exactGeometry, (exactGeometry) )
+SFCGAL_WRAPPER_DECLARE_FUNCTION( exact_extrude, _sfcgal_extrude, exactGeometry, (exactGeometry)(double)(double)(double) )
+SFCGAL_WRAPPER_DECLARE_FUNCTION( exact_make_solid, _sfcgal_make_solid, exactGeometry, (exactGeometry) )
+SFCGAL_WRAPPER_DECLARE_FUNCTION( exact_force_z_up, _sfcgal_force_z_up, exactGeometry, (exactGeometry) )
+SFCGAL_WRAPPER_DECLARE_FUNCTION( exact_distance, SFCGAL::algorithm::distance, double, (exactGeometry)(exactGeometry) )
+SFCGAL_WRAPPER_DECLARE_FUNCTION( exact_distance3D, SFCGAL::algorithm::distance3D, double, (exactGeometry)(exactGeometry) )
+SFCGAL_WRAPPER_DECLARE_FUNCTION( exact_copy, _sfcgal_copy, exactGeometry, (exactGeometry) )
