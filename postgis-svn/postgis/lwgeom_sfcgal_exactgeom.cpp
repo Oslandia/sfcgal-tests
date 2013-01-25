@@ -214,7 +214,7 @@ SFCGAL_WRAPPER_DECLARE_FUNCTION( exact_intersection, SFCGAL::algorithm::intersec
 SFCGAL_WRAPPER_DECLARE_FUNCTION( exact_intersection3D, SFCGAL::algorithm::intersection3D, exactGeometry, (exactGeometry)(exactGeometry) )
 SFCGAL_WRAPPER_DECLARE_FUNCTION( exact_convexhull, SFCGAL::algorithm::convexHull, exactGeometry, (exactGeometry) )
 SFCGAL_WRAPPER_DECLARE_FUNCTION( exact_convexhull3D, SFCGAL::algorithm::convexHull3D, exactGeometry, (exactGeometry) )
-SFCGAL_WRAPPER_DECLARE_FUNCTION( exact_area, SFCGAL::algorithm::area2D, double, (exactGeometry) )
+SFCGAL_WRAPPER_DECLARE_FUNCTION( exact_area, SFCGAL::algorithm::area, double, (exactGeometry) )
 SFCGAL_WRAPPER_DECLARE_FUNCTION( exact_area3D, SFCGAL::algorithm::area3D, double, (exactGeometry) )
 SFCGAL_WRAPPER_DECLARE_FUNCTION( exact_hasplane, _sfcgal_hasplane, bool, (exactGeometry) )
 SFCGAL_WRAPPER_DECLARE_FUNCTION( exact_pointing_up, _sfcgal_pointing_up, bool, (exactGeometry) )

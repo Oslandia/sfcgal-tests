@@ -406,7 +406,7 @@ SFCGAL_WRAPPER_DECLARE_FUNCTION( ref_intersection, SFCGAL::algorithm::intersecti
 SFCGAL_WRAPPER_DECLARE_FUNCTION( ref_intersection3D, SFCGAL::algorithm::intersection3D, refGeometry, (refGeometry)(refGeometry) )
 SFCGAL_WRAPPER_DECLARE_FUNCTION( ref_convexhull, SFCGAL::algorithm::convexHull, refGeometry, (refGeometry) )
 SFCGAL_WRAPPER_DECLARE_FUNCTION( ref_convexhull3D, SFCGAL::algorithm::convexHull3D, refGeometry, (refGeometry) )
-SFCGAL_WRAPPER_DECLARE_FUNCTION( ref_area, SFCGAL::algorithm::area2D, double, (refGeometry) )
+SFCGAL_WRAPPER_DECLARE_FUNCTION( ref_area, SFCGAL::algorithm::area, double, (refGeometry) )
 SFCGAL_WRAPPER_DECLARE_FUNCTION( ref_area3D, SFCGAL::algorithm::area3D, double, (refGeometry) )
 SFCGAL_WRAPPER_DECLARE_FUNCTION( ref_hasplane, _sfcgal_hasplane, bool, (refGeometry) )
 SFCGAL_WRAPPER_DECLARE_FUNCTION( ref_pointing_up, _sfcgal_pointing_up, bool, (refGeometry) )

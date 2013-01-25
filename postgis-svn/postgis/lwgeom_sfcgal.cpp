@@ -198,7 +198,7 @@ SFCGAL_WRAPPER_DECLARE_FUNCTION( intersection, SFCGAL::algorithm::intersection, 
 SFCGAL_WRAPPER_DECLARE_FUNCTION( intersection3D, SFCGAL::algorithm::intersection3D, Geometry, (Geometry)(Geometry) )
 SFCGAL_WRAPPER_DECLARE_FUNCTION( convexhull, SFCGAL::algorithm::convexHull, Geometry, (Geometry) )
 SFCGAL_WRAPPER_DECLARE_FUNCTION( convexhull3D, SFCGAL::algorithm::convexHull3D, Geometry, (Geometry) )
-SFCGAL_WRAPPER_DECLARE_FUNCTION( area, SFCGAL::algorithm::area2D, double, (Geometry) )
+SFCGAL_WRAPPER_DECLARE_FUNCTION( area, SFCGAL::algorithm::area, double, (Geometry) )
 SFCGAL_WRAPPER_DECLARE_FUNCTION( area3D, SFCGAL::algorithm::area3D, double, (Geometry) )
 SFCGAL_WRAPPER_DECLARE_FUNCTION( hasplane, _sfcgal_hasplane, bool, (Geometry) )
 SFCGAL_WRAPPER_DECLARE_FUNCTION( pointing_up, _sfcgal_pointing_up, bool, (Geometry) )
