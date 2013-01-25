@@ -211,3 +211,4 @@ WRAPPER_DECLARE_SFCGAL_FUNCTION( exact_make_solid, _sfcgal_make_solid, exactGeom
 WRAPPER_DECLARE_SFCGAL_FUNCTION( exact_force_z_up, _sfcgal_force_z_up, exactGeometry, (exactGeometry) )
 WRAPPER_DECLARE_SFCGAL_FUNCTION( exact_distance, SFCGAL::algorithm::distance, double, (exactGeometry)(exactGeometry) )
 WRAPPER_DECLARE_SFCGAL_FUNCTION( exact_distance3D, SFCGAL::algorithm::distance3D, double, (exactGeometry)(exactGeometry) )
+WRAPPER_DECLARE_SFCGAL_FUNCTION( exact_copy, _sfcgal_copy, exactGeometry, (exactGeometry) )

@@ -32,6 +32,41 @@ extern "C" {
 }
 
 /**
+ * Only used for debugging purpose
+ */
+static void display_children( MemoryContext context, int level, MemoryContext current )
+{
+	char indent[level*2+1];
+	memset( indent, ' ', level*2 );
+	indent[level*2] = 0;
+
+	if ( context == current && level > 0 ) {
+		indent[0] = '>';
+	}
+	
+	lwnotice( "%s%s %p", indent, context->name, context );
+
+	MemoryContext child = context->firstchild;
+	while ( child != 0 ) {
+		display_children( child, level + 2, current );
+		child = child->nextchild;
+	}
+}
+
+/**
+ * Only used for debugging purpose
+ */
+static void display_contexts( MemoryContext refContext )
+{
+	MemoryContext c = refContext;
+	while ( c != TopMemoryContext ) {
+		c = c->parent;
+	}
+
+	display_children( c, 0, refContext );
+}
+
+/**
  * Global pool of referenced geometries.
  *
  * A list of pointers to geometry can be associated to a MemoryContext
@@ -78,15 +113,19 @@ public:
 		// Find the memory context used to store SFCGAL::Geometry*
 		// Ideally, this would be in the closest parent context of the current function evaluation.
 		//
-		// If the current function call is not part of an ExprNode, it means this context is volatile and will be
+		// If the current context is a not descendant of a PortalMemory, it means this context is volatile and will be
 		// reset between calls within the same tuple access. In this case, attach our context to the MessageContext
-		MemoryContext parentContext;
+		// else, use the current context
+		MemoryContext parentContext = MessageContext;
 		
-		if ( fcinfo->flinfo->fn_expr != NULL ) {
-			parentContext = CurrentMemoryContext;
-		}
-		else {
-			parentContext = MessageContext;
+		MemoryContext c = CurrentMemoryContext;
+		while ( c != TopMemoryContext ) {
+			// If it's a child of a Portal[Heap]Memory
+			if ( !strncmp( c->name, "Portal", 6 ) ) {
+				parentContext = CurrentMemoryContext;
+				break;
+			}
+			c = c->parent;
 		}
 		
 		MemoryContext childContext = 0;
@@ -200,41 +239,6 @@ Datum prepare_for_return( FunctionCallInfo fcinfo, SFCGAL::PreparedGeometry* geo
 	void** p = (void**)palloc( sizeof(void*) );
 	*p = (void *)geo;
 	return Datum(p);
-}
-
-/**
- * Only used for debugging purpose
- */
-static void display_children( MemoryContext context, int level, MemoryContext current )
-{
-	char indent[level*2+1];
-	memset( indent, ' ', level*2 );
-	indent[level*2] = 0;
-
-	if ( context == current && level > 0 ) {
-		indent[0] = '>';
-	}
-	
-	lwnotice( "%s%s %p", indent, context->name, context );
-
-	MemoryContext child = context->firstchild;
-	while ( child != 0 ) {
-		display_children( child, level + 2, current );
-		child = child->nextchild;
-	}
-}
-
-/**
- * Only used for debugging purpose
- */
-static void display_contexts( MemoryContext refContext )
-{
-	MemoryContext c = refContext;
-	while ( c != TopMemoryContext ) {
-		c = c->parent;
-	}
-
-	display_children( c, 0, refContext );
 }
 
 extern "C" {
@@ -400,4 +404,5 @@ WRAPPER_DECLARE_SFCGAL_FUNCTION( ref_make_solid, _sfcgal_make_solid, refGeometry
 WRAPPER_DECLARE_SFCGAL_FUNCTION( ref_force_z_up, _sfcgal_force_z_up, refGeometry, (refGeometry) )
 WRAPPER_DECLARE_SFCGAL_FUNCTION( ref_distance, SFCGAL::algorithm::distance, double, (refGeometry)(refGeometry) )
 WRAPPER_DECLARE_SFCGAL_FUNCTION( ref_distance3D, SFCGAL::algorithm::distance3D, double, (refGeometry)(refGeometry) )
+WRAPPER_DECLARE_SFCGAL_FUNCTION( ref_copy, _sfcgal_copy, refGeometry, (refGeometry) )
 

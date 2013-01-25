@@ -73,3 +73,8 @@ std::auto_ptr<SFCGAL::Geometry> _sfcgal_force_z_up( SFCGAL::Geometry& g )
 	    g.accept( forceZ );
 	    return std::auto_ptr<SFCGAL::Geometry>( g.clone() );
 }
+
+std::auto_ptr<SFCGAL::Geometry> _sfcgal_copy( SFCGAL::Geometry& g )
+{
+	    return std::auto_ptr<SFCGAL::Geometry>( g.clone() );
+}

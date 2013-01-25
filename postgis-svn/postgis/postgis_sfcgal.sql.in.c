@@ -110,6 +110,11 @@ CREATE OR REPLACE FUNCTION sfcgal.ST_CollectionExtract(geometry, int4)
 	AS 'MODULE_PATHNAME','sfcgal_collection_extract'
 	LANGUAGE 'c' IMMUTABLE STRICT;
 
+CREATE OR REPLACE FUNCTION sfcgal.ST_Copy(geometry)
+	RETURNS geometry
+	AS 'MODULE_PATHNAME','sfcgal_copy'
+	LANGUAGE 'c' IMMUTABLE STRICT;
+
 -----------------------------------------------------------------------
 --
 -- SFCGAL Referenced exact geometries
@@ -237,6 +242,10 @@ CREATE OR REPLACE FUNCTION sfcgal.ST_PointingUp(ref_geometry)
 	AS 'MODULE_PATHNAME','sfcgal_ref_pointing_up'
 	LANGUAGE 'c' IMMUTABLE STRICT;
 
+CREATE OR REPLACE FUNCTION sfcgal.ST_Copy(ref_geometry)
+	RETURNS ref_geometry
+	AS 'MODULE_PATHNAME','sfcgal_ref_copy'
+	LANGUAGE 'c' IMMUTABLE STRICT;
 
 -----------------------------------------------------------------------
 --
@@ -364,3 +373,7 @@ CREATE OR REPLACE FUNCTION sfcgal.ST_PointingUp(exact_geometry)
 	AS 'MODULE_PATHNAME','sfcgal_exact_pointing_up'
 	LANGUAGE 'c' IMMUTABLE STRICT;
 
+CREATE OR REPLACE FUNCTION sfcgal.ST_Copy(exact_geometry)
+	RETURNS exact_geometry
+	AS 'MODULE_PATHNAME','sfcgal_exact_copy'
+	LANGUAGE 'c' IMMUTABLE STRICT;

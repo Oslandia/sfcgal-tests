@@ -142,4 +142,9 @@ std::auto_ptr<SFCGAL::Geometry> _sfcgal_make_solid( const SFCGAL::Geometry& g );
 
 std::auto_ptr<SFCGAL::Geometry> _sfcgal_force_z_up( SFCGAL::Geometry& g );
 
+//
+//
+// copy input to output, used for serialization tests
+std::auto_ptr<SFCGAL::Geometry> _sfcgal_copy( SFCGAL::Geometry& g );
+
 #endif

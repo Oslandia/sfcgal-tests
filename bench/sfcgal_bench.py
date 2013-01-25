@@ -270,55 +270,19 @@ cleaning_query="""
 -- drop table sfcgal.geoms;
 """
 
-unserialization1_query="""
-select sum(case when
-sfcgal._st_intersects( sfcgal.st_geomfromtext(st_astext(geom1)), sfcgal.st_geomfromtext(st_astext(geom2)) )
-then 1 else 0 end)
-from sfcgal.geoms;
-"""
-
-unserialization2_query="""
-select sum(case when
-sfcgal.st_intersects( sfcgal.st_exactgeomfromtext(st_astext(geom1)), sfcgal.st_exactgeomfromtext(st_astext(geom2)) )
-then 1 else 0 end)
-from sfcgal.geoms;
-"""
-
-unserialization3_query="""
-select sum(case when
-sfcgal.st_intersects( sfcgal.st_refgeomfromtext(st_astext(geom1)), sfcgal.st_refgeomfromtext(st_astext(geom2)) )
-then 1 else 0 end)
-from sfcgal.geoms;
-"""
-
 serialization1_query="""
-select sum(case when
-sfcgal._st_intersects(
-  sfcgal.st_intersection( sfcgal.st_geomfromtext(st_astext(geom1)), sfcgal.st_geomfromtext(st_astext(geom2)) ),
-  sfcgal.st_geomfromtext(st_astext(geom1))
-)
-then 1 else 0 end)
-from sfcgal.geoms;
+select sum( st_npoints(
+  sfcgal.st_copy( sfcgal.st_copy( sfcgal.st_copy( sfcgal.st_copy( geom1 )))))) from sfcgal.geoms;
 """
 
 serialization2_query="""
-select sum(case when
-sfcgal.st_intersects(
-  sfcgal.st_intersection( sfcgal.st_exactgeomfromtext(st_astext(geom1)), sfcgal.st_exactgeomfromtext(st_astext(geom2)) ),
-  sfcgal.st_exactgeomfromtext(st_astext(geom1))
-)
-then 1 else 0 end)
-from sfcgal.geoms;
+select sum( st_npoints(sfcgal.st_geometry(
+  sfcgal.st_copy( sfcgal.st_copy( sfcgal.st_copy( sfcgal.st_copy( sfcgal.st_exactgeometry(geom1) ))))))) from sfcgal.geoms;
 """
 
 serialization3_query="""
-select sum(case when
-sfcgal.st_intersects(
-  sfcgal.st_intersection( sfcgal.st_refgeomfromtext(st_astext(geom1)), sfcgal.st_refgeomfromtext(st_astext(geom2)) ),
-  sfcgal.st_refgeomfromtext(st_astext(geom1))
-)
-then 1 else 0 end)
-from sfcgal.geoms;
+select sum( st_npoints(sfcgal.st_geometry(
+  sfcgal.st_copy( sfcgal.st_copy( sfcgal.st_copy( sfcgal.st_copy( sfcgal.st_refgeometry(geom1) ))))))) from sfcgal.geoms;
 """
 
 queries = {}
@@ -340,10 +304,6 @@ queries['convexhull_multipoint'] = [create_multipoints, convexhull_query]
 
 queries['triangulate_poly'] = [ create_poly_poly, triangulate_query]
 
-# special query: unserialization
-queries['unserialization'] = [ create_poly_poly, [ unserialization1_query,
-                                                   unserialization2_query,
-                                                   unserialization3_query ] ]
 # special query: chaining of serialization / unserialization
 queries['serialization'] = [ create_poly_poly, [ serialization1_query,
                                                  serialization2_query,

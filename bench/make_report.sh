@@ -22,5 +22,5 @@ echo $cmd
 $cmd
 
 # serialization report
-python ./sfcgal_bench.py -r ${reportfile}_serialization.pdf $npoints -n $ngeoms -x unserialization -x serialization
+python ./sfcgal_bench.py -r ${reportfile}_serialization.pdf $npoints -n $ngeoms -x serialization
 

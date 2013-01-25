@@ -195,6 +195,7 @@ WRAPPER_DECLARE_SFCGAL_FUNCTION( make_solid, _sfcgal_make_solid, Geometry, (Geom
 WRAPPER_DECLARE_SFCGAL_FUNCTION( force_z_up, _sfcgal_force_z_up, Geometry, (Geometry) )
 WRAPPER_DECLARE_SFCGAL_FUNCTION( distance, SFCGAL::algorithm::distance, double, (Geometry)(Geometry) )
 WRAPPER_DECLARE_SFCGAL_FUNCTION( distance3D, SFCGAL::algorithm::distance3D, double, (Geometry)(Geometry) )
+WRAPPER_DECLARE_SFCGAL_FUNCTION( copy, _sfcgal_copy, Geometry, (Geometry) )
 
 extern "C" {
 	PG_FUNCTION_INFO_V1(sfcgal_collection_extract);
