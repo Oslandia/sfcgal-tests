@@ -96,7 +96,7 @@ prepare_query="""
 drop function if exists sfcgal.gen_linestring(int, float);
 create or replace function sfcgal.gen_linestring( N int, maxr float) returns geometry as $$
   select st_makeline(array(
-    select st_makepoint(r*cos(alpha), r*sin(alpha))
+    select st_makepoint(round(r*cos(alpha) * (1<<10))/(1<<10), round(r*sin(alpha)*(1<<10))/(1<<10))
     from (
 -- cut the circle into equal pieces and take a random point on each radius
       select (f-1)*(2*pi()/$1) as alpha, random()*($2/2) + $2/2 as r
@@ -113,7 +113,9 @@ language SQL;
 drop function if exists sfcgal.gen_linestring3D(int, float);
 create or replace function sfcgal.gen_linestring3D( N int, maxr float) returns geometry as $$
   select st_makeline(array(
-    select st_makepoint(r*cos(alpha), r*sin(alpha), r*sin(alpha))
+    select st_makepoint(round(r*cos(alpha)*(1<<10))/(1<<10),
+                        round(r*sin(alpha)*(1<<10))/(1<<10),
+                        round(r*sin(alpha)*(1<<10))/(1<<10))
     from (
 -- cut the circle into equal pieces and take a random point on each radius
       select (f-1)*(2*pi()/$1) as alpha, random()*($2/2) + $2/2 as r

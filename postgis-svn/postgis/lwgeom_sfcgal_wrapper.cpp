@@ -114,6 +114,11 @@ std::auto_ptr<SFCGAL::Geometry> _sfcgal_buffer2D( SFCGAL::Geometry& g, double ra
 	for ( int i = 1; i < nPoints; ++i ) {
 		double x = radius * sin( i * 2 * M_PI / nPoints );
 		double y = radius * cos( i * 2 * M_PI / nPoints );
+
+		int32_t k = 1<<24;
+		// reduce precision of x and y
+		x = double(int32_t(x * k)) / k;
+		y = double(int32_t(y * k)) / k;
 		ls->addPoint( new Point( x, y ) );
 	}
 	ls->addPoint( new Point( 0, radius ) );
