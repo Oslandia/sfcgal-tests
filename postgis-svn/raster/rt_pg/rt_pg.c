@@ -1,5 +1,5 @@
 /*
- * $Id: rt_pg.c 10937 2012-12-27 12:56:59Z strk $
+ * $Id: rt_pg.c 11008 2013-01-20 16:56:27Z dustymugs $
  *
  * WKTRaster - Raster Types for PostGIS
  * http://www.postgis.org/support/wiki/index.php?WKTRasterHomePage
@@ -11346,10 +11346,22 @@ Datum RASTER_GDALWarp(PG_FUNCTION_ARGS)
 	}
 	/* target SRID == src SRID, no reprojection */
 	else if (dst_srid == src_srid) {
-		/* set geotransform */
+		/* set geotransform BUT ONLY when geotransform isn't default */
 		if (src_srid == SRID_UNKNOWN) {
-			double gt[6] = {0, 10, 0, 0, 0, -10};
-			rt_raster_set_geotransform_matrix(raster, gt);
+			double gt[6];
+
+			rt_raster_get_geotransform_matrix(raster, gt);
+			if (
+				FLT_EQ(gt[0], 0) &&
+				FLT_EQ(gt[1], 1) &&
+				FLT_EQ(gt[2], 0) &&
+				FLT_EQ(gt[3], 0) &&
+				FLT_EQ(gt[4], 0) &&
+				FLT_EQ(gt[5], -1)
+			) {
+				double ngt[6] = {0, 10, 0, 0, 0, -10};
+				rt_raster_set_geotransform_matrix(raster, ngt);
+			}
 		}
 
 		no_srid = 1;
