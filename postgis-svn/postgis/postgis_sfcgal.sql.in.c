@@ -115,6 +115,11 @@ CREATE OR REPLACE FUNCTION sfcgal.ST_Copy(geometry)
 	AS 'MODULE_PATHNAME','sfcgal_copy'
 	LANGUAGE 'c' IMMUTABLE STRICT;
 
+CREATE OR REPLACE FUNCTION sfcgal.ST_Buffer(geometry, float8, int4)
+        RETURNS geometry
+        AS 'MODULE_PATHNAME','sfcgal_buffer'
+        LANGUAGE 'c' IMMUTABLE STRICT;
+
 -----------------------------------------------------------------------
 --
 -- SFCGAL Referenced exact geometries
@@ -247,6 +252,11 @@ CREATE OR REPLACE FUNCTION sfcgal.ST_Copy(ref_geometry)
 	AS 'MODULE_PATHNAME','sfcgal_ref_copy'
 	LANGUAGE 'c' IMMUTABLE STRICT;
 
+CREATE OR REPLACE FUNCTION sfcgal.ST_Buffer(ref_geometry, float8, int4)
+        RETURNS ref_geometry
+        AS 'MODULE_PATHNAME','sfcgal_ref_buffer'
+        LANGUAGE 'c' IMMUTABLE STRICT;
+
 -----------------------------------------------------------------------
 --
 -- SFCGAL Serialized exact geometries
@@ -377,3 +387,8 @@ CREATE OR REPLACE FUNCTION sfcgal.ST_Copy(exact_geometry)
 	RETURNS exact_geometry
 	AS 'MODULE_PATHNAME','sfcgal_exact_copy'
 	LANGUAGE 'c' IMMUTABLE STRICT;
+
+CREATE OR REPLACE FUNCTION sfcgal.ST_Buffer(exact_geometry, float8, int4)
+        RETURNS exact_geometry
+        AS 'MODULE_PATHNAME','sfcgal_exact_buffer'
+        LANGUAGE 'c' IMMUTABLE STRICT;

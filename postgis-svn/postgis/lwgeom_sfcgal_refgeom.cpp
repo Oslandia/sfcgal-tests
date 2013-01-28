@@ -418,4 +418,5 @@ SFCGAL_WRAPPER_DECLARE_FUNCTION( ref_force_z_up, _sfcgal_force_z_up, refGeometry
 SFCGAL_WRAPPER_DECLARE_FUNCTION( ref_distance, SFCGAL::algorithm::distance, double, (refGeometry)(refGeometry) )
 SFCGAL_WRAPPER_DECLARE_FUNCTION( ref_distance3D, SFCGAL::algorithm::distance3D, double, (refGeometry)(refGeometry) )
 SFCGAL_WRAPPER_DECLARE_FUNCTION( ref_copy, _sfcgal_copy, refGeometry, (refGeometry) )
+SFCGAL_WRAPPER_DECLARE_FUNCTION( ref_buffer, _sfcgal_buffer2D, refGeometry, (refGeometry)(double)(int) )
 

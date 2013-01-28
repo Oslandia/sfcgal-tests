@@ -15,7 +15,11 @@
 #include <boost/format.hpp>
 
 #include <SFCGAL/Geometry.h>
+#include <SFCGAL/Point.h>
+#include <SFCGAL/LineString.h>
+#include <SFCGAL/Polygon.h>
 #include <SFCGAL/TriangulatedSurface.h>
+#include <SFCGAL/MultiPolygon.h>
 #include <SFCGAL/Solid.h>
 #include <SFCGAL/algorithm/triangulate.h>
 #include <SFCGAL/algorithm/extrude.h>
@@ -23,6 +27,7 @@
 #include <SFCGAL/algorithm/intersection.h>
 #include <SFCGAL/algorithm/plane.h>
 #include <SFCGAL/transform/ForceZOrderPoints.h>
+#include <SFCGAL/algorithm/minkowskiSum.h>
 
 #include "lwgeom_sfcgal_wrapper.h"
 
@@ -91,4 +96,32 @@ std::auto_ptr<SFCGAL::Geometry> _sfcgal_force_z_up( SFCGAL::Geometry& g )
 std::auto_ptr<SFCGAL::Geometry> _sfcgal_copy( SFCGAL::Geometry& g )
 {
 	    return std::auto_ptr<SFCGAL::Geometry>( g.clone() );
+}
+
+///
+///
+/// ST_buffer
+std::auto_ptr<SFCGAL::Geometry> _sfcgal_buffer2D( SFCGAL::Geometry& g, double radius, int nSegQuarter )
+{
+	using namespace SFCGAL;
+
+	//
+	// build a circle approximation
+	int nPoints = nSegQuarter * 4;
+
+	LineString* ls = new LineString;
+	ls->addPoint( new Point( 0, radius ) );
+	for ( int i = 1; i < nPoints; ++i ) {
+		double x = radius * sin( i * 2 * M_PI / nPoints );
+		double y = radius * cos( i * 2 * M_PI / nPoints );
+		ls->addPoint( new Point( x, y ) );
+	}
+	ls->addPoint( new Point( 0, radius ) );
+	std::auto_ptr<Polygon> poly(new Polygon( ls ));
+
+	std::auto_ptr<MultiPolygon> sum = algorithm::minkowskiSum( g, *poly );
+	if ( sum->numGeometries() == 1 ) {
+		return std::auto_ptr<Geometry>( sum->geometryN(0).clone() );
+	}
+	return std::auto_ptr<Geometry>(sum);
 }

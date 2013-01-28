@@ -28,6 +28,17 @@
 #define SFCGAL_TYPE_bool_WRAPPER_RETURN()                    PG_RETURN_BOOL( result )
 
 /**
+ * generic int argument wrapper
+ */
+#define SFCGAL_TYPE_int_WRAPPER_INPUT( i )                int32_t BOOST_PP_CAT(input, i) = PG_GETARG_INT32(i);
+#define SFCGAL_TYPE_int_WRAPPER_ACCESS_INPUT( i )         BOOST_PP_CAT( input, i )
+#define SFCGAL_TYPE_int_WRAPPER_TO_CSTR( i )              "%ld", BOOST_PP_CAT( input, i )
+#define SFCGAL_TYPE_int_WRAPPER_DECLARE_RETURN_VAR()      int32_t result
+#define SFCGAL_TYPE_int_WRAPPER_CONVERT_RESULT()          /**/
+#define SFCGAL_TYPE_int_WRAPPER_FREE_INPUT( i )           /**/
+#define SFCGAL_TYPE_int_WRAPPER_RETURN()                  PG_RETURN_INT32( result )
+
+/**
  * generic double argument wrapper
  */
 #define SFCGAL_TYPE_double_WRAPPER_INPUT( i )                double BOOST_PP_CAT(input, i) = PG_GETARG_FLOAT8(i);
@@ -138,4 +149,7 @@ std::auto_ptr<SFCGAL::Geometry> _sfcgal_force_z_up( SFCGAL::Geometry& g );
 // copy input to output, used for serialization tests
 std::auto_ptr<SFCGAL::Geometry> _sfcgal_copy( SFCGAL::Geometry& g );
 
+//
+//
+std::auto_ptr<SFCGAL::Geometry> _sfcgal_buffer2D( SFCGAL::Geometry& g, double radius, int nSegQuarter );
 #endif

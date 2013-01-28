@@ -266,6 +266,10 @@ triangulate_query="""
 select sum(st_numgeometries(st_delaunaytriangles(geom1))) from sfcgal.geoms;
 """
 
+buffer_query="""
+select st_area( st_buffer( geom1, 2, 4 ) ) from sfcgal.geoms;
+"""
+
 cleaning_query="""
 -- drop table sfcgal.geoms;
 """
@@ -303,6 +307,7 @@ queries['area_polygon'] = [ create_poly_poly, area_poly_query ]
 queries['convexhull_multipoint'] = [create_multipoints, convexhull_query]
 
 queries['triangulate_poly'] = [ create_poly_poly, triangulate_query]
+queries['buffer_poly'] = [ create_poly_poly, buffer_query]
 
 # special query: chaining of serialization / unserialization
 queries['serialization'] = [ create_poly_poly, [ serialization1_query,
