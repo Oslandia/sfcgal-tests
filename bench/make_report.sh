@@ -6,7 +6,7 @@ if [ -z "$1" ]; then
 fi
 
 reportfile=$1
-points="4 5 10 20 50 100 200"
+points="4 5 10 20 50 100 200 500 1500 5000"
 ngeoms="1000"
 algos="intersects_polygon_polygon intersects_point_polygon intersects_ls_poly_h intersects_ls_ls intersection_polygon_polygon intersection_poly_poly_h intersection_ls_ls area_polygon convexhull_multipoint"
 

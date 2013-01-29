@@ -380,6 +380,8 @@ for n_pts in options.n_pts:
         print "Preparing ..."
 
     bench.call_sql( prepare_query )
+    if not options.quiet:
+        print "Ok"
 
     ltype, lresults = bench.bench_queries( selqueries )
 
@@ -405,7 +407,7 @@ if options.report_file:
             plt.xlabel( "# of points" )
             plt.ylabel( "Time (s)" )
             
-            plt.title( q )
+            plt.title( q + ", %d geoms" % options.n_objs )
             # GEOS
             plt.plot( X, v[0], marker='o', label='GEOS' )
             # SFCGAL
@@ -436,7 +438,7 @@ if options.report_file:
             plt.xlabel( "# of points" )
             plt.ylabel( "Time (s)" )
             
-            plt.title( q )
+            plt.title( q + ", %d geoms" % options.n_objs )
             # native
             plt.plot( X, cpuY[0], marker='o', label='Native inexact' )
             # SFCGAL
@@ -450,7 +452,7 @@ if options.report_file:
             plt.xlabel( "# of points" )
             plt.ylabel( "kB" )
             
-            plt.title( q + ", memory usage" )
+            plt.title( q + ", %d geoms, memory usage" % options.n_objs )
             # native
             plt.plot( X, memY[0], marker='o', label='Native inexact' )
             # SFCGAL
