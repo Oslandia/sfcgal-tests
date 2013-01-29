@@ -434,24 +434,36 @@ if options.report_file:
                     cpuY[j].append(cpu[i][j])
                     memY[j].append(mem[i][j])
 
+            # native vs exact_geometry
             plt.clf()
             plt.xlabel( "# of points" )
             plt.ylabel( "Time (s)" )
             
-            plt.title( q + ", %d geoms" % options.n_objs )
+            plt.title( "native vs. exact " + q + ", %d geoms" % options.n_objs )
             # native
             plt.plot( X, cpuY[0], marker='o', label='Native inexact' )
             # SFCGAL
             plt.plot( X, cpuY[1], marker='o', label='Serialized exact' )
-            # Referenced
-            plt.plot( X, cpuY[2], marker='o', label='Referenced exact' )
             plt.legend(loc='upper left')
             pdf.savefig()
             
+            # native vs ref_geometry
+            plt.clf()
+            plt.xlabel( "# of points" )
+            plt.ylabel( "Time (s)" )
+            
+            plt.title( "native vs. referenced " + q + ", %d geoms" % options.n_objs )
+            # native
+            plt.plot( X, cpuY[0], marker='o', label='Native inexact' )
+            # SFCGAL
+            plt.plot( X, cpuY[2], marker='o', label='Referenced exact' )
+            plt.legend(loc='upper left')
+            pdf.savefig()
+
             plt.clf()
             plt.xlabel( "# of points" )
             plt.ylabel( "kB" )
-            
+
             plt.title( q + ", %d geoms, memory usage" % options.n_objs )
             # native
             plt.plot( X, memY[0], marker='o', label='Native inexact' )
