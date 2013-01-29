@@ -96,13 +96,14 @@ SFCGAL_OBJS = lwgeom_sfcgal.o
 
 LT_SA_OBJS = $(SA_OBJS:.o=.lo)
 LT_NM_OBJS = $(NM_OBJS:.o=.lo)
-LT_OBJS = $(LT_SA_OBJS) $(LT_NM_OBJS) $(LT_CPP_OBJS)
 
 ifeq (@POSTGIS_SFCGAL@,1)
 CXXFLAGS += @SFCGAL_CPPFLAGS@
 LDFLAGS += SFCGAL_LDFLAGS@
-LT_OBJS += $(SFCGAL_OBJS:.o=.lo)
+LT_CPP_OBJS = $(SFCGAL_OBJS:.o=.lo)
 endif
+
+LT_OBJS = $(LT_SA_OBJS) $(LT_NM_OBJS) $(LT_CPP_OBJS)
 
 SA_HEADERS = \
 	liblwgeom.h \
