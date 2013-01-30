@@ -12,7 +12,7 @@
 
 CC=@CC@
 CFLAGS=@CFLAGS@ @WARNFLAGS@ @GEOS_CPPFLAGS@ @PROJ_CPPFLAGS@ 
-LDFLAGS = @GEOS_LDFLAGS@ -lgeos_c @SFCGAL_LDFLAGS@
+LDFLAGS = @GEOS_LDFLAGS@ -lgeos_c
 top_builddir = @top_builddir@
 SHELL = @SHELL@
 LIBTOOL = @LIBTOOL@
@@ -30,7 +30,6 @@ OBJS=	\
 	cu_ptarray.o \
 	cu_geodetic.o \
 	cu_geos.o \
-	cu_sfcgal.o \
 	cu_tree.o \
 	cu_measures.o \
 	cu_node.o \
@@ -50,6 +49,12 @@ OBJS=	\
 	cu_in_wkb.o \
 	cu_in_wkt.o \
 	cu_tester.o 
+
+ifeq (@POSTGIS_SFCGAL@,1)
+CXXFLAGS += @SFCGAL_CPPFLAGS@
+LDFLAGS += @SFCGAL_LDFLAGS@
+OBJS += cu_sfcgal.o
+endif
 
 # If we couldn't find the cunit library then display a helpful message
 ifeq ($(CUNIT_LDFLAGS),)
