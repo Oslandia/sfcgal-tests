@@ -120,6 +120,16 @@ CREATE OR REPLACE FUNCTION sfcgal.ST_Buffer(geometry, float8, int4)
         AS 'MODULE_PATHNAME','sfcgal_buffer'
         LANGUAGE 'c' IMMUTABLE STRICT;
 
+CREATE OR REPLACE FUNCTION sfcgal.ST_Offset(geometry, float8, int4)
+        RETURNS geometry
+        AS 'MODULE_PATHNAME','sfcgal_offset'
+        LANGUAGE 'c' IMMUTABLE STRICT;
+
+CREATE OR REPLACE FUNCTION sfcgal.ST_Round(geometry, int4)
+        RETURNS geometry
+        AS 'MODULE_PATHNAME','sfcgal_round'
+        LANGUAGE 'c' IMMUTABLE STRICT;
+
 -----------------------------------------------------------------------
 --
 -- SFCGAL Referenced exact geometries

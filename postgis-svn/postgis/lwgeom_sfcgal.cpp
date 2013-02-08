@@ -211,6 +211,8 @@ SFCGAL_WRAPPER_DECLARE_FUNCTION( distance, SFCGAL::algorithm::distance, double, 
 SFCGAL_WRAPPER_DECLARE_FUNCTION( distance3D, SFCGAL::algorithm::distance3D, double, (Geometry)(Geometry) )
 SFCGAL_WRAPPER_DECLARE_FUNCTION( copy, _sfcgal_copy, Geometry, (Geometry) )
 SFCGAL_WRAPPER_DECLARE_FUNCTION( buffer, _sfcgal_buffer2D, Geometry, (Geometry)(double)(int) )
+SFCGAL_WRAPPER_DECLARE_FUNCTION( round, _sfcgal_round, Geometry, (Geometry)(int) )
+SFCGAL_WRAPPER_DECLARE_FUNCTION( offset, _sfcgal_offset, Geometry, (Geometry)(double)(int) )
 
 extern "C" {
 	PG_FUNCTION_INFO_V1(sfcgal_collection_extract);

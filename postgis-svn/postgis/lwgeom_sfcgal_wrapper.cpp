@@ -27,7 +27,9 @@
 #include <SFCGAL/algorithm/intersection.h>
 #include <SFCGAL/algorithm/plane.h>
 #include <SFCGAL/transform/ForceZOrderPoints.h>
+#include <SFCGAL/transform/RoundTransform.h>
 #include <SFCGAL/algorithm/minkowskiSum.h>
+#include <SFCGAL/algorithm/offset.h>
 
 #include "lwgeom_sfcgal_wrapper.h"
 
@@ -129,4 +131,23 @@ std::auto_ptr<SFCGAL::Geometry> _sfcgal_buffer2D( SFCGAL::Geometry& g, double ra
 		return std::auto_ptr<Geometry>( sum->geometryN(0).clone() );
 	}
 	return std::auto_ptr<Geometry>(sum);
+}
+
+
+///
+///
+/// ST_Offset
+std::auto_ptr<SFCGAL::Geometry> _sfcgal_offset( SFCGAL::Geometry& g, double radius, int nSegQuarter )
+{
+	return std::auto_ptr<SFCGAL::Geometry>( SFCGAL::algorithm::offset( g, radius ).release() );
+}
+
+///
+///
+/// ST_round
+std::auto_ptr<SFCGAL::Geometry> _sfcgal_round( SFCGAL::Geometry& g, int scale )
+{
+	SFCGAL::transform::RoundTransform roundT( scale );
+	g.accept( roundT );
+	return std::auto_ptr<SFCGAL::Geometry>( g.clone() );
 }
