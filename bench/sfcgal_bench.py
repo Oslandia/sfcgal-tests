@@ -18,7 +18,7 @@ class PgBench(object):
         self.quiet = quiet
 
     def call_sql( self, query, measure_mem = False ):
-        fmt_query = query % { 'n_id' : self.n_objs, 'n_pts' : self.n_pts }
+        fmt_query = query % { 'n_id' : self.n_objs, 'n_pts' : self.n_pts, 'scaling': (1<<24) }
         start_time = time.time()
         p = subprocess.Popen( ['psql', '-q', '-t', '-d', self.db_name ], stdin = subprocess.PIPE, stdout = subprocess.PIPE, stderr = sys.stderr )
         if measure_mem:
@@ -96,7 +96,7 @@ prepare_query="""
 drop function if exists sfcgal.gen_linestring(int, float);
 create or replace function sfcgal.gen_linestring( N int, maxr float) returns geometry as $$
   select st_makeline(array(
-    select st_makepoint(round(r*cos(alpha) * (1<<24))/(1<<24), round(r*sin(alpha)*(1<<24))/(1<<24))
+    select st_makepoint(r*cos(alpha), r*sin(alpha))
     from (
 -- cut the circle into equal pieces and take a random point on each radius
       select (f-1)*(2*pi()/$1) as alpha, random()*($2/2) + $2/2 as r
@@ -113,9 +113,7 @@ language SQL;
 drop function if exists sfcgal.gen_linestring3D(int, float);
 create or replace function sfcgal.gen_linestring3D( N int, maxr float) returns geometry as $$
   select st_makeline(array(
-    select st_makepoint(round(r*cos(alpha)*(1<<24))/(1<<24),
-                        round(r*sin(alpha)*(1<<24))/(1<<24),
-                        round(r*sin(alpha)*(1<<24))/(1<<24))
+    select st_makepoint(r*cos(alpha),r*sin(alpha),r*sin(alpha))
     from (
 -- cut the circle into equal pieces and take a random point on each radius
       select (f-1)*(2*pi()/$1) as alpha, random()*($2/2) + $2/2 as r
@@ -180,61 +178,61 @@ language SQL;
 """
 
 create_poly_poly = """
-select id, st_translate(sfcgal.gen_poly1(%(n_pts)d, 10), random()*16-8, random()*16-8) as geom1,
-  st_translate(sfcgal.gen_poly1(%(n_pts)d, 10), random()*16-8, random()*16-8) as geom2
+select id, sfcgal.st_round(st_translate(sfcgal.gen_poly1(%(n_pts)d, 10), random()*16-8, random()*16-8),%(scaling)d) as geom1,
+  sfcgal.st_round(st_translate(sfcgal.gen_poly1(%(n_pts)d, 10), random()*16-8, random()*16-8),%(scaling)d) as geom2
 from generate_series(1, %(n_id)d) as id;
 """
 
 create_ls_ls = """
 select
   id,
-  st_translate(sfcgal.gen_linestring(%(n_pts)d, 10), random()*16-8, random()*16-8) as geom1,
-  st_translate(sfcgal.gen_linestring(%(n_pts)d, 10), random()*16-8, random()*16-8) as geom2
+  sfcgal.st_round(st_translate(sfcgal.gen_linestring(%(n_pts)d, 10), random()*16-8, random()*16-8),%(scaling)d) as geom1,
+  sfcgal.st_round(st_translate(sfcgal.gen_linestring(%(n_pts)d, 10), random()*16-8, random()*16-8),%(scaling)d) as geom2
 from generate_series(1, %(n_id)d) as id;
 """
 
 create_ls_ls_3D = """
 select
   id,
-  st_translate(sfcgal.gen_linestring3D(%(n_pts)d, 10), random()*16-8, random()*16-8) as geom1,
-  st_translate(sfcgal.gen_linestring3D(%(n_pts)d, 10), random()*16-8, random()*16-8) as geom2
+  sfcgal.st_round(st_translate(sfcgal.gen_linestring3D(%(n_pts)d, 10), random()*16-8, random()*16-8),%(scaling)d) as geom1,
+  sfcgal.st_round(st_translate(sfcgal.gen_linestring3D(%(n_pts)d, 10), random()*16-8, random()*16-8),%(scaling)d) as geom2
 from generate_series(1, %(n_id)d) as id;
 """
 
 create_ls_poly_h = """
 select
   id,
-  st_translate(sfcgal.gen_linestring(%(n_pts)d, 10), random()*16-8, random()*16-8) as geom1,
-  st_translate(sfcgal.gen_poly_with_hole(%(n_pts)d, 10), random()*16-8, random()*16-8) as geom2
+  sfcgal.st_round(st_translate(sfcgal.gen_linestring(%(n_pts)d, 10), random()*16-8, random()*16-8),%(scaling)d) as geom1,
+  sfcgal.st_round(st_translate(sfcgal.gen_poly_with_hole(%(n_pts)d, 10), random()*16-8, random()*16-8),%(scaling)d) as geom2
 from generate_series(1, %(n_id)d) as id;
 """
 
 create_ls_tin = """
 select
   id,
-  st_translate(sfcgal.gen_linestring(%(n_pts)d, 10), random()*16-8, random()*16-8) as geom1,
-  st_translate(sfcgal.gen_tin(%(n_pts)d, 10), random()*16-8, random()*16-8) as geom2
+  sfcgal.st_round(st_translate(sfcgal.gen_linestring(%(n_pts)d, 10), random()*16-8, random()*16-8),%(scaling)d) as geom1,
+  sfcgal.st_round(st_translate(sfcgal.gen_tin(%(n_pts)d, 10), random()*16-8, random()*16-8),%(scaling)d) as geom2
 from generate_series(1, %(n_id)d) as id;
 """
 
 create_poly_h_poly_h = """
-select id, st_translate(sfcgal.gen_poly_with_hole(%(n_pts)d, 10), random()*16-8, random()*16-8) as geom1,
-  st_translate(sfcgal.gen_poly_with_hole(%(n_pts)d, 10), random()*16-8, random()*16-8) as geom2
+select id, sfcgal.st_round(st_translate(sfcgal.gen_poly_with_hole(%(n_pts)d, 10), random()*16-8, random()*16-8),%(scaling)d) as geom1,
+  sfcgal.st_round(st_translate(sfcgal.gen_poly_with_hole(%(n_pts)d, 10), random()*16-8, random()*16-8),%(scaling)d) as geom2
 from generate_series(1, %(n_id)d) as id;
 """
 
 create_point_poly = """
 select
 id,
-st_makepoint(random()*16-8, random()*16-8) as geom1,
-st_translate(sfcgal.gen_poly1(%(n_pts)d, 10), random()*16-8, random()*16-8) as geom2
+sfcgal.st_round(st_makepoint(random()*16-8, random()*16-8),%(scaling)d) as geom1,
+sfcgal.st_round(st_translate(sfcgal.gen_poly1(%(n_pts)d, 10), random()*16-8, random()*16-8),%(scaling)d) as geom2
 from generate_series(1, %(n_id)d) as id;
 """
 
 create_multipoints = """
 select
 id,
-sfcgal.gen_mpoints(%(n_pts)d) as geom1
+sfcgal.st_round(sfcgal.gen_mpoints(%(n_pts)d),%(scaling)d) as geom1
 from generate_series(1, %(n_id)d) as id;
 """
 
