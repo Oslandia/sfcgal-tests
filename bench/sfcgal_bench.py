@@ -169,8 +169,8 @@ $$
 language SQL;
 
 -- generate a random solid (extrusion from a polygon) ($1: # of triangles, $2: max radius)
-drop function if exists sfcgal.gen_solid(int, float);
-create or replace function sfcgal.gen_solid( N int, maxr float) returns geometry as $$
+drop function if exists sfcgal.gen_poly3d(int, float);
+create or replace function sfcgal.gen_poly3d( N int, maxr float) returns geometry as $$
 -- generate a polygon and extrude it
 select sfcgal.st_extrude( st_force_3d(sfcgal.gen_poly1($1,$2)), 0.0, 0.0, $2 )
 $$
@@ -180,6 +180,12 @@ language SQL;
 create_poly_poly = """
 select id, sfcgal.st_round(st_translate(sfcgal.gen_poly1(%(n_pts)d, 10), random()*16-8, random()*16-8),%(scaling)d) as geom1,
   sfcgal.st_round(st_translate(sfcgal.gen_poly1(%(n_pts)d, 10), random()*16-8, random()*16-8),%(scaling)d) as geom2
+from generate_series(1, %(n_id)d) as id;
+"""
+
+create_poly_poly_3D = """
+select id, sfcgal.st_round(st_translate(sfcgal.gen_poly3d(%(n_pts)d, 10), random()*16-8, random()*16-8, random()*16-8),%(scaling)d) as geom1,
+  sfcgal.st_round(st_translate(sfcgal.gen_poly3d(%(n_pts)d, 10), random()*16-8, random()*16-8, random()*16-8),%(scaling)d) as geom2
 from generate_series(1, %(n_id)d) as id;
 """
 
@@ -295,6 +301,7 @@ queries['intersects_polygon_polygon'] = [ create_poly_poly, intersects_query ]
 queries['intersects_ls_ls'] = [ create_ls_ls, intersects_query ]
 queries['intersects_ls_poly_h'] = [ create_ls_poly_h, intersects_query]
 queries['intersects3D_ls_ls'] = [ create_ls_ls_3D, intersects3D_query]
+queries['intersects3D_poly_poly'] = [ create_ls_ls_3D, intersects3D_query]
 
 queries['intersection_polygon_polygon'] = [ create_poly_poly, intersection_query ]
 queries['intersection_poly_poly_h'] = [ create_poly_h_poly_h, intersection_query]
