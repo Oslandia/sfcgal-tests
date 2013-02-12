@@ -92,18 +92,15 @@ SA_OBJS = \
 NM_OBJS = \
 	lwspheroid.o 
 
-SFCGAL_OBJS = lwgeom_sfcgal.o
+ifeq (@POSTGIS_SFCGAL@,1)
+CFLAGS += @SFCGAL_CPPFLAGS@
+LDFLAGS += @SFCGAL_LDFLAGS@
+SA_OBJS += lwgeom_sfcgal_c.o
+endif
 
 LT_SA_OBJS = $(SA_OBJS:.o=.lo)
 LT_NM_OBJS = $(NM_OBJS:.o=.lo)
-
-ifeq (@POSTGIS_SFCGAL@,1)
-CXXFLAGS += @SFCGAL_CPPFLAGS@
-LDFLAGS += @SFCGAL_LDFLAGS@
-LT_CPP_OBJS = $(SFCGAL_OBJS:.o=.lo)
-endif
-
-LT_OBJS = $(LT_SA_OBJS) $(LT_NM_OBJS) $(LT_CPP_OBJS)
+LT_OBJS = $(LT_SA_OBJS) $(LT_NM_OBJS)
 
 SA_HEADERS = \
 	liblwgeom.h \
@@ -163,8 +160,8 @@ $(LT_SA_OBJS): %.lo: %.c
 $(LT_NM_OBJS): %.lo: %.c
 	$(LIBTOOL) --mode=compile $(CC) $(CFLAGS) $(NUMERICFLAGS) -c -o $@ $<
 
-$(LT_CPP_OBJS): %.lo: %.cpp
-	$(LIBTOOL) --mode=compile $(CXX) $(CXXFLAGS) $(NUMERICFLAGS) -c -o $@ $<
+#$(LT_CPP_OBJS): %.lo: %.cpp
+#	$(LIBTOOL) --mode=compile $(CXX) $(CXXFLAGS) $(NUMERICFLAGS) -c -o $@ $<
 
 # Manually generate WKT parser from Flex/Bison inputs
 # Bison 2.5, Flex 2.5.35

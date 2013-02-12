@@ -87,7 +87,7 @@ CREATE OR REPLACE FUNCTION sfcgal.ST_3DArea(geometry)
 
 CREATE OR REPLACE FUNCTION sfcgal.ST_HasPlane(geometry)
 	RETURNS BOOL
-	AS 'MODULE_PATHNAME','sfcgal_hasplane'
+	AS 'MODULE_PATHNAME','sfcgal_has_plane'
 	LANGUAGE 'c' IMMUTABLE STRICT;
 
 CREATE OR REPLACE FUNCTION sfcgal.ST_Extrude(geometry, float8, float8, float8)
@@ -115,14 +115,14 @@ CREATE OR REPLACE FUNCTION sfcgal.ST_Copy(geometry)
 	AS 'MODULE_PATHNAME','sfcgal_copy'
 	LANGUAGE 'c' IMMUTABLE STRICT;
 
-CREATE OR REPLACE FUNCTION sfcgal.ST_Buffer(geometry, float8, int4)
+CREATE OR REPLACE FUNCTION sfcgal.ST_Minkowski(geometry, geometry)
         RETURNS geometry
-        AS 'MODULE_PATHNAME','sfcgal_buffer'
+        AS 'MODULE_PATHNAME','sfcgal_minkowski_sum'
         LANGUAGE 'c' IMMUTABLE STRICT;
 
 CREATE OR REPLACE FUNCTION sfcgal.ST_Offset(geometry, float8, int4)
         RETURNS geometry
-        AS 'MODULE_PATHNAME','sfcgal_offset'
+        AS 'MODULE_PATHNAME','sfcgal_offset_polygon'
         LANGUAGE 'c' IMMUTABLE STRICT;
 
 CREATE OR REPLACE FUNCTION sfcgal.ST_Round(geometry, int4)
