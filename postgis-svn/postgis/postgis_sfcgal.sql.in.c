@@ -239,7 +239,7 @@ CREATE OR REPLACE FUNCTION sfcgal.ST_3DArea(ref_geometry)
 
 CREATE OR REPLACE FUNCTION sfcgal.ST_HasPlane(ref_geometry)
 	RETURNS BOOL
-	AS 'MODULE_PATHNAME','sfcgal_ref_hasplane'
+	AS 'MODULE_PATHNAME','sfcgal_ref_has_plane'
 	LANGUAGE 'c' IMMUTABLE STRICT;
 
 CREATE OR REPLACE FUNCTION sfcgal.ST_Extrude(ref_geometry, float8, float8, float8)
@@ -375,7 +375,7 @@ CREATE OR REPLACE FUNCTION sfcgal.ST_3DArea(exact_geometry)
 
 CREATE OR REPLACE FUNCTION sfcgal.ST_HasPlane(exact_geometry)
 	RETURNS BOOL
-	AS 'MODULE_PATHNAME','sfcgal_exact_hasplane'
+	AS 'MODULE_PATHNAME','sfcgal_exact_has_plane'
 	LANGUAGE 'c' IMMUTABLE STRICT;
 
 CREATE OR REPLACE FUNCTION sfcgal.ST_Extrude(exact_geometry, float8, float8, float8)

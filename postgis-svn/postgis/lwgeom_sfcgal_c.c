@@ -14,6 +14,7 @@
 
 #include "postgres.h"
 #include "fmgr.h"
+#include "../liblwgeom/liblwgeom.h"
 
 #include "lwgeom_sfcgal_c.h"
 
@@ -48,6 +49,7 @@ sfcgal_prepared_geometry_t* POSTGIS2SFCGALPreparedGeometry(GSERIALIZED *pglwgeom
 		lwerror("POSTGIS2SFCGALPreparedGeometry: unable to deserialize input");
 	}
 	g = LWGEOM2SFCGAL( lwgeom );
+
 	lwgeom_free(lwgeom);
 	return sfcgal_prepared_geometry_create_from_geometry( g, gserialized_get_srid(pglwgeom) );
 }
@@ -85,6 +87,7 @@ void sfcgal_postgis_init()
     if ( ! __sfcgal_init ) {
 	sfcgal_init();
 	sfcgal_set_error_handlers( (sfcgal_error_handler_t)lwnotice, (sfcgal_error_handler_t)lwerror );
+	sfcgal_set_alloc_handlers( lwalloc, lwfree );
 	__sfcgal_init = 1;
     }
 }
@@ -120,10 +123,10 @@ Datum sfcgal_from_text(PG_FUNCTION_ARGS)
 	sfcgal_geometry_t *geom0;					\
 	ret_type result;						\
 									\
+	sfcgal_postgis_init();						\
+									\
 	input0 = (GSERIALIZED*)PG_DETOAST_DATUM(PG_GETARG_DATUM(0));	\
 	geom0 = POSTGIS2SFCGALGeometry( input0 );			\
-									\
-	sfcgal_postgis_init();						\
 									\
 	result = fname( geom0 );					\
 	sfcgal_geometry_delete( geom0 );				\
@@ -147,12 +150,12 @@ Datum sfcgal_from_text(PG_FUNCTION_ARGS)
 	sfcgal_geometry_t *geom0, *geom1;					\
 	ret_type result;						\
 									\
+	sfcgal_postgis_init();						\
+									\
 	input0 = (GSERIALIZED*)PG_DETOAST_DATUM(PG_GETARG_DATUM(0));	\
 	input1 = (GSERIALIZED*)PG_DETOAST_DATUM(PG_GETARG_DATUM(1));	\
 	geom0 = POSTGIS2SFCGALGeometry( input0 );			\
 	geom1 = POSTGIS2SFCGALGeometry( input1 );			\
-									\
-	sfcgal_postgis_init();						\
 									\
 	result = fname( geom0, geom1 );					\
 	sfcgal_geometry_delete( geom0 );				\
@@ -178,10 +181,10 @@ Datum sfcgal_from_text(PG_FUNCTION_ARGS)
 	sfcgal_geometry_t *geom0;					\
 	sfcgal_geometry_t *result;					\
 									\
+	sfcgal_postgis_init();						\
+									\
 	input0 = (GSERIALIZED*)PG_DETOAST_DATUM(PG_GETARG_DATUM(0));	\
 	geom0 = POSTGIS2SFCGALGeometry( input0 );			\
-									\
-	sfcgal_postgis_init();						\
 									\
 	result = fname( geom0 );					\
 	sfcgal_geometry_delete( geom0 );				\
@@ -203,12 +206,12 @@ Datum sfcgal_from_text(PG_FUNCTION_ARGS)
 	sfcgal_geometry_t *geom0, *geom1;				\
 	sfcgal_geometry_t *result;					\
 									\
+	sfcgal_postgis_init();						\
+									\
 	input0 = (GSERIALIZED*)PG_DETOAST_DATUM(PG_GETARG_DATUM(0));	\
 	input1 = (GSERIALIZED*)PG_DETOAST_DATUM(PG_GETARG_DATUM(1));	\
 	geom0 = POSTGIS2SFCGALGeometry( input0 );			\
 	geom1 = POSTGIS2SFCGALGeometry( input1 );			\
-									\
-	sfcgal_postgis_init();						\
 									\
 	result = fname( geom0, geom1 );					\
 	sfcgal_geometry_delete( geom0 );				\
@@ -257,13 +260,13 @@ Datum sfcgal_extrude(PG_FUNCTION_ARGS)
     sfcgal_geometry_t *result;
     double dx, dy, dz;
 
+    sfcgal_postgis_init();
+    
     input0 = (GSERIALIZED*)PG_DETOAST_DATUM(PG_GETARG_DATUM(0));
     geom0 = POSTGIS2SFCGALGeometry( input0 );
     dx = PG_GETARG_FLOAT8( 1 );
     dy = PG_GETARG_FLOAT8( 2 );
     dz = PG_GETARG_FLOAT8( 3 );
-    
-    sfcgal_postgis_init();
     
     result = sfcgal_geometry_extrude( geom0, dx, dy, dz );
     sfcgal_geometry_delete( geom0 );
@@ -285,11 +288,11 @@ Datum sfcgal_offset_polygon(PG_FUNCTION_ARGS)
     sfcgal_geometry_t *result;
     double offset;
 
+    sfcgal_postgis_init();
+    
     input0 = (GSERIALIZED*)PG_DETOAST_DATUM(PG_GETARG_DATUM(0));
     geom0 = POSTGIS2SFCGALGeometry( input0 );
     offset = PG_GETARG_FLOAT8( 1 );
-    
-    sfcgal_postgis_init();
     
     result = sfcgal_geometry_offset_polygon( geom0, offset );
     sfcgal_geometry_delete( geom0 );
@@ -311,11 +314,11 @@ Datum sfcgal_round(PG_FUNCTION_ARGS)
     sfcgal_geometry_t *result;
     int scale;
 
+    sfcgal_postgis_init();
+    
     input0 = (GSERIALIZED*)PG_DETOAST_DATUM(PG_GETARG_DATUM(0));
     geom0 = POSTGIS2SFCGALGeometry( input0 );
     scale = PG_GETARG_INT32( 1 );
-    
-    sfcgal_postgis_init();
     
     result = sfcgal_geometry_round( geom0, scale );
     sfcgal_geometry_delete( geom0 );
