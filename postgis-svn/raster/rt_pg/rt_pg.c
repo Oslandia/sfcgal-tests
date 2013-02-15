@@ -1,5 +1,5 @@
 /*
- * $Id: rt_pg.c 11008 2013-01-20 16:56:27Z dustymugs $
+ * $Id: rt_pg.c 11084 2013-02-07 17:16:54Z dustymugs $
  *
  * WKTRaster - Raster Types for PostGIS
  * http://www.postgis.org/support/wiki/index.php?WKTRasterHomePage
@@ -808,23 +808,23 @@ Datum RASTER_minPossibleValue(PG_FUNCTION_ARGS)
 PG_FUNCTION_INFO_V1(RASTER_in);
 Datum RASTER_in(PG_FUNCTION_ARGS)
 {
-    rt_raster raster;
-    char *hexwkb = PG_GETARG_CSTRING(0);
-    void *result = NULL;
+	rt_raster raster;
+	char *hexwkb = PG_GETARG_CSTRING(0);
+	void *result = NULL;
 
-		POSTGIS_RT_DEBUG(3, "Starting");
+	POSTGIS_RT_DEBUG(3, "Starting");
 
-    raster = rt_raster_from_hexwkb(hexwkb, strlen(hexwkb));
-    result = rt_raster_serialize(raster);
+	raster = rt_raster_from_hexwkb(hexwkb, strlen(hexwkb));
+	if (raster == NULL)
+		PG_RETURN_NULL();
 
-    SET_VARSIZE(result, ((rt_pgraster*)result)->size);
+	result = rt_raster_serialize(raster);
+	rt_raster_destroy(raster);
+	if (result == NULL)
+		PG_RETURN_NULL();
 
-    rt_raster_destroy(raster);
-
-    if ( NULL != result )
-        PG_RETURN_POINTER(result);
-    else
-        PG_RETURN_NULL();
+	SET_VARSIZE(result, ((rt_pgraster*)result)->size);
+	PG_RETURN_POINTER(result);
 }
 
 /**
@@ -1208,9 +1208,8 @@ Datum RASTER_makeEmpty(PG_FUNCTION_ARGS)
 		skewx, skewy, srid);
 
 	raster = rt_raster_new(width, height);
-	if (!raster) {
+	if (raster == NULL)
 		PG_RETURN_NULL(); /* error was supposedly printed already */
-	}
 
 	rt_raster_set_scale(raster, scalex, scaley);
 	rt_raster_set_offsets(raster, ipx, ipy);
@@ -2169,8 +2168,6 @@ Datum RASTER_setBandNoDataValue(PG_FUNCTION_ARGS)
 	}
 
 	if (!skipset) {
-		assert(0 <= (bandindex - 1));
-
 		/* Fetch requested band */
 		band = rt_raster_get_band(raster, bandindex - 1);
 		if (!band) {
@@ -3079,7 +3076,7 @@ Datum RASTER_setPixelValuesArray(PG_FUNCTION_ARGS)
 		default:
 			elog(ERROR, "RASTER_setPixelValuesArray: Invalid data type for new values");
 			rt_raster_destroy(raster);
-			pfree(pgraster);
+			PG_FREE_IF_COPY(pgraster, 0);
 			PG_RETURN_NULL();
 			break;
 	}
@@ -3119,7 +3116,7 @@ Datum RASTER_setPixelValuesArray(PG_FUNCTION_ARGS)
 			pfree(nulls);
 		}
 		rt_raster_destroy(raster);
-		pfree(pgraster);
+		PG_FREE_IF_COPY(pgraster, 0);
 		PG_RETURN_NULL();
 	}
 
@@ -3131,7 +3128,7 @@ Datum RASTER_setPixelValuesArray(PG_FUNCTION_ARGS)
 		pfree(elements);
 		pfree(nulls);
 		rt_raster_destroy(raster);
-		pfree(pgraster);
+		PG_FREE_IF_COPY(pgraster, 0);
 		PG_RETURN_NULL();
 	}
 
@@ -3180,7 +3177,7 @@ Datum RASTER_setPixelValuesArray(PG_FUNCTION_ARGS)
 				elog(ERROR, "RASTER_setPixelValuesArray: Invalid data type for noset flags");
 				pfree(pixval);
 				rt_raster_destroy(raster);
-				pfree(pgraster);
+				PG_FREE_IF_COPY(pgraster, 0);
 				PG_RETURN_NULL();
 				break;
 		}
@@ -3222,7 +3219,7 @@ Datum RASTER_setPixelValuesArray(PG_FUNCTION_ARGS)
 				pfree(nulls);
 			}
 			rt_raster_destroy(raster);
-			pfree(pgraster);
+			PG_FREE_IF_COPY(pgraster, 0);
 			PG_RETURN_NULL();
 		}
 
@@ -3331,7 +3328,7 @@ Datum RASTER_setPixelValuesArray(PG_FUNCTION_ARGS)
 				elog(ERROR, "Cannot get value of pixel.  Returning NULL");
 				pfree(pixval);
 				rt_raster_destroy(raster);
-				pfree(pgraster);
+				PG_FREE_IF_COPY(pgraster, 0);
 				PG_RETURN_NULL();
 			}
 
@@ -3352,7 +3349,7 @@ Datum RASTER_setPixelValuesArray(PG_FUNCTION_ARGS)
 	/* serialize new raster */
 	pgrtn = rt_raster_serialize(raster);
 	rt_raster_destroy(raster);
-	pfree(pgraster);
+	PG_FREE_IF_COPY(pgraster, 0);
 	if (!pgrtn)
 		PG_RETURN_NULL();
 
@@ -5827,7 +5824,7 @@ Datum RASTER_tile(PG_FUNCTION_ARGS)
 				rt_band_get_ext_band_num(_band, &bandnum);
 
 				band = rt_band_new_offline(
-					arg2->raster.width, arg2->raster.height,
+					width, height,
 					pixtype,
 					hasnodata, nodataval,
 					bandnum, rt_band_get_ext_path(_band)
@@ -8562,7 +8559,6 @@ Datum RASTER_quantile(PG_FUNCTION_ARGS)
 			MemoryContextSwitchTo(oldcontext);
 			SRF_RETURN_DONE(funcctx);
 		}
-		assert(0 <= (bandindex - 1));
 
 		/* exclude_nodata_value flag */
 		if (!PG_ARGISNULL(2))
@@ -9241,7 +9237,6 @@ Datum RASTER_valueCount(PG_FUNCTION_ARGS) {
 			MemoryContextSwitchTo(oldcontext);
 			SRF_RETURN_DONE(funcctx);
 		}
-		assert(0 <= (bandindex - 1));
 
 		/* exclude_nodata_value flag */
 		if (!PG_ARGISNULL(2))
@@ -11346,7 +11341,7 @@ Datum RASTER_GDALWarp(PG_FUNCTION_ARGS)
 	}
 	/* target SRID == src SRID, no reprojection */
 	else if (dst_srid == src_srid) {
-		/* set geotransform BUT ONLY when geotransform isn't default */
+		/* set geotransform BUT ONLY when geotransform IS the default */
 		if (src_srid == SRID_UNKNOWN) {
 			double gt[6];
 

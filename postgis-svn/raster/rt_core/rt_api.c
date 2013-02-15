@@ -1,5 +1,5 @@
 /*
- * $Id: rt_api.c 10914 2012-12-21 22:55:10Z dustymugs $
+ * $Id: rt_api.c 11083 2013-02-07 17:16:49Z dustymugs $
  *
  * WKTRaster - Raster Types for PostGIS
  * http://trac.osgeo.org/postgis/wiki/WKTRaster
@@ -200,7 +200,7 @@ static void quicksort(double *left, double *right) {
  */
 GDALResampleAlg
 rt_util_gdal_resample_alg(const char *algname) {
-	if (!algname || !strlen(algname))	return GRA_NearestNeighbour;
+	assert(algname != NULL && strlen(algname) > 0);
 
 	if (strcmp(algname, "NEARESTNEIGHBOUR") == 0)
 		return GRA_NearestNeighbour;
@@ -300,6 +300,8 @@ rt_util_gdal_version(const char *request) {
 */
 rt_extenttype
 rt_util_extent_type(const char *name) {
+	assert(name != NULL && strlen(name) > 0);
+
 	if (strcmp(name, "UNION") == 0)
 		return ET_UNION;
 	else if (strcmp(name, "FIRST") == 0)
@@ -321,6 +323,8 @@ char*
 rt_util_gdal_convert_sr(const char *srs, int proj4) {
 	OGRSpatialReferenceH hsrs;
 	char *rtn = NULL;
+
+	assert(srs != NULL);
 
 	hsrs = OSRNewSpatialReference(NULL);
 	if (OSRSetFromUserInput(hsrs, srs) == OGRERR_NONE) {
@@ -350,6 +354,8 @@ int
 rt_util_gdal_supported_sr(const char *srs) {
 	OGRSpatialReferenceH hsrs;
 	OGRErr rtn = OGRERR_NONE;
+
+	assert(srs != NULL);
 
 	hsrs = OSRNewSpatialReference(NULL);
 	rtn = OSRSetFromUserInput(hsrs, srs);
@@ -509,8 +515,6 @@ void init_rt_errorreporter(const char * fmt, va_list ap);
 void init_rt_warnreporter(const char * fmt, va_list ap);
 void init_rt_inforeporter(const char * fmt, va_list ap);
 
-
-
 /*
  * Default allocators
  *
@@ -538,7 +542,6 @@ default_rt_deallocator(void *mem)
     free(mem);
 }
 
-
 void
 default_rt_error_handler(const char *fmt, va_list ap) {
 
@@ -565,7 +568,6 @@ default_rt_warning_handler(const char *fmt, va_list ap) {
     va_end(ap);
 }
 
-
 void
 default_rt_info_handler(const char *fmt, va_list ap) {
 
@@ -578,7 +580,6 @@ default_rt_info_handler(const char *fmt, va_list ap) {
 
     va_end(ap);
 }
-
 
 /**
  * Struct definition here
@@ -1200,8 +1201,9 @@ rt_errorstate rt_pixel_set_to_array(
 	int _x;
 	int _y;
 
-	assert(npixel != NULL);
-	assert(count > 0);
+	assert(npixel != NULL && count > 0);
+	assert(value != NULL);
+	assert(nodata != NULL);
 
 	/* dimensions */
 	dim[0] = distancex * 2 + 1;
@@ -1437,6 +1439,7 @@ rt_band_new_offline(
 rt_band
 rt_band_duplicate(rt_band band) {
 	rt_band rtn = NULL;
+
 	assert(band != NULL);
 
 	/* offline */
@@ -1587,6 +1590,7 @@ rt_band_load_offline_data(rt_band band) {
 
 	rt_raster _rast = NULL;
 	rt_band _band = NULL;
+	int aligned = 0;
 
 	assert(band != NULL);
 	assert(band->raster != NULL);
@@ -1631,6 +1635,20 @@ rt_band_load_offline_data(rt_band band) {
 	RASTER_DEBUGF(3, "Offline geotransform (%f, %f, %f, %f, %f, %f)",
 		ogt[0], ogt[1], ogt[2], ogt[3], ogt[4], ogt[5]);
 
+	/* are rasters aligned? */
+	_rast = rt_raster_new(1, 1);
+	rt_raster_set_geotransform_matrix(_rast, ogt);
+	rt_raster_set_srid(_rast, band->raster->srid);
+	if (rt_raster_same_alignment(band->raster, _rast, &aligned, NULL) != ES_NONE) {
+		rterror("rt_band_load_offline_data: : Could not test alignment of in-db representation of out-db raster");
+		GDALClose(hdsSrc);
+		return ES_ERROR;
+	}
+	else if (!aligned) {
+		rtwarn("The in-db representation of the out-db raster is not aligned. Band data may be incorrect");
+	}
+	rt_raster_destroy(_rast);
+
 	/* get offsets */
 	rt_raster_geopoint_to_cell(
 		band->raster,
@@ -1640,8 +1658,6 @@ rt_band_load_offline_data(rt_band band) {
 	);
 	RASTER_DEBUGF(4, "offsets: (%f, %f)", offset[0], offset[1]);
 
-	/* XXX: should there be a check for the spatial attributes between the offline raster file and that of the raster? */
-	
 	/* create VRT dataset */
 	hdsDst = VRTCreate(band->width, band->height);
 	GDALSetGeoTransform(hdsDst, gt);
@@ -1765,6 +1781,7 @@ setBits(char* ch, double val, int bits, int bitOffset) {
     char ival = val;
 
 
+		assert(ch != NULL);
     assert(8 - bitOffset >= bits);
 
     RASTER_DEBUGF(4, "ival:%d bits:%d mask:%hhx bitoffset:%d\n",
@@ -1985,7 +2002,7 @@ rt_errorstate
 rt_band_set_pixel_line(
 	rt_band band,
 	int x, int y,
-	void *vals, uint16_t len
+	void *vals, uint32_t len
 ) {
 	rt_pixtype pixtype = PT_END;
 	int size = 0;
@@ -1993,6 +2010,9 @@ rt_band_set_pixel_line(
 	uint32_t offset = 0;
 
 	assert(NULL != band);
+	assert(vals != NULL && len > 0);
+
+	RASTER_DEBUGF(3, "length of values = %d", len);
 
 	if (band->offline) {
 		rterror("rt_band_set_pixel_line not implemented yet for OFFDB bands");
@@ -2012,7 +2032,7 @@ rt_band_set_pixel_line(
 
 	data = rt_band_get_data(band);
 	offset = x + (y * band->width);
-	RASTER_DEBUGF(5, "offset = %d", offset);
+	RASTER_DEBUGF(4, "offset = %d", offset);
 
 	/* make sure len of values to copy don't exceed end of data */
 	if (len > (band->width * band->height) - offset) {
@@ -2279,6 +2299,7 @@ rt_errorstate rt_band_get_pixel_line(
 	uint8_t *ptr = NULL;
 
 	assert(NULL != band);
+	assert(vals != NULL && nvals != NULL);
 
 	/* initialize to no values */
 	*nvals = 0;
@@ -2359,6 +2380,7 @@ rt_band_get_pixel(
 	uint32_t offset = 0; 
 
 	assert(NULL != band);
+	assert(NULL != value);
 
 	/* set nodata to 0 */
 	if (nodata != NULL)
@@ -2796,6 +2818,7 @@ rt_band_get_pixel_of_value(
 
 	assert(NULL != band);
 	assert(NULL != pixels);
+	assert(NULL != searchset && searchcount > 0);
 
 	if (!band->hasnodata)
 		exclude_nodata_value = FALSE;
@@ -2857,6 +2880,7 @@ rt_band_get_pixel_of_value(
 rt_errorstate
 rt_band_get_nodata(rt_band band, double *nodata) { 
 	assert(NULL != band);
+	assert(NULL != nodata);
 
 	*nodata = band->nodataval;
 
@@ -3396,6 +3420,7 @@ rt_band_get_histogram(
 #endif
 
 	assert(NULL != stats);
+	assert(NULL != rtn_count);
 
 	if (stats->count < 1 || NULL == stats->values) {
 		rterror("rt_util_get_histogram: rt_bandstats object has no value");
@@ -3647,6 +3672,7 @@ rt_band_get_quantiles(
 #endif
 
 	assert(NULL != stats);
+	assert(NULL != rtn_count);
 
 	if (stats->count < 1 || NULL == stats->values) {
 		rterror("rt_band_get_quantiles: rt_bandstats object has no value");
@@ -3999,6 +4025,7 @@ rt_band_get_quantiles_stream(
 
 	assert(NULL != band);
 	assert(cov_count > 1);
+	assert(NULL != rtn_count);
 	RASTER_DEBUGF(3, "cov_count = %d", cov_count);
 
 	data = rt_band_get_data(band);
@@ -4586,6 +4613,7 @@ rt_band_get_value_count(
 #endif
 
 	assert(NULL != band);
+	assert(NULL != rtn_count);
 
 	data = rt_band_get_data(band);
 	if (data == NULL) {
@@ -4834,7 +4862,7 @@ rt_band_reclass(
 	rt_reclassexpr expr = NULL;
 
 	assert(NULL != srcband);
-	assert(NULL != exprset);
+	assert(NULL != exprset && exprcount > 0);
 
 	/* source nodata */
 	src_hasnodata = rt_band_get_hasnodata_flag(srcband);
@@ -5474,6 +5502,7 @@ rt_raster_add_band(rt_raster raster, rt_band band, int index) {
 
 
     assert(NULL != raster);
+		assert(NULL != band);
 
     RASTER_DEBUGF(3, "Adding band %p to raster %p", band, raster);
 
@@ -5819,8 +5848,7 @@ rt_raster_cell_to_geopoint(
 	double _gt[6] = {0};
 
 	assert(NULL != raster);
-	assert(NULL != xw);
-	assert(NULL != yw);
+	assert(NULL != xw && NULL != yw);
 
 	if (NULL != gt)
 		memcpy(_gt, gt, sizeof(double) * 6);
@@ -5872,8 +5900,7 @@ rt_raster_geopoint_to_cell(
 	double rnd = 0;
 
 	assert(NULL != raster);
-	assert(NULL != xr);
-	assert(NULL != yr);
+	assert(NULL != xr && NULL != yr);
 
 	if (igt != NULL)
 		memcpy(_igt, igt, sizeof(double) * 6);
@@ -5971,9 +5998,11 @@ rt_raster_gdal_polygonize(
 
 	/* checks */
 	assert(NULL != raster);
-	assert(nband >= 0 && nband < rt_raster_get_num_bands(raster));
+	assert(NULL != pnElements);
 
 	RASTER_DEBUG(2, "In rt_raster_gdal_polygonize");
+
+	*pnElements = 0;
 
 	/*******************************
 	 * Get band
@@ -5989,8 +6018,7 @@ rt_raster_gdal_polygonize(
 		/* band is NODATA */
 		if (rt_band_get_isnodata_flag(band)) {
 			RASTER_DEBUG(3, "Band is NODATA.  Returning null");
-			if (pnElements)
-				*pnElements = 0;
+			*pnElements = 0;
 			return NULL;
 		}
 
@@ -6158,9 +6186,6 @@ rt_raster_gdal_polygonize(
 
 	RASTER_DEBUGF(3, "storing polygons (%d)", nFeatureCount);
 
-	if (pnElements)
-		*pnElements = 0;
-
 	/* Reset feature reading to start in the first feature */
 	OGR_L_ResetReading(hLayer);
 
@@ -6275,8 +6300,7 @@ rt_raster_gdal_polygonize(
 		pols[j].val = dValue;
 	}
 
-	if (pnElements)
-		*pnElements = nFeatureCount;
+	*pnElements = nFeatureCount;
 
 	RASTER_DEBUG(3, "destroying GDAL MEM raster");
 	GDALClose(memdataset);
@@ -8440,6 +8464,7 @@ rt_band
 rt_raster_replace_band(rt_raster raster, rt_band band, int index) {
 	rt_band oldband = NULL;
 	assert(NULL != raster);
+	assert(NULL != band);
 
 	if (band->width != raster->width || band->height != raster->height) {
 		rterror("rt_raster_replace_band: Band does not match raster's dimensions: %dx%d band to %dx%d raster",
@@ -8541,6 +8566,7 @@ rt_raster_to_gdal(rt_raster raster, const char *srs,
 	uint8_t *rtn = NULL;
 
 	assert(NULL != raster);
+	assert(NULL != gdalsize);
 
 	/* any supported format is possible */
 	rt_util_gdal_register_all();
@@ -8630,6 +8656,8 @@ rt_raster_gdal_drivers(uint32_t *drv_count, uint8_t cancc) {
 	int count;
 	int i;
 	uint32_t j;
+
+	assert(drv_count != NULL);
 
 	rt_util_gdal_register_all();
 	count = GDALGetDriverCount();
@@ -8738,6 +8766,7 @@ rt_raster_to_gdal_mem(
 	rt_pixtype pt = PT_END;
 
 	assert(NULL != raster);
+	assert(NULL != rtn_drv);
 
 	/* store raster in GDAL MEM raster */
 	if (!rt_util_gdal_driver_registered("MEM"))
@@ -9013,6 +9042,21 @@ rt_raster_to_gdal_mem(
 				rtwarn("rt_raster_to_gdal_mem: Could not set nodata value for band");
 			RASTER_DEBUGF(3, "nodata value set to %f", GDALGetRasterNoDataValue(band, NULL));
 		}
+
+#if POSTGIS_DEBUG_LEVEL > 3
+		{
+			GDALRasterBandH _grb = NULL;
+			double _min;
+			double _max;
+			double _mean;
+			double _stddev;
+
+			_grb = GDALGetRasterBand(ds, i + 1);
+			GDALComputeRasterStatistics(_grb, FALSE, &_min, &_max, &_mean, &_stddev, NULL, NULL);
+			RASTER_DEBUGF(4, "GDAL Band %d stats: %f, %f, %f, %f", i + 1, _min, _max, _mean, _stddev);
+		}
+#endif
+
 	}
 
 	/* necessary??? */
@@ -9089,11 +9133,12 @@ rt_raster_from_gdal_dataset(GDALDatasetH ds) {
 		rt_raster_destroy(rast);
 		return NULL;
 	}
-	RASTER_DEBUGF(3, "Raster geotransform (%f, %f, %f, %f, %f, %f)",
-		gt[0], gt[1], gt[2], gt[3], gt[4], gt[5]);
 
 	/* apply raster attributes */
 	rt_raster_set_geotransform_matrix(rast, gt);
+
+	RASTER_DEBUGF(3, "Raster geotransform (%f, %f, %f, %f, %f, %f)",
+		gt[0], gt[1], gt[2], gt[3], gt[4], gt[5]);
 
 	/* srid */
 	srs = GDALGetProjectionRef(ds);
@@ -9108,13 +9153,29 @@ rt_raster_from_gdal_dataset(GDALDatasetH ds) {
 				pszAuthorityCode != NULL
 			) {
 				rt_raster_set_srid(rast, atoi(pszAuthorityCode));
+				RASTER_DEBUGF(3, "New raster's SRID = %d", rast->srid);
 			}
 		}
 		OSRDestroySpatialReference(hSRS);
 	}
 
-	/* copy bands */
 	numBands = GDALGetRasterCount(ds);
+
+#if POSTGIS_DEBUG_LEVEL > 3
+	for (i = 1; i <= numBands; i++) {
+		GDALRasterBandH _grb = NULL;
+		double _min;
+		double _max;
+		double _mean;
+		double _stddev;
+
+		_grb = GDALGetRasterBand(ds, i);
+		GDALComputeRasterStatistics(_grb, FALSE, &_min, &_max, &_mean, &_stddev, NULL, NULL);
+		RASTER_DEBUGF(4, "GDAL Band %d stats: %f, %f, %f, %f", i, _min, _max, _mean, _stddev);
+	}
+#endif
+
+	/* copy bands */
 	for (i = 1; i <= numBands; i++) {
 		RASTER_DEBUGF(3, "Processing band %d of %d", i, numBands);
 		gdband = NULL;
@@ -9138,7 +9199,7 @@ rt_raster_from_gdal_dataset(GDALDatasetH ds) {
 		/* size: width and height */
 		width = GDALGetRasterBandXSize(gdband);
 		height = GDALGetRasterBandYSize(gdband);
-		RASTER_DEBUGF(3, "Band dimensions (width x height): %d x %d", width, height);
+		RASTER_DEBUGF(3, "GDAL band dimensions (width x height): %d x %d", width, height);
 
 		/* nodata */
 		nodataval = GDALGetRasterNoDataValue(gdband, &status);
@@ -9206,15 +9267,16 @@ rt_raster_from_gdal_dataset(GDALDatasetH ds) {
 			rt_raster_destroy(rast);
 			return NULL;
 		}
+		RASTER_DEBUGF(3, "values len = %d", valueslen);
 
 		for (iYBlock = 0; iYBlock < nYBlocks; iYBlock++) {
 			for (iXBlock = 0; iXBlock < nXBlocks; iXBlock++) {
-				memset(values, 0, valueslen);
-
 				x = iXBlock * nXBlockSize;
 				y = iYBlock * nYBlockSize;
 				RASTER_DEBUGF(4, "(iXBlock, iYBlock) = (%d, %d)", iXBlock, iYBlock);
 				RASTER_DEBUGF(4, "(x, y) = (%d, %d)", x, y);
+
+				memset(values, 0, valueslen);
 
 				/* valid block width */
 				if ((iXBlock + 1) * nXBlockSize > width)
@@ -9239,7 +9301,7 @@ rt_raster_from_gdal_dataset(GDALDatasetH ds) {
 					0, 0
 				);
 				if (cplerr != CE_None) {
-					rterror("rt_raster_from_gdal_dataset: Unable to get data from transformed raster");
+					rterror("rt_raster_from_gdal_dataset: Unable to get data from GDAL raster");
 					rtdealloc(values);
 					rt_raster_destroy(rast);
 					return NULL;
@@ -9272,6 +9334,104 @@ rt_raster_from_gdal_dataset(GDALDatasetH ds) {
 	}
 
 	return rast;
+}
+
+/******************************************************************************
+* rt_raster_gdal_warp()
+******************************************************************************/
+
+typedef struct _rti_warp_arg_t* _rti_warp_arg;
+struct _rti_warp_arg_t {
+
+	struct {
+		GDALDriverH drv;
+		GDALDatasetH ds;
+		char *srs;
+	} src, dst;
+
+	GDALWarpOptions *wopts;
+
+	struct {
+		struct {
+			char **item;
+			int len;
+		} option;
+
+		struct {
+			void *transform;
+			void *imgproj;
+			void *approx;
+		} arg;
+
+		GDALTransformerFunc func;
+	} transform;
+
+};
+
+static _rti_warp_arg
+_rti_warp_arg_init() {
+	_rti_warp_arg arg = NULL;
+
+	arg = rtalloc(sizeof(struct _rti_warp_arg_t));
+	if (arg == NULL) {
+		rterror("_rti_warp_arg_init: Unable to allocate memory for _rti_warp_arg");
+		return NULL;
+	}
+
+	arg->src.drv = NULL;
+	arg->src.ds = NULL;
+	arg->src.srs = NULL;
+
+	arg->dst.drv = NULL;
+	arg->dst.ds = NULL;
+	arg->dst.srs = NULL;
+
+	arg->wopts = NULL;
+
+	arg->transform.option.item = NULL;
+	arg->transform.option.len = 0;
+
+	arg->transform.arg.transform = NULL;
+	arg->transform.arg.imgproj = NULL;
+	arg->transform.arg.approx = NULL;
+
+	arg->transform.func = NULL;
+
+	return arg;
+}
+
+static void
+_rti_warp_arg_destroy(_rti_warp_arg arg) {
+	int i = 0;
+
+	if (arg->dst.ds != NULL)
+		GDALClose(arg->dst.ds);
+	if (arg->dst.srs != NULL)
+		CPLFree(arg->dst.srs);
+
+	if (arg->src.ds != NULL)
+		GDALClose(arg->src.ds);
+	if (arg->src.srs != NULL)
+		CPLFree(arg->src.srs);
+
+	if (arg->transform.func == GDALApproxTransform) {
+		if (arg->transform.arg.imgproj != NULL)
+			GDALDestroyGenImgProjTransformer(arg->transform.arg.imgproj);
+	}
+
+	if (arg->wopts != NULL)
+		GDALDestroyWarpOptions(arg->wopts);
+
+	if (arg->transform.option.len > 0 && arg->transform.option.item != NULL) {
+		for (i = 0; i < arg->transform.option.len; i++) {
+			if (arg->transform.option.item[i] != NULL)
+				rtdealloc(arg->transform.option.item[i]);
+		}
+		rtdealloc(arg->transform.option.item);
+	}
+
+	rtdealloc(arg);
+	arg = NULL;
 }
 
 /**
@@ -9314,21 +9474,12 @@ rt_raster rt_raster_gdal_warp(
 	double *skew_x, double *skew_y,
 	GDALResampleAlg resample_alg, double max_err
 ) {
+	// keep these
 	CPLErr cplerr;
-	GDALDriverH src_drv = NULL;
-	GDALDatasetH src_ds = NULL;
-	GDALWarpOptions *wopts = NULL;
-	GDALDriverH dst_drv = NULL;
-	GDALDatasetH dst_ds = NULL;
-	char *_src_srs = NULL;
-	char *_dst_srs = NULL;
 	char *dst_options[] = {"SUBCLASS=VRTWarpedDataset", NULL};
-	char **transform_opts = NULL;
-	int transform_opts_len = 2;
-	void *transform_arg = NULL;
-	void *imgproj_arg = NULL;
-	void *approx_arg = NULL;
-	GDALTransformerFunc transform_func = NULL;
+	_rti_warp_arg arg = NULL;
+
+	int hasnodata = 0;
 
 	GDALRasterBandH band;
 	rt_band rtband = NULL;
@@ -9347,12 +9498,18 @@ rt_raster rt_raster_gdal_warp(
 
 	rt_raster rast = NULL;
 	int i = 0;
-	int j = 0;
 	int numBands = 0;
 
 	RASTER_DEBUG(3, "starting");
 
 	assert(NULL != raster);
+
+	/* internal variables */
+	arg = _rti_warp_arg_init();
+	if (arg == NULL) {
+		rterror("rt_raster_gdal_warp: Unable to initialize internal variables");
+		return NULL;
+	}
 
 	/*
 		max_err must be gte zero
@@ -9367,14 +9524,12 @@ rt_raster rt_raster_gdal_warp(
 		/* reprojection taking place */
 		if (dst_srs != NULL && strcmp(src_srs, dst_srs) != 0) {
 			RASTER_DEBUG(4, "Warp operation does include a reprojection");
-			_src_srs = rt_util_gdal_convert_sr(src_srs, 0);
-			_dst_srs = rt_util_gdal_convert_sr(dst_srs, 0);
+			arg->src.srs = rt_util_gdal_convert_sr(src_srs, 0);
+			arg->dst.srs = rt_util_gdal_convert_sr(dst_srs, 0);
 
-			if (_src_srs == NULL || _dst_srs == NULL) {
+			if (arg->src.srs == NULL || arg->dst.srs == NULL) {
 				rterror("rt_raster_gdal_warp: Unable to convert srs values to GDAL accepted format");
-				if (_src_srs != NULL) CPLFree(_src_srs);
-				if (_dst_srs != NULL) CPLFree(_dst_srs);
-
+				_rti_warp_arg_destroy(arg);
 				return NULL;
 			}
 		}
@@ -9386,127 +9541,102 @@ rt_raster rt_raster_gdal_warp(
 	else if (dst_srs != NULL) {
 		/* dst_srs provided but not src_srs */
 		rterror("rt_raster_gdal_warp: SRS required for input raster if SRS provided for warped raster");
+		_rti_warp_arg_destroy(arg);
 		return NULL;
 	}
 
 	/* load raster into a GDAL MEM dataset */
-	src_ds = rt_raster_to_gdal_mem(raster, _src_srs, NULL, NULL, 0, &src_drv);
-	if (NULL == src_ds) {
+	arg->src.ds = rt_raster_to_gdal_mem(raster, arg->src.srs, NULL, NULL, 0, &(arg->src.drv));
+	if (NULL == arg->src.ds) {
 		rterror("rt_raster_gdal_warp: Unable to convert raster to GDAL MEM format");
-
-		if (_src_srs != NULL) {
-			CPLFree(_src_srs);
-			CPLFree(_dst_srs);
-		}
-
+		_rti_warp_arg_destroy(arg);
 		return NULL;
 	}
 	RASTER_DEBUG(3, "raster loaded into GDAL MEM dataset");
 
-	/* set transform_opts */
-	transform_opts = (char **) rtalloc(sizeof(char *) * (transform_opts_len + 1));
-	if (NULL == transform_opts) {
-		rterror("rt_raster_gdal_warp: Unable to allocation memory for transform options");
-
-		GDALClose(src_ds);
-
-		if (_src_srs != NULL) {
-			CPLFree(_src_srs);
-			CPLFree(_dst_srs);
-		}
-
-		return NULL;
-	}
-	for (i = 0; i < transform_opts_len; i++) {
-		switch (i) {
-			case 1:
-				if (_dst_srs != NULL)
-					transform_opts[i] = (char *) rtalloc(sizeof(char) * (strlen("DST_SRS=") + strlen(_dst_srs) + 1));
-				else
-					transform_opts[i] = (char *) rtalloc(sizeof(char) * (strlen("DST_SRS=") + 1));
-				break;
-			case 0:
-				if (_src_srs != NULL)
-					transform_opts[i] = (char *) rtalloc(sizeof(char) * (strlen("SRC_SRS=") + strlen(_src_srs) + 1));
-				else
-					transform_opts[i] = (char *) rtalloc(sizeof(char) * (strlen("SRC_SRS=") + 1));
-				break;
-		}
-		if (NULL == transform_opts[i]) {
+	/* set transform options */
+	if (arg->src.srs != NULL || arg->dst.srs != NULL) {
+		arg->transform.option.len = 2;
+		arg->transform.option.item = rtalloc(sizeof(char *) * (arg->transform.option.len + 1));
+		if (NULL == arg->transform.option.item) {
 			rterror("rt_raster_gdal_warp: Unable to allocation memory for transform options");
-
-			for (j = 0; j < i; j++) rtdealloc(transform_opts[j]);
-			rtdealloc(transform_opts);
-			GDALClose(src_ds);
-
-			if (_src_srs != NULL) {
-				CPLFree(_src_srs);
-				CPLFree(_dst_srs);
-			}
-
+			_rti_warp_arg_destroy(arg);
 			return NULL;
 		}
+		memset(arg->transform.option.item, 0, sizeof(char *) * (arg->transform.option.len + 1));
 
-		switch (i) {
-			case 1:
-				if (_dst_srs != NULL) {
-					snprintf(
-						transform_opts[i],
-						sizeof(char) * (strlen("DST_SRS=") + strlen(_dst_srs) + 1),
-						"DST_SRS=%s",
-						_dst_srs
-					);
-				}
-				else
-					sprintf(transform_opts[i], "%s", "DST_SRS=");
-				break;
-			case 0:
-				if (_src_srs != NULL) {
-					snprintf(
-						transform_opts[i],
-						sizeof(char) * (strlen("SRC_SRS=") + strlen(_src_srs) + 1),
-						"SRC_SRS=%s",
-						_src_srs
-					);
-				}
-				else
-					sprintf(transform_opts[i], "%s", "SRC_SRS=");
-				break;
+		for (i = 0; i < arg->transform.option.len; i++) {
+			switch (i) {
+				case 1:
+					if (arg->dst.srs != NULL)
+						arg->transform.option.item[i] = (char *) rtalloc(sizeof(char) * (strlen("DST_SRS=") + strlen(arg->dst.srs) + 1));
+					else
+						arg->transform.option.item[i] = (char *) rtalloc(sizeof(char) * (strlen("DST_SRS=") + 1));
+					break;
+				case 0:
+					if (arg->src.srs != NULL)
+						arg->transform.option.item[i] = (char *) rtalloc(sizeof(char) * (strlen("SRC_SRS=") + strlen(arg->src.srs) + 1));
+					else
+						arg->transform.option.item[i] = (char *) rtalloc(sizeof(char) * (strlen("SRC_SRS=") + 1));
+					break;
+			}
+			if (NULL == arg->transform.option.item[i]) {
+				rterror("rt_raster_gdal_warp: Unable to allocation memory for transform options");
+				_rti_warp_arg_destroy(arg);
+				return NULL;
+			}
+
+			switch (i) {
+				case 1:
+					if (arg->dst.srs != NULL) {
+						snprintf(
+							arg->transform.option.item[i],
+							sizeof(char) * (strlen("DST_SRS=") + strlen(arg->dst.srs) + 1),
+							"DST_SRS=%s",
+							arg->dst.srs
+						);
+					}
+					else
+						sprintf(arg->transform.option.item[i], "%s", "DST_SRS=");
+					break;
+				case 0:
+					if (arg->src.srs != NULL) {
+						snprintf(
+							arg->transform.option.item[i],
+							sizeof(char) * (strlen("SRC_SRS=") + strlen(arg->src.srs) + 1),
+							"SRC_SRS=%s",
+							arg->src.srs
+						);
+					}
+					else
+						sprintf(arg->transform.option.item[i], "%s", "SRC_SRS=");
+					break;
+			}
+			RASTER_DEBUGF(4, "arg->transform.option.item[%d] = %s", i, arg->transform.option.item[i]);
 		}
-		RASTER_DEBUGF(4, "transform_opts[%d] = %s", i, transform_opts[i]);
 	}
-	transform_opts[transform_opts_len] = NULL;
-	if (_src_srs != NULL) CPLFree(_src_srs);
+	else
+		arg->transform.option.len = 0;
 
 	/* transformation object for building dst dataset */
-	transform_arg = GDALCreateGenImgProjTransformer2(src_ds, NULL, transform_opts);
-	if (NULL == transform_arg) {
+	arg->transform.arg.transform = GDALCreateGenImgProjTransformer2(arg->src.ds, NULL, arg->transform.option.item);
+	if (NULL == arg->transform.arg.transform) {
 		rterror("rt_raster_gdal_warp: Unable to create GDAL transformation object for output dataset creation");
-
-		GDALClose(src_ds);
-
-		for (i = 0; i < transform_opts_len; i++) rtdealloc(transform_opts[i]);
-		rtdealloc(transform_opts);
-		if (_dst_srs != NULL) CPLFree(_dst_srs);
-
+		_rti_warp_arg_destroy(arg);
 		return NULL;
 	}
 
 	/* get approximate output georeferenced bounds and resolution */
-	cplerr = GDALSuggestedWarpOutput2(src_ds, GDALGenImgProjTransform,
-		transform_arg, _gt, &(_dim[0]), &(_dim[1]), dst_extent, 0);
-	GDALDestroyGenImgProjTransformer(transform_arg);
+	cplerr = GDALSuggestedWarpOutput2(
+		arg->src.ds, GDALGenImgProjTransform,
+		arg->transform.arg.transform, _gt, &(_dim[0]), &(_dim[1]), dst_extent, 0);
 	if (cplerr != CE_None) {
 		rterror("rt_raster_gdal_warp: Unable to get GDAL suggested warp output for output dataset creation");
-
-		GDALClose(src_ds);
-
-		for (i = 0; i < transform_opts_len; i++) rtdealloc(transform_opts[i]);
-		rtdealloc(transform_opts);
-		if (_dst_srs != NULL) CPLFree(_dst_srs);
-
+		_rti_warp_arg_destroy(arg);
 		return NULL;
 	}
+	GDALDestroyGenImgProjTransformer(arg->transform.arg.transform);
+	arg->transform.arg.transform = NULL;
 
 	/*
 		don't use suggested dimensions as use of suggested scales
@@ -9536,13 +9666,7 @@ rt_raster rt_raster_gdal_warp(
 		((NULL != width) || (NULL != height))
 	) {
 		rterror("rt_raster_gdal_warp: Scale X/Y and width/height are mutually exclusive.  Only provide one");
-
-		GDALClose(src_ds);
-
-		for (i = 0; i < transform_opts_len; i++) rtdealloc(transform_opts[i]);
-		rtdealloc(transform_opts);
-		if (_dst_srs != NULL) CPLFree(_dst_srs);
-
+		_rti_warp_arg_destroy(arg);
 		return NULL;
 	}
 
@@ -9570,13 +9694,7 @@ rt_raster rt_raster_gdal_warp(
 		((NULL == scale_x) && (NULL != scale_y))
 	) {
 		rterror("rt_raster_gdal_warp: Both X and Y scale values must be provided for scale");
-
-		GDALClose(src_ds);
-
-		for (i = 0; i < transform_opts_len; i++) rtdealloc(transform_opts[i]);
-		rtdealloc(transform_opts);
-		if (_dst_srs != NULL) CPLFree(_dst_srs);
-
+		_rti_warp_arg_destroy(arg);
 		return NULL;
 	}
 
@@ -9637,13 +9755,7 @@ rt_raster rt_raster_gdal_warp(
 		);
 		if (skewedrast == NULL) {
 			rterror("rt_raster_gdal_warp: Could not compute skewed raster");
-
-			GDALClose(src_ds);
-
-			for (i = 0; i < transform_opts_len; i++) rtdealloc(transform_opts[i]);
-			rtdealloc(transform_opts);
-			if (_dst_srs != NULL) CPLFree(_dst_srs);
-
+			_rti_warp_arg_destroy(arg);
 			return NULL;
 		}
 
@@ -9668,13 +9780,7 @@ rt_raster rt_raster_gdal_warp(
 	rast = rt_raster_new(_dim[0], _dim[1]);
 	if (rast == NULL) {
 		rterror("rt_raster_gdal_warp: Out of memory allocating temporary raster");
-
-		GDALClose(src_ds);
-
-		for (i = 0; i < transform_opts_len; i++) rtdealloc(transform_opts[i]);
-		rtdealloc(transform_opts);
-		if (_dst_srs != NULL) CPLFree(_dst_srs);
-
+		_rti_warp_arg_destroy(arg);
 		return NULL;
 	}
 
@@ -9708,14 +9814,8 @@ rt_raster rt_raster_gdal_warp(
 		((NULL == ul_xw) && (NULL != ul_yw))
 	) {
 		rterror("rt_raster_gdal_warp: Both X and Y upper-left corner values must be provided");
-
 		rt_raster_destroy(rast);
-		GDALClose(src_ds);
-
-		for (i = 0; i < transform_opts_len; i++) rtdealloc(transform_opts[i]);
-		rtdealloc(transform_opts);
-		if (_dst_srs != NULL) CPLFree(_dst_srs);
-
+		_rti_warp_arg_destroy(arg);
 		return NULL;
 	}
 
@@ -9731,14 +9831,8 @@ rt_raster rt_raster_gdal_warp(
 			((NULL == grid_xw) && (NULL != grid_yw))
 		) {
 			rterror("rt_raster_gdal_warp: Both X and Y alignment values must be provided");
-
 			rt_raster_destroy(rast);
-			GDALClose(src_ds);
-
-			for (i = 0; i < transform_opts_len; i++) rtdealloc(transform_opts[i]);
-			rtdealloc(transform_opts);
-			if (_dst_srs != NULL) CPLFree(_dst_srs);
-
+			_rti_warp_arg_destroy(arg);
 			return NULL;
 		}
 
@@ -9766,14 +9860,8 @@ rt_raster rt_raster_gdal_warp(
 				NULL
 			) != ES_NONE) {
 				rterror("rt_raster_gdal_warp: Unable to compute raster pixel for spatial coordinates");
-
 				rt_raster_destroy(rast);
-				GDALClose(src_ds);
-
-				for (i = 0; i < transform_opts_len; i++) rtdealloc(transform_opts[i]);
-				rtdealloc(transform_opts);
-				if (_dst_srs != NULL) CPLFree(_dst_srs);
-
+				_rti_warp_arg_destroy(arg);
 				return NULL;
 			}
 
@@ -9786,12 +9874,7 @@ rt_raster rt_raster_gdal_warp(
 				rterror("rt_raster_gdal_warp: Unable to compute spatial coordinates for raster pixel");
 
 				rt_raster_destroy(rast);
-				GDALClose(src_ds);
-
-				for (i = 0; i < transform_opts_len; i++) rtdealloc(transform_opts[i]);
-				rtdealloc(transform_opts);
-				if (_dst_srs != NULL) CPLFree(_dst_srs);
-
+				_rti_warp_arg_destroy(arg);
 				return NULL;
 			}
 
@@ -9812,14 +9895,8 @@ rt_raster rt_raster_gdal_warp(
 						NULL
 					) != ES_NONE) {
 						rterror("rt_raster_gdal_warp: Unable to compute spatial coordinates for raster pixel");
-
 						rt_raster_destroy(rast);
-						GDALClose(src_ds);
-
-						for (i = 0; i < transform_opts_len; i++) rtdealloc(transform_opts[i]);
-						rtdealloc(transform_opts);
-						if (_dst_srs != NULL) CPLFree(_dst_srs);
-
+						_rti_warp_arg_destroy(arg);
 						return NULL;
 					}
 
@@ -9844,12 +9921,7 @@ rt_raster rt_raster_gdal_warp(
 						rterror("rt_raster_gdal_warp: Unable to compute spatial coordinates for raster pixel");
 
 						rt_raster_destroy(rast);
-						GDALClose(src_ds);
-
-						for (i = 0; i < transform_opts_len; i++) rtdealloc(transform_opts[i]);
-						rtdealloc(transform_opts);
-						if (_dst_srs != NULL) CPLFree(_dst_srs);
-
+						_rti_warp_arg_destroy(arg);
 						return NULL;
 					}
 
@@ -9892,15 +9964,8 @@ rt_raster rt_raster_gdal_warp(
 				NULL
 			) != ES_NONE) {
 				rterror("rt_raster_gdal_warp: Unable to compute spatial coordinates for raster pixel");
-
 				rt_raster_destroy(rast);
-
-				GDALClose(src_ds);
-
-				for (i = 0; i < transform_opts_len; i++) rtdealloc(transform_opts[i]);
-				rtdealloc(transform_opts);
-				if (_dst_srs != NULL) CPLFree(_dst_srs);
-
+				_rti_warp_arg_destroy(arg);
 				return NULL;
 			}
 
@@ -9923,15 +9988,8 @@ rt_raster rt_raster_gdal_warp(
 				NULL
 			) != ES_NONE) {
 				rterror("rt_raster_gdal_warp: Unable to compute spatial coordinates for raster pixel");
-
 				rt_raster_destroy(rast);
-
-				GDALClose(src_ds);
-
-				for (i = 0; i < transform_opts_len; i++) rtdealloc(transform_opts[i]);
-				rtdealloc(transform_opts);
-				if (_dst_srs != NULL) CPLFree(_dst_srs);
-
+				_rti_warp_arg_destroy(arg);
 				return NULL;
 			}
 
@@ -9954,70 +10012,44 @@ rt_raster rt_raster_gdal_warp(
 
 	if (FLT_EQ(_dim[0], 0) || FLT_EQ(_dim[1], 0)) {
 		rterror("rt_raster_gdal_warp: The width (%f) or height (%f) of the warped raster is zero", _dim[0], _dim[1]);
-
-		GDALClose(src_ds);
-
-		for (i = 0; i < transform_opts_len; i++) rtdealloc(transform_opts[i]);
-		rtdealloc(transform_opts);
-		if (_dst_srs != NULL) CPLFree(_dst_srs);
-
+		_rti_warp_arg_destroy(arg);
 		return NULL;
 	}
 
 	/* load VRT driver */
 	if (!rt_util_gdal_driver_registered("VRT"))
 		GDALRegister_VRT();
-	dst_drv = GDALGetDriverByName("VRT");
-	if (NULL == dst_drv) {
+	arg->dst.drv = GDALGetDriverByName("VRT");
+	if (NULL == arg->dst.drv) {
 		rterror("rt_raster_gdal_warp: Unable to load the output GDAL VRT driver");
-
-		GDALClose(src_ds);
-
+		_rti_warp_arg_destroy(arg);
 		return NULL;
 	}
 
 	/* create dst dataset */
-	dst_ds = GDALCreate(dst_drv, "", _dim[0], _dim[1], 0, GDT_Byte, dst_options);
-	if (NULL == dst_ds) {
+	arg->dst.ds = GDALCreate(arg->dst.drv, "", _dim[0], _dim[1], 0, GDT_Byte, dst_options);
+	if (NULL == arg->dst.ds) {
 		rterror("rt_raster_gdal_warp: Unable to create GDAL VRT dataset");
-
-		GDALClose(src_ds);
-
-		for (i = 0; i < transform_opts_len; i++) rtdealloc(transform_opts[i]);
-		rtdealloc(transform_opts);
-		if (_dst_srs != NULL) CPLFree(_dst_srs);
-
+		_rti_warp_arg_destroy(arg);
 		return NULL;
 	}
 
 	/* set dst srs */
-	if (_dst_srs != NULL) {
-		cplerr = GDALSetProjection(dst_ds, _dst_srs);
-		CPLFree(_dst_srs);
+	if (arg->dst.srs != NULL) {
+		cplerr = GDALSetProjection(arg->dst.ds, arg->dst.srs);
 		if (cplerr != CE_None) {
 			rterror("rt_raster_gdal_warp: Unable to set projection");
-
-			GDALClose(dst_ds);
-			GDALClose(src_ds);
-
-			for (i = 0; i < transform_opts_len; i++) rtdealloc(transform_opts[i]);
-			rtdealloc(transform_opts);
-
+			_rti_warp_arg_destroy(arg);
 			return NULL;
 		}
+		RASTER_DEBUGF(3, "Applied SRS: %s", GDALGetProjectionRef(arg->dst.ds));
 	}
 
 	/* set dst geotransform */
-	cplerr = GDALSetGeoTransform(dst_ds, _gt);
+	cplerr = GDALSetGeoTransform(arg->dst.ds, _gt);
 	if (cplerr != CE_None) {
 		rterror("rt_raster_gdal_warp: Unable to set geotransform");
-
-		GDALClose(dst_ds);
-		GDALClose(src_ds);
-
-		for (i = 0; i < transform_opts_len; i++) rtdealloc(transform_opts[i]);
-		rtdealloc(transform_opts);
-
+		_rti_warp_arg_destroy(arg);
 		return NULL;
 	}
 
@@ -10027,13 +10059,7 @@ rt_raster rt_raster_gdal_warp(
 		rtband = rt_raster_get_band(raster, i);
 		if (NULL == rtband) {
 			rterror("rt_raster_gdal_warp: Unable to get band %d for adding to VRT dataset", i);
-
-			GDALClose(dst_ds);
-			GDALClose(src_ds);
-
-			for (i = 0; i < transform_opts_len; i++) rtdealloc(transform_opts[i]);
-			rtdealloc(transform_opts);
-
+			_rti_warp_arg_destroy(arg);
 			return NULL;
 		}
 
@@ -10042,36 +10068,25 @@ rt_raster rt_raster_gdal_warp(
 		if (gdal_pt == GDT_Unknown)
 			rtwarn("rt_raster_gdal_warp: Unknown pixel type for band %d", i);
 
-		cplerr = GDALAddBand(dst_ds, gdal_pt, NULL);
+		cplerr = GDALAddBand(arg->dst.ds, gdal_pt, NULL);
 		if (cplerr != CE_None) {
 			rterror("rt_raster_gdal_warp: Unable to add band to VRT dataset");
-
-			GDALClose(dst_ds);
-			GDALClose(src_ds);
-
-			for (i = 0; i < transform_opts_len; i++) rtdealloc(transform_opts[i]);
-			rtdealloc(transform_opts);
-
+			_rti_warp_arg_destroy(arg);
 			return NULL;
 		}
 
 		/* get band to write data to */
 		band = NULL;
-		band = GDALGetRasterBand(dst_ds, i + 1);
+		band = GDALGetRasterBand(arg->dst.ds, i + 1);
 		if (NULL == band) {
 			rterror("rt_raster_gdal_warp: Could not get GDAL band for additional processing");
-
-			GDALClose(dst_ds);
-			GDALClose(src_ds);
-
-			for (i = 0; i < transform_opts_len; i++) rtdealloc(transform_opts[i]);
-			rtdealloc(transform_opts);
-
+			_rti_warp_arg_destroy(arg);
 			return NULL;
 		}
 
 		/* set nodata */
 		if (rt_band_get_hasnodata_flag(rtband) != FALSE) {
+			hasnodata = 1;
 			rt_band_get_nodata(rtband, &nodata);
 			if (GDALSetRasterNoDataValue(band, nodata) != CE_None)
 				rtwarn("rt_raster_gdal_warp: Could not set nodata value for band %d", i);
@@ -10080,170 +10095,123 @@ rt_raster rt_raster_gdal_warp(
 	}
 
 	/* create transformation object */
-	transform_arg = imgproj_arg = GDALCreateGenImgProjTransformer2(src_ds, dst_ds, transform_opts);
-	if (NULL == transform_arg) {
+	arg->transform.arg.transform = arg->transform.arg.imgproj = GDALCreateGenImgProjTransformer2(
+		arg->src.ds, arg->dst.ds,
+		arg->transform.option.item
+	);
+	if (NULL == arg->transform.arg.transform) {
 		rterror("rt_raster_gdal_warp: Unable to create GDAL transformation object");
-
-		GDALClose(dst_ds);
-		GDALClose(src_ds);
-
-		for (i = 0; i < transform_opts_len; i++) rtdealloc(transform_opts[i]);
-		rtdealloc(transform_opts);
-
+		_rti_warp_arg_destroy(arg);
 		return NULL;
 	}
-	transform_func = GDALGenImgProjTransform;
+	arg->transform.func = GDALGenImgProjTransform;
 
 	/* use approximate transformation object */
 	if (max_err > 0.0) {
-		transform_arg = approx_arg = GDALCreateApproxTransformer(
+		arg->transform.arg.transform = arg->transform.arg.approx = GDALCreateApproxTransformer(
 			GDALGenImgProjTransform,
-			imgproj_arg, max_err
+			arg->transform.arg.imgproj, max_err
 		);
-		if (NULL == transform_arg) {
+		if (NULL == arg->transform.arg.transform) {
 			rterror("rt_raster_gdal_warp: Unable to create GDAL approximate transformation object");
-
-			GDALClose(dst_ds);
-			GDALClose(src_ds);
-
-			GDALDestroyGenImgProjTransformer(imgproj_arg);
-			for (i = 0; i < transform_opts_len; i++) rtdealloc(transform_opts[i]);
-			rtdealloc(transform_opts);
-
+			_rti_warp_arg_destroy(arg);
 			return NULL;
 		}
 
-		transform_func = GDALApproxTransform;
+		arg->transform.func = GDALApproxTransform;
 	}
 
 	/* warp options */
-	wopts = GDALCreateWarpOptions();
-	if (NULL == wopts) {
+	arg->wopts = GDALCreateWarpOptions();
+	if (NULL == arg->wopts) {
 		rterror("rt_raster_gdal_warp: Unable to create GDAL warp options object");
-
-		GDALClose(dst_ds);
-		GDALClose(src_ds);
-
-		GDALDestroyGenImgProjTransformer(imgproj_arg);
-		GDALDestroyApproxTransformer(approx_arg);
-		for (i = 0; i < transform_opts_len; i++) rtdealloc(transform_opts[i]);
-		rtdealloc(transform_opts);
-
+		_rti_warp_arg_destroy(arg);
 		return NULL;
 	}
 
 	/* set options */
-	wopts->eResampleAlg = resample_alg;
-	wopts->hSrcDS = src_ds;
-	wopts->hDstDS = dst_ds;
-	wopts->pfnTransformer = transform_func;
-	wopts->pTransformerArg = transform_arg;
-	wopts->papszWarpOptions = (char **) CPLMalloc(sizeof(char *) * 2);
-	wopts->papszWarpOptions[0] = (char *) CPLMalloc(sizeof(char) * (strlen("INIT_DEST=NO_DATA") + 1));
-	strcpy(wopts->papszWarpOptions[0], "INIT_DEST=NO_DATA");
-	wopts->papszWarpOptions[1] = NULL;
+	arg->wopts->eResampleAlg = resample_alg;
+	arg->wopts->hSrcDS = arg->src.ds;
+	arg->wopts->hDstDS = arg->dst.ds;
+	arg->wopts->pfnTransformer = arg->transform.func;
+	arg->wopts->pTransformerArg = arg->transform.arg.transform;
+	arg->wopts->papszWarpOptions = (char **) CPLMalloc(sizeof(char *) * 2);
+	arg->wopts->papszWarpOptions[0] = (char *) CPLMalloc(sizeof(char) * (strlen("INIT_DEST=NO_DATA") + 1));
+	strcpy(arg->wopts->papszWarpOptions[0], "INIT_DEST=NO_DATA");
+	arg->wopts->papszWarpOptions[1] = NULL;
 
 	/* set band mapping */
-	wopts->nBandCount = numBands;
-	wopts->panSrcBands = (int *) CPLMalloc(sizeof(int) * wopts->nBandCount);
-	wopts->panDstBands = (int *) CPLMalloc(sizeof(int) * wopts->nBandCount);
-	for (i = 0; i < wopts->nBandCount; i++)
-		wopts->panDstBands[i] = wopts->panSrcBands[i] = i + 1;
+	arg->wopts->nBandCount = numBands;
+	arg->wopts->panSrcBands = (int *) CPLMalloc(sizeof(int) * arg->wopts->nBandCount);
+	arg->wopts->panDstBands = (int *) CPLMalloc(sizeof(int) * arg->wopts->nBandCount);
+	for (i = 0; i < arg->wopts->nBandCount; i++)
+		arg->wopts->panDstBands[i] = arg->wopts->panSrcBands[i] = i + 1;
 
 	/* set nodata mapping */
-	RASTER_DEBUG(3, "Setting nodata mapping");
-	wopts->padfSrcNoDataReal = (double *) CPLMalloc(numBands * sizeof(double));
-	wopts->padfDstNoDataReal = (double *) CPLMalloc(numBands * sizeof(double));
-	wopts->padfSrcNoDataImag = (double *) CPLMalloc(numBands * sizeof(double));
-	wopts->padfDstNoDataImag = (double *) CPLMalloc(numBands * sizeof(double));
-	if (
-		NULL == wopts->padfSrcNoDataReal ||
-		NULL == wopts->padfDstNoDataReal ||
-		NULL == wopts->padfSrcNoDataImag ||
-		NULL == wopts->padfDstNoDataImag
-	) {
-		rterror("rt_raster_gdal_warp: Out of memory allocating nodata mapping");
-
-		GDALClose(dst_ds);
-		GDALClose(src_ds);
-
-		GDALDestroyGenImgProjTransformer(imgproj_arg);
-		GDALDestroyApproxTransformer(approx_arg);
-		GDALDestroyWarpOptions(wopts);
-		for (i = 0; i < transform_opts_len; i++) rtdealloc(transform_opts[i]);
-		rtdealloc(transform_opts);
-
-		return NULL;
-	}
-	for (i = 0; i < numBands; i++) {
-		band = rt_raster_get_band(raster, i);
-		if (!band) {
-			rterror("rt_raster_gdal_warp: Unable to process bands for nodata values");
-
-			GDALClose(dst_ds);
-			GDALClose(src_ds);
-
-			GDALDestroyGenImgProjTransformer(imgproj_arg);
-			GDALDestroyApproxTransformer(approx_arg);
-			GDALDestroyWarpOptions(wopts);
-			for (i = 0; i < transform_opts_len; i++) rtdealloc(transform_opts[i]);
-			rtdealloc(transform_opts);
-
+	if (hasnodata) {
+		RASTER_DEBUG(3, "Setting nodata mapping");
+		arg->wopts->padfSrcNoDataReal = (double *) CPLMalloc(numBands * sizeof(double));
+		arg->wopts->padfDstNoDataReal = (double *) CPLMalloc(numBands * sizeof(double));
+		arg->wopts->padfSrcNoDataImag = (double *) CPLMalloc(numBands * sizeof(double));
+		arg->wopts->padfDstNoDataImag = (double *) CPLMalloc(numBands * sizeof(double));
+		if (
+			NULL == arg->wopts->padfSrcNoDataReal ||
+			NULL == arg->wopts->padfDstNoDataReal ||
+			NULL == arg->wopts->padfSrcNoDataImag ||
+			NULL == arg->wopts->padfDstNoDataImag
+		) {
+			rterror("rt_raster_gdal_warp: Out of memory allocating nodata mapping");
+			_rti_warp_arg_destroy(arg);
 			return NULL;
 		}
+		for (i = 0; i < numBands; i++) {
+			band = rt_raster_get_band(raster, i);
+			if (!band) {
+				rterror("rt_raster_gdal_warp: Unable to process bands for nodata values");
+				_rti_warp_arg_destroy(arg);
+				return NULL;
+			}
 
-		if (!rt_band_get_hasnodata_flag(band)) {
-			/*
-				based on line 1004 of gdalwarp.cpp
-				the problem is that there is a chance that this number is a legitimate value
-			*/
-			wopts->padfSrcNoDataReal[i] = -123456.789;
-		}
-		else {
-			rt_band_get_nodata(band, &(wopts->padfSrcNoDataReal[i]));
-		}
+			if (!rt_band_get_hasnodata_flag(band)) {
+				/*
+					based on line 1004 of gdalwarp.cpp
+					the problem is that there is a chance that this number is a legitimate value
+				*/
+				arg->wopts->padfSrcNoDataReal[i] = -123456.789;
+			}
+			else {
+				rt_band_get_nodata(band, &(arg->wopts->padfSrcNoDataReal[i]));
+			}
 
-		wopts->padfDstNoDataReal[i] = wopts->padfSrcNoDataReal[i];
-		wopts->padfDstNoDataImag[i] = wopts->padfSrcNoDataImag[i] = 0.0;
-		RASTER_DEBUGF(4, "Mapped nodata value for band %d: %f (%f) => %f (%f)",
-			i,
-			wopts->padfSrcNoDataReal[i], wopts->padfSrcNoDataImag[i],
-			wopts->padfDstNoDataReal[i], wopts->padfDstNoDataImag[i]
-		);
+			arg->wopts->padfDstNoDataReal[i] = arg->wopts->padfSrcNoDataReal[i];
+			arg->wopts->padfDstNoDataImag[i] = arg->wopts->padfSrcNoDataImag[i] = 0.0;
+			RASTER_DEBUGF(4, "Mapped nodata value for band %d: %f (%f) => %f (%f)",
+				i,
+				arg->wopts->padfSrcNoDataReal[i], arg->wopts->padfSrcNoDataImag[i],
+				arg->wopts->padfDstNoDataReal[i], arg->wopts->padfDstNoDataImag[i]
+			);
+		}
 	}
 
 	/* warp raster */
 	RASTER_DEBUG(3, "Warping raster");
-	cplerr = GDALInitializeWarpedVRT(dst_ds, wopts);
+	cplerr = GDALInitializeWarpedVRT(arg->dst.ds, arg->wopts);
 	if (cplerr != CE_None) {
 		rterror("rt_raster_gdal_warp: Unable to warp raster");
-
-		GDALClose(dst_ds);
-		GDALClose(src_ds);
-
-		if ((transform_func == GDALApproxTransform) && (NULL != imgproj_arg))
-			GDALDestroyGenImgProjTransformer(imgproj_arg);
-		GDALDestroyWarpOptions(wopts);
-		for (i = 0; i < transform_opts_len; i++) rtdealloc(transform_opts[i]);
-		rtdealloc(transform_opts);
-
+		_rti_warp_arg_destroy(arg);
 		return NULL;
 	}
-	GDALFlushCache(dst_ds);
+	/*
+	GDALSetDescription(arg->dst.ds, "/tmp/warped.vrt");
+	*/
+	GDALFlushCache(arg->dst.ds);
 	RASTER_DEBUG(3, "Raster warped");
 
 	/* convert gdal dataset to raster */
 	RASTER_DEBUG(3, "Converting GDAL dataset to raster");
-	rast = rt_raster_from_gdal_dataset(dst_ds);
+	rast = rt_raster_from_gdal_dataset(arg->dst.ds);
 
-	GDALClose(dst_ds);
-	GDALClose(src_ds);
-
-	if ((transform_func == GDALApproxTransform) && (NULL != imgproj_arg))
-		GDALDestroyGenImgProjTransformer(imgproj_arg);
-	GDALDestroyWarpOptions(wopts);
-	for (i = 0; i < transform_opts_len; i++) rtdealloc(transform_opts[i]);
-	rtdealloc(transform_opts);
+	_rti_warp_arg_destroy(arg);
 
 	if (NULL == rast) {
 		rterror("rt_raster_gdal_warp: Unable to warp raster");
@@ -11719,6 +11687,7 @@ rt_raster_intersects(
 
 	assert(NULL != rast1);
 	assert(NULL != rast2);
+	assert(NULL != intersects);
 
 	if (nband1 < 0 && nband2 < 0) {
 		nband1 = -1;
@@ -12315,6 +12284,7 @@ rt_errorstate rt_raster_within_distance(
 
 	assert(NULL != rast1);
 	assert(NULL != rast2);
+	assert(NULL != dwithin);
 
 	if (nband1 < 0 && nband2 < 0) {
 		nband1 = -1;
@@ -12409,6 +12379,7 @@ rt_errorstate rt_raster_fully_within_distance(
 
 	assert(NULL != rast1);
 	assert(NULL != rast2);
+	assert(NULL != dfwithin);
 
 	if (nband1 < 0 && nband2 < 0) {
 		nband1 = -1;
@@ -13683,6 +13654,7 @@ rt_raster_iterator(
 
 	RASTER_DEBUG(3, "Starting...");
 
+	assert(itrset != NULL && itrcount > 0);
 	assert(rtnraster != NULL);
 
 	/* init rtnraster to NULL */
@@ -13703,18 +13675,6 @@ rt_raster_iterator(
 	/* check that pixtype != PT_END */
 	if (pixtype == PT_END) {
 		rterror("rt_raster_iterator: Pixel type cannot be PT_END");
-		return ES_ERROR;
-	}
-
-	/* itrcount must be greater than 0 */
-	if (itrcount < 1) {
-		rterror("rt_raster_iterator: At least one element must be provided for itrset");
-		return ES_ERROR;
-	}
-
-	/* itrset is not NULL */
-	if (itrset == NULL) {
-		rterror("rt_raster_iterator: itrset cannot be NULL");
 		return ES_ERROR;
 	}
 

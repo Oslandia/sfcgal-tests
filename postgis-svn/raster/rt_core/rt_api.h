@@ -1,5 +1,5 @@
 /*
- * $Id: rt_api.h 10866 2012-12-19 23:26:33Z dustymugs $
+ * $Id: rt_api.h 11057 2013-01-28 23:01:25Z dustymugs $
  *
  * WKTRaster - Raster Types for PostGIS
  * http://www.postgis.org/support/wiki/index.php?WKTRasterHomePage
@@ -638,7 +638,7 @@ rt_errorstate rt_band_get_nodata(rt_band band, double *nodata);
 rt_errorstate rt_band_set_pixel_line(
 	rt_band band,
 	int x, int y,
-	void *vals, uint16_t len
+	void *vals, uint32_t len
 );
 
 /**
