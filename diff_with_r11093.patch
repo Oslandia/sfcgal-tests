@@ -1,0 +1,2394 @@
+Index: liblwgeom/Makefile.in
+===================================================================
+--- liblwgeom/Makefile.in	(révision 11093)
++++ liblwgeom/Makefile.in	(copie de travail)
+@@ -91,6 +91,12 @@
+ NM_OBJS = \
+ 	lwspheroid.o 
+ 
++ifeq (@POSTGIS_SFCGAL@,1)
++CFLAGS += @SFCGAL_CPPFLAGS@
++LDFLAGS += @SFCGAL_LDFLAGS@
++SA_OBJS += lwgeom_sfcgal.o
++endif
++
+ LT_SA_OBJS = $(SA_OBJS:.o=.lo)
+ LT_NM_OBJS = $(NM_OBJS:.o=.lo)
+ LT_OBJS = $(LT_SA_OBJS) $(LT_NM_OBJS)
+@@ -158,7 +164,6 @@
+ parser:
+ 	$(YACC) -o'lwin_wkt_parse.c' -d lwin_wkt_parse.y
+ 	$(LEX) -i lwin_wkt_lex.l
+-	
+ #	$(YACC) --debug --verbose -o'$@' -d $<
+ #	$(YACC) -o'$@' -d $^
+ #	$(LEX) -i $<
+Index: liblwgeom/cunit/Makefile.in
+===================================================================
+--- liblwgeom/cunit/Makefile.in	(révision 11093)
++++ liblwgeom/cunit/Makefile.in	(copie de travail)
+@@ -50,6 +50,12 @@
+ 	cu_in_wkt.o \
+ 	cu_tester.o 
+ 
++ifeq (@POSTGIS_SFCGAL@,1)
++CXXFLAGS += @SFCGAL_CPPFLAGS@
++LDFLAGS += @SFCGAL_LDFLAGS@
++OBJS += cu_sfcgal.o
++endif
++
+ # If we couldn't find the cunit library then display a helpful message
+ ifeq ($(CUNIT_LDFLAGS),)
+ all: requirements_not_met_cunit
+Index: liblwgeom/cunit/cu_sfcgal.c
+===================================================================
+--- liblwgeom/cunit/cu_sfcgal.c	(révision 0)
++++ liblwgeom/cunit/cu_sfcgal.c	(révision 0)
+@@ -0,0 +1,100 @@
++/**********************************************************************
++ *
++ * PostGIS - Spatial Types for PostgreSQL
++ * http://postgis.refractions.net
++ *
++ *
++ * This is free software; you can redistribute and/or modify it under
++ * the terms of the GNU General Public Licence. See the COPYING file.
++ *
++ **********************************************************************/
++
++#include <stdio.h>
++#include <stdlib.h>
++#include <string.h>
++#include "CUnit/Basic.h"
++
++#include "cu_tester.h"
++#include "liblwgeom.h"
++
++extern LWGEOM* lwgeom_sfcgal_noop( const LWGEOM* geom_in );
++
++static void test_sfcgal_noop(void)
++{
++	int i;
++
++	char *ewkt[] =
++	{
++		"POINT(0 0.2)",
++		"LINESTRING(-1 -1,-1 2.5,2 2,2 -1)",
++		"TRIANGLE((0 0,-1 1,0 -1,0 0))",
++		"MULTIPOINT(0.9 0.9,0.9 0.9,0.9 0.9,0.9 0.9,0.9 0.9,0.9 0.9)",
++		"SRID=1;MULTILINESTRING((-1 -1,-1 2.5,2 2,2 -1),(-1 -1,-1 2.5,2 2,2 -1),(-1 -1,-1 2.5,2 2,2 -1),(-1 -1,-1 2.5,2 2,2 -1))",
++		"SRID=1;MULTILINESTRING((-1 -1,-1 2.5,2 2,2 -1),(-1 -1,-1 2.5,2 2,2 -1),(-1 -1,-1 2.5,2 2,2 -1),(-1 -1,-1 2.5,2 2,2 -1))",
++		"POLYGON((-1 -1,-1 2.5,2 2,2 -1,-1 -1),(0 0,0 1,1 1,1 0,0 0))",
++		"SRID=4326;POLYGON((-1 -1,-1 2.5,2 2,2 -1,-1 -1),(0 0,0 1,1 1,1 0,0 0))",
++		"SRID=4326;POLYGON((-1 -1 1,-1 2.5 1,2 2 2,2 -1 2,-1 -1 2),(0 0 1,0 1 1,1 1 1,1 0 2,0 0 2))",
++		"SRID=4326;POLYGON((-1 -1,-1 2.5,2 2,2 -1,-1 -1),(0 0,0 1,1 1,1 0,0 0),(-0.5 -0.5,-0.5 -0.4,-0.4 -0.4,-0.4 -0.5,-0.5 -0.5))",
++		"SRID=100000;POLYGON((-1 -1 3,-1 2.5 3,2 2 3,2 -1 3,-1 -1 3),(0 0 3,0 1 3,1 1 3,1 0 3,0 0 3),(-0.5 -0.5 3,-0.5 -0.4 3,-0.4 -0.4 3,-0.4 -0.5 3,-0.5 -0.5 3))",
++		"SRID=4326;MULTIPOLYGON(((-1 -1,-1 2.5,2 2,2 -1,-1 -1),(0 0,0 1,1 1,1 0,0 0),(-0.5 -0.5,-0.5 -0.4,-0.4 -0.4,-0.4 -0.5,-0.5 -0.5)),((-1 -1,-1 2.5,2 2,2 -1,-1 -1),(0 0,0 1,1 1,1 0,0 0),(-0.5 -0.5,-0.5 -0.4,-0.4 -0.4,-0.4 -0.5,-0.5 -0.5)))",
++		"SRID=4326;GEOMETRYCOLLECTION(POINT(0 1),POLYGON((-1 -1,-1 2.5,2 2,2 -1,-1 -1),(0 0,0 1,1 1,1 0,0 0)),MULTIPOLYGON(((-1 -1,-1 2.5,2 2,2 -1,-1 -1),(0 0,0 1,1 1,1 0,0 0),(-0.5 -0.5,-0.5 -0.4,-0.4 -0.4,-0.4 -0.5,-0.5 -0.5))))",
++		"POLYHEDRALSURFACE(((-1 -1,-1 2.5,2 2,2 -1,-1 -1),(0 0,0 1,1 1,1 0,0 0),(-0.5 -0.5,-0.5 -0.4,-0.4 -0.4,-0.4 -0.5,-0.5 -0.5)),((-1 -1,-1 2.5,2 2,2 -1,-1 -1),(0 0,0 1,1 1,1 0,0 0),(-0.5 -0.5,-0.5 -0.4,-0.4 -0.4,-0.4 -0.5,-0.5 -0.5)))",
++		"POLYHEDRALSURFACE(((-1 -1 1,-1 2.5 1,2 2 1,2 -1 1,-1 -1 1),(0 0 1,0 1 1,1 1 1,1 0 1,0 0 1),(-0.5 -0.5 1,-0.5 -0.4 1,-0.4 -0.4 1,-0.4 -0.5 1,-0.5 -0.5 1)),((-1 -1 1,-1 2.5 1,2 2 1,2 -1 1,-1 -1 1),(0 0 1,0 1 1,1 1 1,1 0 1,0 0 1),(-0.5 -0.5 1,-0.5 -0.4 1,-0.4 -0.4 1,-0.4 -0.5 1,-0.5 -0.5 1)))",
++		"TIN(((0 0,0 -1,-1 1,0 0)),((0 0,1 0,0 -1,0 0)))",
++	};
++
++	char *expected_ewkt[] =
++	{
++		"POINT(0 0.2)",
++		"LINESTRING(-1 -1,-1 2.5,2 2,2 -1)",
++		"TRIANGLE((0 0,-1 1,0 -1))",
++		"MULTIPOINT(0.9 0.9,0.9 0.9,0.9 0.9,0.9 0.9,0.9 0.9,0.9 0.9)",
++		"SRID=1;MULTILINESTRING((-1 -1,-1 2.5,2 2,2 -1),(-1 -1,-1 2.5,2 2,2 -1),(-1 -1,-1 2.5,2 2,2 -1),(-1 -1,-1 2.5,2 2,2 -1))",
++		"SRID=1;MULTILINESTRING((-1 -1,-1 2.5,2 2,2 -1),(-1 -1,-1 2.5,2 2,2 -1),(-1 -1,-1 2.5,2 2,2 -1),(-1 -1,-1 2.5,2 2,2 -1))",
++		"POLYGON((-1 -1,-1 2.5,2 2,2 -1,-1 -1),(0 0,0 1,1 1,1 0,0 0))",
++		"SRID=4326;POLYGON((-1 -1,-1 2.5,2 2,2 -1,-1 -1),(0 0,0 1,1 1,1 0,0 0))",
++		"SRID=4326;POLYGON((-1 -1 1,-1 2.5 1,2 2 2,2 -1 2,-1 -1 2),(0 0 1,0 1 1,1 1 1,1 0 2,0 0 2))",
++		"SRID=4326;POLYGON((-1 -1,-1 2.5,2 2,2 -1,-1 -1),(0 0,0 1,1 1,1 0,0 0),(-0.5 -0.5,-0.5 -0.4,-0.4 -0.4,-0.4 -0.5,-0.5 -0.5))",
++		"SRID=100000;POLYGON((-1 -1 3,-1 2.5 3,2 2 3,2 -1 3,-1 -1 3),(0 0 3,0 1 3,1 1 3,1 0 3,0 0 3),(-0.5 -0.5 3,-0.5 -0.4 3,-0.4 -0.4 3,-0.4 -0.5 3,-0.5 -0.5 3))",
++		"SRID=4326;MULTIPOLYGON(((-1 -1,-1 2.5,2 2,2 -1,-1 -1),(0 0,0 1,1 1,1 0,0 0),(-0.5 -0.5,-0.5 -0.4,-0.4 -0.4,-0.4 -0.5,-0.5 -0.5)),((-1 -1,-1 2.5,2 2,2 -1,-1 -1),(0 0,0 1,1 1,1 0,0 0),(-0.5 -0.5,-0.5 -0.4,-0.4 -0.4,-0.4 -0.5,-0.5 -0.5)))",
++		"SRID=4326;GEOMETRYCOLLECTION(POINT(0 1),POLYGON((-1 -1,-1 2.5,2 2,2 -1,-1 -1),(0 0,0 1,1 1,1 0,0 0)),MULTIPOLYGON(((-1 -1,-1 2.5,2 2,2 -1,-1 -1),(0 0,0 1,1 1,1 0,0 0),(-0.5 -0.5,-0.5 -0.4,-0.4 -0.4,-0.4 -0.5,-0.5 -0.5))))",
++		"POLYHEDRALSURFACE(((-1 -1,-1 2.5,2 2,2 -1,-1 -1),(0 0,0 1,1 1,1 0,0 0),(-0.5 -0.5,-0.5 -0.4,-0.4 -0.4,-0.4 -0.5,-0.5 -0.5)),((-1 -1,-1 2.5,2 2,2 -1,-1 -1),(0 0,0 1,1 1,1 0,0 0),(-0.5 -0.5,-0.5 -0.4,-0.4 -0.4,-0.4 -0.5,-0.5 -0.5)))",
++		"POLYHEDRALSURFACE(((-1 -1 1,-1 2.5 1,2 2 1,2 -1 1,-1 -1 1),(0 0 1,0 1 1,1 1 1,1 0 1,0 0 1),(-0.5 -0.5 1,-0.5 -0.4 1,-0.4 -0.4 1,-0.4 -0.5 1,-0.5 -0.5 1)),((-1 -1 1,-1 2.5 1,2 2 1,2 -1 1,-1 -1 1),(0 0 1,0 1 1,1 1 1,1 0 1,0 0 1),(-0.5 -0.5 1,-0.5 -0.4 1,-0.4 -0.4 1,-0.4 -0.5 1,-0.5 -0.5 1)))",
++		"TIN(((0 0,0 -1,-1 1)),((0 0,1 0,0 -1)))",
++	};
++
++	for ( i = 0; i < (sizeof ewkt/sizeof(char *)); i++ )
++	{
++		LWGEOM *geom_in, *geom_out;
++		char *in_ewkt;
++		char *out_ewkt;
++
++		in_ewkt = ewkt[i];
++		geom_in = lwgeom_from_wkt(in_ewkt, LW_PARSER_CHECK_NONE);
++		geom_out = lwgeom_sfcgal_noop(geom_in);
++		if ( ! geom_out ) {
++			fprintf(stderr, "\nNull return from lwgeom_sfcgal_noop with wkt:   %s\n", in_ewkt);
++			lwgeom_free(geom_in);
++			continue;
++		}
++		out_ewkt = lwgeom_to_ewkt(geom_out);
++		if (strcmp(expected_ewkt[i], out_ewkt))
++			fprintf(stderr, "\nExp:   %s\nObt:  %s\n", expected_ewkt[i], out_ewkt);
++		CU_ASSERT_STRING_EQUAL(expected_ewkt[i], out_ewkt);
++		lwfree(out_ewkt);
++		lwgeom_free(geom_out);
++		lwgeom_free(geom_in);
++	}
++}
++
++
++/*
++** Used by test harness to register the tests in this file.
++*/
++CU_TestInfo sfcgal_tests[] =
++{
++	PG_TEST(test_sfcgal_noop),
++	CU_TEST_INFO_NULL
++};
++CU_SuiteInfo sfcgal_suite = {"SFCGAL",  NULL,  NULL, sfcgal_tests};
++
+Index: liblwgeom/cunit/cu_tester.c
+===================================================================
+--- liblwgeom/cunit/cu_tester.c	(révision 11093)
++++ liblwgeom/cunit/cu_tester.c	(copie de travail)
+@@ -37,6 +37,7 @@
+ extern CU_SuiteInfo split_suite;
+ extern CU_SuiteInfo geodetic_suite;
+ extern CU_SuiteInfo geos_suite;
++extern CU_SuiteInfo sfcgal_suite;
+ extern CU_SuiteInfo tree_suite;
+ extern CU_SuiteInfo triangulate_suite;
+ extern CU_SuiteInfo homogenize_suite;
+@@ -74,6 +75,7 @@
+ 		split_suite,
+ 		geodetic_suite,
+ 		geos_suite,
++		sfcgal_suite,
+ 		tree_suite,
+ 		triangulate_suite,
+ 		stringbuffer_suite,
+Index: liblwgeom/lwgeom_sfcgal.c
+===================================================================
+--- liblwgeom/lwgeom_sfcgal.c	(révision 0)
++++ liblwgeom/lwgeom_sfcgal.c	(révision 0)
+@@ -0,0 +1,543 @@
++#include "lwgeom_sfcgal.h"
++
++int SFCGAL_type_to_lwgeom_type( sfcgal_geometry_type_t type );
++
++int SFCGAL_type_to_lwgeom_type( sfcgal_geometry_type_t type )
++{
++    switch ( type )
++    {
++    case SFCGAL_TYPE_POINT:
++	return POINTTYPE;
++    case SFCGAL_TYPE_LINESTRING:
++	return LINETYPE;
++    case SFCGAL_TYPE_POLYGON:
++	return POLYGONTYPE;
++    case SFCGAL_TYPE_MULTIPOINT:
++	return MULTIPOINTTYPE;
++    case SFCGAL_TYPE_MULTILINESTRING:
++	return MULTILINETYPE;
++    case SFCGAL_TYPE_MULTIPOLYGON:
++	return MULTIPOLYGONTYPE;
++    case SFCGAL_TYPE_MULTISOLID:
++	return COLLECTIONTYPE;
++    case SFCGAL_TYPE_GEOMETRYCOLLECTION:
++	return COLLECTIONTYPE;
++	//    case SFCGAL_TYPE_CIRCULARSTRING:
++	//	return CIRCSTRINGTYPE;
++	//    case SFCGAL_TYPE_COMPOUNDCURVE:
++	//	return COMPOUNDTYPE;
++	//    case SFCGAL_TYPE_CURVEPOLYGON:
++	//	return CURVEPOLYTYPE;
++	//    case SFCGAL_TYPE_MULTICURVE:
++	//	return MULTICURVETYPE;
++	//    case SFCGAL_TYPE_MULTISURFACE:
++	//	return MULTISURFACETYPE;
++	//    case SFCGAL_TYPE_CURVE:
++	// Unknown LWGEOM type
++	//	return 0;
++	//    case SFCGAL_TYPE_SURFACE:
++	// Unknown LWGEOM type
++	//	return 0;
++    case SFCGAL_TYPE_POLYHEDRALSURFACE:
++	return POLYHEDRALSURFACETYPE;
++    case SFCGAL_TYPE_TRIANGULATEDSURFACE:
++	return TINTYPE;
++    case SFCGAL_TYPE_TRIANGLE:
++	return TRIANGLETYPE;
++    default:
++	return 0;
++    };
++    return 0;
++}
++
++POINTARRAY* ptarray_from_SFCGAL( const sfcgal_geometry_t* geom, int force3D );
++POINTARRAY* ptarray_from_SFCGAL( const sfcgal_geometry_t* geom, int force3D )
++{
++    POINTARRAY* pa = 0;
++    POINT4D point;
++    int want3d = force3D || sfcgal_geometry_is_3d( geom );
++    
++    switch ( sfcgal_geometry_type_id( geom ) )
++    {
++    case SFCGAL_TYPE_POINT:
++	{
++	    pa = ptarray_construct( want3d, 0, 1 );
++	    point.x = sfcgal_point_x( geom );
++	    point.y = sfcgal_point_y( geom );
++	    if ( sfcgal_geometry_is_3d( geom ) ) {
++		point.z = sfcgal_point_z( geom );
++	    }
++	    else if ( force3D ) {
++		point.z = 0.0;
++	    }	    
++	    point.m = 0.0;
++	    ptarray_set_point4d( pa, 0, &point );
++	    break;
++	}
++    case SFCGAL_TYPE_LINESTRING:
++	{
++	    //	    pa = ptarray_construct( ls->is3D() ? 1 : 0, 0, ls->numPoints() );
++	    size_t num_points = sfcgal_linestring_num_points( geom );
++	    size_t i;
++	    pa = ptarray_construct( want3d, 0, num_points );
++	    
++	    for ( i = 0; i < num_points; i++ )
++	    {
++		const sfcgal_geometry_t* pt = sfcgal_linestring_point_n( geom, i );
++		point.x = sfcgal_point_x( pt );
++		point.y = sfcgal_point_y( pt );
++		if ( sfcgal_geometry_is_3d( geom ) ) {
++		    point.z = sfcgal_point_z( pt );
++		}
++		else if ( force3D ) {
++		    point.z = 0.0;
++		}
++		point.m = 0.0;
++		ptarray_set_point4d( pa, i, &point );		
++	    }
++	    break;
++	}
++    case SFCGAL_TYPE_TRIANGLE:
++	{
++	    size_t i;
++	    pa = ptarray_construct( want3d, 0, 3 );
++	    
++	    for ( i = 0; i < 3; i++ )
++	    {
++		const sfcgal_geometry_t* pt = sfcgal_triangle_vertex( geom, i );
++		point.x = sfcgal_point_x( pt );
++		point.y = sfcgal_point_y( pt );
++		if ( sfcgal_geometry_is_3d( geom ) ) {
++		    point.z = sfcgal_point_z( pt );
++		}
++		else if ( force3D ) {
++		    point.z = 0.0;
++		}
++		point.m = 0.0;
++		ptarray_set_point4d( pa, i, &point );		
++	    }
++	    break;
++	}
++	// These other types should not be called directly ...
++    case SFCGAL_TYPE_POLYGON:
++    case SFCGAL_TYPE_MULTIPOINT:
++    case SFCGAL_TYPE_MULTILINESTRING:
++    case SFCGAL_TYPE_MULTIPOLYGON:
++    case SFCGAL_TYPE_GEOMETRYCOLLECTION:
++	//    case SFCGAL::TYPE_CIRCULARSTRING:
++	//    case SFCGAL::TYPE_COMPOUNDCURVE:
++	//    case SFCGAL::TYPE_CURVEPOLYGON:
++	//    case SFCGAL::TYPE_MULTICURVE:
++	//    case SFCGAL::TYPE_MULTISURFACE:
++	//    case SFCGAL::TYPE_CURVE:
++	//    case SFCGAL::TYPE_SURFACE:
++    case SFCGAL_TYPE_POLYHEDRALSURFACE:
++    case SFCGAL_TYPE_TRIANGULATEDSURFACE:
++    default:
++	// FIXME
++	//	    throw std::runtime_error( "ptarray_from_SFCGAL: Unsupported SFCGAL geometry of type " + geom->geometryType() );
++	break;
++    }
++    return pa;
++}
++
++sfcgal_geometry_t* ptarray_to_SFCGAL( const POINTARRAY* pa, int type );
++sfcgal_geometry_t* ptarray_to_SFCGAL( const POINTARRAY* pa, int type )
++{
++    POINT3DZ point;
++    
++    switch ( type )
++    {
++    case POINTTYPE:
++	{
++	    getPoint3dz_p( pa, 0, &point );
++	    int is_3d = FLAGS_GET_Z( pa->flags ) != 0;
++	    if ( is_3d ) {
++		return sfcgal_point_create_from_xyz( point.x, point.y, point.z );
++	    }
++	    else {
++		return sfcgal_point_create_from_xy( point.x, point.y );
++	    }
++	}
++    case LINETYPE:
++	{
++	    size_t i;
++	    sfcgal_geometry_t* ret_geom = sfcgal_linestring_create();
++	    
++	    int is_3d = FLAGS_GET_Z( pa->flags ) != 0;
++	    for ( i = 0; i < pa->npoints; i++ )
++	    {
++		getPoint3dz_p( pa, i, &point );
++		if ( is_3d ) {
++		    sfcgal_linestring_add_point( ret_geom, sfcgal_point_create_from_xyz( point.x, point.y, point.z ) );
++		}
++		else {
++		    sfcgal_linestring_add_point( ret_geom, sfcgal_point_create_from_xy( point.x, point.y ) );
++		}
++	    }
++	    return ret_geom;
++	}
++    case TRIANGLETYPE:
++	{
++	    sfcgal_geometry_t* pta;
++	    sfcgal_geometry_t* ptb;
++	    sfcgal_geometry_t* ptc;
++
++	    int is_3d = FLAGS_GET_Z( pa->flags ) != 0;
++	    getPoint3dz_p( pa, 0, &point );
++	    if ( is_3d ) {
++		pta = sfcgal_point_create_from_xyz( point.x, point.y, point.z );
++	    }
++	    else {
++		pta = sfcgal_point_create_from_xy( point.x, point.y );
++	    }
++	    getPoint3dz_p( pa, 1, &point );
++	    if ( is_3d ) {
++		ptb = sfcgal_point_create_from_xyz( point.x, point.y, point.z );
++	    }
++	    else {
++		ptb = sfcgal_point_create_from_xy( point.x, point.y );
++	    }
++	    getPoint3dz_p( pa, 2, &point );
++	    if ( is_3d ) {
++		ptc = sfcgal_point_create_from_xyz( point.x, point.y, point.z );
++	    }
++	    else {
++		ptc = sfcgal_point_create_from_xy( point.x, point.y );
++	    }
++
++	    sfcgal_geometry_t* tri = sfcgal_triangle_create_from_points( pta, ptb, ptc );
++	    // delete points
++	    sfcgal_geometry_delete( pta );
++	    sfcgal_geometry_delete( ptb );
++	    sfcgal_geometry_delete( ptc );
++	    return tri;
++	}
++    }
++    return NULL;
++}
++
++LWGEOM* SFCGAL2LWGEOM( const sfcgal_geometry_t* geom, int force3D, int SRID )
++{
++    int want3d;
++
++    want3d = force3D || sfcgal_geometry_is_3d( geom );
++
++    switch ( sfcgal_geometry_type_id( geom ) )
++    {
++    case SFCGAL_TYPE_POINT:
++	{
++	    if ( sfcgal_geometry_is_empty( geom ) )
++		return (LWGEOM*)lwpoint_construct_empty( SRID, want3d, 0 );
++	    POINTARRAY* pa = ptarray_from_SFCGAL( geom, force3D );
++	    return (LWGEOM*)lwpoint_construct( SRID, /* bbox */ NULL, pa );
++	}
++    case SFCGAL_TYPE_LINESTRING:
++	{
++	    if ( sfcgal_geometry_is_empty( geom ) )
++		return (LWGEOM*)lwline_construct_empty( SRID, want3d, 0 );
++	    POINTARRAY* pa = ptarray_from_SFCGAL( geom, force3D );
++	    return (LWGEOM*)lwline_construct( SRID, /* bbox */ NULL, pa );
++	}
++    case SFCGAL_TYPE_TRIANGLE:
++	{
++	    if ( sfcgal_geometry_is_empty( geom ) )
++		return (LWGEOM*)lwtriangle_construct_empty( SRID, want3d, 0 );
++	    POINTARRAY* pa = ptarray_from_SFCGAL( geom, force3D );
++	    return (LWGEOM*)lwtriangle_construct( SRID, /* bbox */ NULL, pa );
++	}
++    case SFCGAL_TYPE_POLYGON:
++	{
++	    size_t i;
++	    if ( sfcgal_geometry_is_empty( geom ) )
++		return (LWGEOM*)lwpoly_construct_empty( SRID, want3d, 0 );
++
++	    size_t n_interiors = sfcgal_polygon_num_interior_rings( geom );
++	    // allocate for all the rings (including the exterior one)
++	    POINTARRAY** pa = (POINTARRAY**) lwalloc( sizeof(POINTARRAY*) * (n_interiors + 1 ) );
++
++	    // write the exterior ring
++	    pa[0] = ptarray_from_SFCGAL( sfcgal_polygon_exterior_ring( geom ), force3D );
++	    for ( i = 0; i < n_interiors; i++ )
++	    {
++		pa[ i+1 ] = ptarray_from_SFCGAL( sfcgal_polygon_interior_ring_n( geom, i ), force3D );
++	    }
++	    return (LWGEOM*)lwpoly_construct( SRID, NULL, n_interiors + 1, pa );
++	}
++    case SFCGAL_TYPE_MULTIPOINT:
++    case SFCGAL_TYPE_MULTILINESTRING:
++    case SFCGAL_TYPE_MULTIPOLYGON:
++    case SFCGAL_TYPE_MULTISOLID:
++    case SFCGAL_TYPE_GEOMETRYCOLLECTION:
++	{
++	    size_t i;
++	    size_t n_geoms = sfcgal_geometry_collection_num_geometries( geom );
++	    LWGEOM** geoms = 0;
++	    if ( n_geoms )
++	    {
++		geoms = (LWGEOM**)lwalloc( sizeof(LWGEOM*) * n_geoms );
++		size_t j = 0;
++		for ( i = 0; i < n_geoms; i++ )
++		{
++		    const sfcgal_geometry_t* g = sfcgal_geometry_collection_geometry_n( geom, i );
++		    if ( ! sfcgal_geometry_is_empty( g ) )
++		    {
++			// recurse call
++			geoms[j++] = SFCGAL2LWGEOM( g, 0, SRID_UNKNOWN );
++		    }
++		}
++		n_geoms = j;
++		geoms = (LWGEOM**)lwrealloc( geoms, sizeof(LWGEOM*) * n_geoms );
++	    }
++	    return (LWGEOM*)lwcollection_construct( SFCGAL_type_to_lwgeom_type( sfcgal_geometry_type_id( geom )),
++						    SRID,
++						    NULL,
++						    n_geoms,
++						    geoms );
++	}
++	//    case SFCGAL_TYPE_CIRCULARSTRING:
++	//    case SFCGAL_TYPE_COMPOUNDCURVE:
++	//    case SFCGAL_TYPE_CURVEPOLYGON:
++	//    case SFCGAL_TYPE_MULTICURVE:
++	//    case SFCGAL_TYPE_MULTISURFACE:
++	//    case SFCGAL_TYPE_CURVE:
++	//    case SFCGAL_TYPE_SURFACE:
++    case SFCGAL_TYPE_POLYHEDRALSURFACE:
++	{
++	    size_t i;
++	    size_t n_geoms = sfcgal_polyhedral_surface_num_polygons( geom );
++	    LWGEOM** geoms = 0;
++	    if ( n_geoms )
++	    {
++		geoms = (LWGEOM**)lwalloc( sizeof(LWGEOM*) * n_geoms );
++		for ( i = 0; i < n_geoms; i++ )
++		{
++		    const sfcgal_geometry_t* g = sfcgal_polyhedral_surface_polygon_n( geom, i );
++		    // recurse call
++		    geoms[i] = SFCGAL2LWGEOM( g, 0, SRID_UNKNOWN );
++		}
++	    }
++	    return (LWGEOM*)lwcollection_construct( POLYHEDRALSURFACETYPE,
++						    SRID,
++						    NULL,
++						    n_geoms,
++						    geoms );
++	}
++    case SFCGAL_TYPE_SOLID:
++	{
++	    // a Solid is a closed PolyhedralSurface
++	    // compute the number of polyhedral
++	    size_t i;
++	    size_t n_geoms = 0;
++	    size_t num_shells = sfcgal_solid_num_shells( geom );
++	    for ( i = 0; i < num_shells; ++i ) {
++		n_geoms += sfcgal_polyhedral_surface_num_polygons( sfcgal_solid_shell_n( geom, i ) );
++	    }
++	    LWGEOM** geoms = 0;
++	    if ( n_geoms )
++	    {
++		geoms = (LWGEOM**)lwalloc( sizeof(LWGEOM*) * n_geoms );
++		size_t k = 0;
++		for ( i = 0; i < num_shells; i++ )
++		{
++		    size_t j;
++		    const sfcgal_geometry_t* shell_i = sfcgal_solid_shell_n( geom, i );
++		    size_t num_polygons = sfcgal_polyhedral_surface_num_polygons( shell_i );
++		    for ( j = 0; j < num_polygons; ++j ) {
++			const sfcgal_geometry_t* g = sfcgal_polyhedral_surface_polygon_n( shell_i, j );
++			// recurse call
++			geoms[k] = SFCGAL2LWGEOM( g, /* force3D = */ 1, SRID_UNKNOWN );
++			++k;
++		    }
++		}
++	    }
++	    LWGEOM* rgeom =  (LWGEOM*)lwcollection_construct( POLYHEDRALSURFACETYPE,
++							      SRID,
++							      NULL,
++							      n_geoms,
++							      geoms );
++	    if ( n_geoms ) {
++		// set the 'Solid' flag before returning
++		FLAGS_SET_SOLID( rgeom->flags, 1 );
++	    }
++	    return rgeom;
++	}
++    case SFCGAL_TYPE_TRIANGULATEDSURFACE:
++	{
++	    size_t i;
++	    size_t n_geoms = sfcgal_triangulated_surface_num_triangles( geom );
++	    LWGEOM** geoms = 0;
++	    if ( n_geoms )
++	    {
++		geoms = (LWGEOM**)lwalloc( sizeof(LWGEOM*) * n_geoms );
++		for ( i = 0; i < n_geoms; i++ )
++		{
++		    const sfcgal_geometry_t* g = sfcgal_triangulated_surface_triangle_n( geom, i );
++		    // recurse call
++		    geoms[i] = SFCGAL2LWGEOM( g, 0, SRID_UNKNOWN );
++		}
++	    }
++	    return (LWGEOM*)lwcollection_construct( TINTYPE,
++						    SRID,
++						    NULL,
++						    n_geoms,
++						    geoms );
++	}
++    default:
++	// FIXME
++	//	throw std::runtime_error( "SFCGAL2LWGEOM: Unsupported SFCGAL geometry of type " + geom->geometryType() );
++	break;
++    }
++
++    return NULL;
++}
++
++sfcgal_geometry_t* LWGEOM2SFCGAL( const LWGEOM* geom )
++{
++    sfcgal_geometry_t* ret_geom = NULL;
++
++    switch ( geom->type )
++    {
++    case POINTTYPE:
++	{
++	    const LWPOINT* lwp = (const LWPOINT*) geom;
++	    if ( lwgeom_is_empty( geom ) ) {
++		return sfcgal_point_create();
++	    }
++
++	    return ptarray_to_SFCGAL( lwp->point, POINTTYPE );
++	}
++	break;
++    case LINETYPE:
++	{
++	    const LWLINE* line = (const LWLINE*) geom;
++	    if ( lwgeom_is_empty( geom ) ) {
++		return sfcgal_linestring_create();
++	    }
++
++	    return ptarray_to_SFCGAL( line->points, LINETYPE );
++	}
++	break;
++    case TRIANGLETYPE:
++	{
++	    const LWTRIANGLE* tri = (const LWTRIANGLE*) geom;
++	    if ( lwgeom_is_empty( geom ) ) {
++		return sfcgal_triangle_create();
++	    }
++
++	    return ptarray_to_SFCGAL( tri->points, TRIANGLETYPE );
++	}
++	break;
++    case POLYGONTYPE:
++	{
++	    size_t i;
++	    const LWPOLY* poly = (const LWPOLY*) geom;
++	    if ( lwgeom_is_empty( geom ) ) {
++		return sfcgal_polygon_create();
++	    }
++
++	    size_t n_rings = poly->nrings - 1;
++	    
++	    sfcgal_geometry_t* ext_ring = ptarray_to_SFCGAL( poly->rings[0], LINETYPE );
++	    ret_geom = sfcgal_polygon_create_from_exterior_ring( ext_ring );
++
++	    for ( i = 0; i < n_rings; i++ )
++	    {
++		sfcgal_geometry_t* ring = ptarray_to_SFCGAL( poly->rings[ i + 1 ], LINETYPE );
++		// takes ownership
++		sfcgal_polygon_add_interior_ring( ret_geom, ring );
++	    }
++	    return ret_geom;
++	}
++	break;
++    case MULTIPOINTTYPE:
++    case MULTILINETYPE:
++    case MULTIPOLYGONTYPE:
++    case COLLECTIONTYPE:
++	{
++	    size_t i;
++
++	    if ( geom->type == MULTIPOINTTYPE ) {
++		ret_geom = sfcgal_multi_point_create();
++	    }
++	    else if ( geom->type == MULTILINETYPE ) {
++		ret_geom = sfcgal_multi_linestring_create();
++	    }
++	    else if ( geom->type == MULTIPOLYGONTYPE ) {
++		ret_geom = sfcgal_multi_polygon_create();
++	    }
++	    else {
++		ret_geom = sfcgal_geometry_collection_create();
++	    }
++	    
++	    const LWCOLLECTION* lwc = (const LWCOLLECTION*)geom;
++	    for ( i = 0; i < lwc->ngeoms; i++ )
++	    {
++		// recurse call
++		sfcgal_geometry_t* g = LWGEOM2SFCGAL( lwc->geoms[i] );
++		// takes ownership of the pointer
++		sfcgal_geometry_collection_add_geometry( ret_geom, g );
++	    }
++	    return ret_geom;
++	}
++	break;
++    case POLYHEDRALSURFACETYPE:
++	{
++	    size_t i;
++
++	    const LWPSURFACE* lwp = (const LWPSURFACE*)geom;
++	    ret_geom = sfcgal_polyhedral_surface_create();
++
++	    for ( i = 0; i < lwp->ngeoms; i++ )
++	    {
++		// recurse call
++		sfcgal_geometry_t* g = LWGEOM2SFCGAL( (const LWGEOM*)lwp->geoms[i] );
++		// add the obtained polygon to the surface
++		// (pass ownership )
++		sfcgal_polyhedral_surface_add_polygon( ret_geom, g );
++	    }
++	    if ( FLAGS_GET_SOLID( lwp->flags ) ) {
++		// return a Solid
++		// FIXME: we treat polyhedral surface as the only exterior shell, since we do not have
++		// any way to distinguish exterior from interior shells ...
++		return sfcgal_solid_create_from_exterior_shell( ret_geom );
++	    }
++	    return ret_geom;
++	}
++    case TINTYPE:
++	{
++	    size_t i;
++
++	    const LWTIN* lwp = (const LWTIN*)geom;
++	    ret_geom = sfcgal_triangulated_surface_create();
++
++	    for ( i = 0; i < lwp->ngeoms; i++ )
++	    {
++		// recurse call
++		sfcgal_geometry_t* g = LWGEOM2SFCGAL( (const LWGEOM*)lwp->geoms[i] );
++		// add the obtained polygon to the surface
++		sfcgal_triangulated_surface_add_triangle( ret_geom, g );
++	    }
++	    return ret_geom;
++	}
++    default:
++	// FIXME
++	//	throw std::runtime_error( (boost::format( "Unsupported LWGEOM type %1%" ) % geom->type ).str() );
++	break;
++    }
++    return ret_geom;
++}
++
++LWGEOM* lwgeom_sfcgal_noop( const LWGEOM* geom_in )
++{
++    sfcgal_geometry_t* converted = LWGEOM2SFCGAL( geom_in );
++
++    // Noop
++
++    LWGEOM* geom_out = SFCGAL2LWGEOM( converted, 0, SRID_UNKNOWN );
++    sfcgal_geometry_delete( converted );
++
++    // copy SRID (SFCGAL does not store the SRID)
++    geom_out->srid = geom_in->srid;
++    return geom_out;
++}
+Index: liblwgeom/lwgeom_sfcgal.h
+===================================================================
+--- liblwgeom/lwgeom_sfcgal.h	(révision 0)
++++ liblwgeom/lwgeom_sfcgal.h	(révision 0)
+@@ -0,0 +1,12 @@
++#ifndef LWGEOM_SFCGAL_C_H
++#define LWGEOM_SFCGAL_C_H
++
++#include "liblwgeom.h"
++#include <SFCGAL/sfcgal_c.h>
++
++LWGEOM* lwgeom_sfcgal_noop( const LWGEOM* geom_in );
++
++LWGEOM*            SFCGAL2LWGEOM( const sfcgal_geometry_t* geom, int force3D, int SRID );
++sfcgal_geometry_t* LWGEOM2SFCGAL( const LWGEOM* geom );
++
++#endif
+Index: loader/Makefile.in
+===================================================================
+--- loader/Makefile.in	(révision 11093)
++++ loader/Makefile.in	(copie de travail)
+@@ -28,6 +28,10 @@
+ INSTALL = $(SHELL) ../install-sh
+ LIBTOOL = @LIBTOOL@
+ 
++ifeq (@POSTGIS_SFCGAL@,1)
++SFCGAL_LDFLAGS = @SFCGAL_LDFLAGS@
++endif
++
+ # Filenames with extension as determined by the OS
+ PGSQL2SHP-CLI=pgsql2shp@EXESUFFIX@
+ SHP2PGSQL-CLI=shp2pgsql@EXESUFFIX@
+@@ -97,11 +101,11 @@
+ 
+ $(PGSQL2SHP-CLI): $(SHPLIB_OBJS) pgsql2shp-core.o pgsql2shp-cli.o $(LIBLWGEOM) 
+ 	$(LIBTOOL) --mode=link \
+-	  $(CC) $(CFLAGS) $^ $(ICONV_LDFLAGS) $(PGSQL_FE_LDFLAGS) $(GETTEXT_LDFLAGS) -o $@ 
++	  $(CC) $(CFLAGS) $^ $(ICONV_LDFLAGS) $(PGSQL_FE_LDFLAGS) $(GETTEXT_LDFLAGS) $(SFCGAL_LDFLAGS) -o $@ 
+ 
+ $(SHP2PGSQL-CLI): $(SHPLIB_OBJS) shp2pgsql-core.o shp2pgsql-cli.o $(LIBLWGEOM) 
+ 	$(LIBTOOL) --mode=link \
+-	  $(CC) $(CFLAGS) $^ -o $@ $(GETTEXT_LDFLAGS) $(ICONV_LDFLAGS) 
++	  $(CC) $(CFLAGS) $^ -o $@ $(GETTEXT_LDFLAGS) $(ICONV_LDFLAGS) $(SFCGAL_LDFLAGS)
+ 
+ shp2pgsql-gui.o: shp2pgsql-gui.c shp2pgsql-core.h shpcommon.h
+ 	$(CC) $(CFLAGS) $(GTK_CFLAGS) $(PGSQL_FE_CPPFLAGS) -o $@ -c shp2pgsql-gui.c
+Index: postgis/Makefile.in
+===================================================================
+--- postgis/Makefile.in	(révision 11093)
++++ postgis/Makefile.in	(copie de travail)
+@@ -24,6 +24,15 @@
+ # SQL objects (files requiring pre-processing)
+ SQL_OBJS=postgis.sql.in legacy.sql.in legacy_minimal.sql.in 
+ 
++GEOM_BACKEND_OBJ = lwgeom_geos.o
++SFCGAL_BACKEND_OBJ = lwgeom_sfcgal.o lwgeom_sfcgal_exact.o lwgeom_sfcgal_ref.o
++
++ifeq (@POSTGIS_SFCGAL@,1)
++BACKEND_OBJ=$(GEOM_BACKEND_OBJ) $(SFCGAL_BACKEND_OBJ)
++else
++BACKEND_OBJ=$(GEOM_BACKEND_OBJ)
++endif
++
+ # PostgreSQL objects
+ PG_OBJS= \
+ 	postgis_module.o \
+@@ -36,7 +45,7 @@
+ 	lwgeom_btree.o \
+ 	lwgeom_box.o \
+ 	lwgeom_box3d.o \
+-	lwgeom_geos.o \
++	$(BACKEND_OBJ) \
+ 	lwgeom_geos_prepared.o \
+ 	lwgeom_geos_clean.o \
+ 	lwgeom_geos_relatematch.o \
+@@ -74,9 +83,14 @@
+ # to an existing liblwgeom.so in the PostgreSQL $libdir supplied by an
+ # older version of PostGIS, rather than with the static liblwgeom.a 
+ # supplied with newer versions of PostGIS
+-PG_CPPFLAGS += @CPPFLAGS@ -I../liblwgeom -I../libpgcommon
+-SHLIB_LINK_F = ../libpgcommon/libpgcommon.a ../liblwgeom/.libs/liblwgeom.a @SHLIB_LINK@ 
++PG_CPPFLAGS += @CPPFLAGS@ -I../liblwgeom -I../libpgcommon -fPIC
++SHLIB_LINK_F = ../libpgcommon/libpgcommon.a ../liblwgeom/.libs/liblwgeom.a @SHLIB_LINK@
+ 
++ifeq (@POSTGIS_SFCGAL@,1)
++PG_CPPFLAGS += @SFCGAL_CPPFLAGS@
++SHLIB_LINK_F += @SFCGAL_LDFLAGS@
++endif
++
+ # Extra files to remove during 'make clean'
+ EXTRA_CLEAN=$(SQL_OBJS) legacy_uninstall.sql
+ 
+@@ -151,7 +165,7 @@
+ # SQL objects are also dependent on postgis_config.h for PostgreSQL version
+ $(SQL_OBJS): ../postgis_config.h ../postgis_svn_revision.h
+ 
+-postgis.sql.in: sqldefines.h long_xact.sql.in.c geography.sql.in.c 
++postgis.sql.in: sqldefines.h long_xact.sql.in.c geography.sql.in.c postgis_sfcgal.sql.in.c
+ 
+ #uninstall_postgis.sql.in: sqldefines.h uninstall_sqlmm.sql.in.c uninstall_long_xact.sql.in.c uninstall_geography.sql.in.c
+ uninstall_postgis.sql: postgis.sql ../utils/create_undef.pl 
+Index: postgis/lwgeom_sfcgal_ref.c
+===================================================================
+--- postgis/lwgeom_sfcgal_ref.c	(révision 0)
++++ postgis/lwgeom_sfcgal_ref.c	(révision 0)
+@@ -0,0 +1,615 @@
++/**********************************************************************
++ *
++ * PostGIS - Spatial Types for PostgreSQL
++ * http://postgis.refractions.net
++ *
++ * Wrapper around SFCGAL for 3D and exact geometries
++ *
++ * Copyright 2012-2013 Oslandia <contact@oslandia.com>
++ *
++ * This is free software; you can redistribute and/or modify it under
++ * the terms of the GNU General Public Licence. See the COPYING file.
++ *
++ **********************************************************************/
++
++#include "postgres.h"
++#include "fmgr.h"
++
++#include "lwgeom_sfcgal.h"
++#include "utils/hsearch.h"
++#include "utils/palloc.h"
++#include "access/hash.h"
++#include "nodes/memnodes.h"
++#include "utils/memutils.h"
++
++GSERIALIZED *geometry_serialize(LWGEOM *lwgeom);
++char* text2cstring(const text *textptr);
++
++/**
++ * Global pool of referenced geometries.
++ *
++ * A list of pointers to geometry can be associated to a MemoryContext
++ * They are deleted when the MemoryContext is deleted or reset
++ */
++
++typedef struct
++{
++    /* Geometry => MemoryContext */
++    HTAB* geometry_context_map;
++    /* Memory Context => Child memory context where geometries are stored */
++    HTAB* child_context_map;
++} geometry_pool_t;
++
++/* Entry of the geometry_context_map */
++typedef struct
++{
++    /* pointer back to geometry (hashtable key) */
++    sfcgal_prepared_geometry_t* geometry;
++    MemoryContext context;
++} geometry_context_entry_t;
++
++/* Entry of the child_context_map */
++typedef struct
++{
++    /* pointer back to the parent context (hashtable key) */
++    MemoryContext parent;
++    /* child context */
++    MemoryContext child;
++} child_context_entry_t;
++
++/* global geometry pool */
++static geometry_pool_t sfcgal_geometry_pool;
++static int __sfcgal_geometry_pool_init = 0;
++
++/* pointer hashing */
++uint32 ptr_hash(const void *key, Size keysize);
++uint32 ptr_hash(const void *key, Size keysize)
++{
++	uint32 hashval;
++	hashval = DatumGetUInt32(hash_any(key, keysize));
++	return hashval;
++}
++
++static void geometry_pool_reference_geometry( sfcgal_prepared_geometry_t* geometry );
++static void geometry_pool_delete_context( MemoryContext context );
++static void geometry_pool_init();
++static int  geometry_pool_is_referenced( const sfcgal_prepared_geometry_t* geom );
++static void geometry_pool_context_nil( MemoryContext context );
++static bool geometry_pool_context_is_empty( MemoryContext context );
++static void geometry_pool_context_stats( MemoryContext context, int level );
++
++static void geometry_pool_init()
++{
++    HASHCTL ctl;
++
++    if ( ! __sfcgal_geometry_pool_init ) {
++	/* key: pointer */
++	ctl.keysize = sizeof(void*);
++	/* entry */
++	ctl.entrysize = sizeof( geometry_context_entry_t );
++	ctl.hash = ptr_hash;
++	
++	sfcgal_geometry_pool.geometry_context_map = hash_create( "PostGIS referenced geometry pool 1",
++								 32,
++								 &ctl,
++								 /* set keysize and entrysize, set hash function */ HASH_ELEM | HASH_FUNCTION );
++	
++	sfcgal_geometry_pool.child_context_map = hash_create( "PostGIS referenced geometry pool 2",
++							      32,
++							      &ctl,
++							      /* set keysize and entrysize, set hash function */ HASH_ELEM | HASH_FUNCTION );
++	__sfcgal_geometry_pool_init = 1;
++    }
++}
++
++static int geometry_pool_is_referenced( const sfcgal_prepared_geometry_t* geom )
++{
++    // this has to be fast, the geometry is then the key of the pool_ map
++    bool found;
++    hash_search( sfcgal_geometry_pool.geometry_context_map, &geom, HASH_FIND, &found );
++    return found ? 1 : 0;
++}
++
++static void geometry_pool_context_nil( MemoryContext context )
++{
++}
++
++static bool geometry_pool_context_is_empty( MemoryContext context )
++{
++    return false;
++}
++
++static void geometry_pool_context_stats( MemoryContext context, int level )
++{
++    fprintf( stderr, "%s: ref geometry context\n", context->name );
++}
++
++MemoryContextMethods geometry_pool_context_methods = {
++    NULL, // alloc
++    NULL, // free
++    NULL, // realloc
++    geometry_pool_context_nil, //init
++    geometry_pool_delete_context, //reset
++    geometry_pool_delete_context,
++    NULL, // get_chunk_space
++    geometry_pool_context_is_empty,
++    geometry_pool_context_stats,
++#ifdef MEMORY_CONTEXT_CHECKING
++    , geometry_pool_context_nil // check
++#endif
++};
++
++/**
++ * Save a reference to the given Geometry.
++ * It is associated with a MemoryContext with a proper life cycle.
++ */
++static void geometry_pool_reference_geometry( sfcgal_prepared_geometry_t* geometry )
++{
++    //
++    // Find the memory context used to store SFCGAL::Geometry*
++    // Ideally, this would be in the closest parent context of the current function evaluation.
++    //
++    // If the current context is a not descendant of a PortalMemory, it means this context is volatile and will be
++    // reset between calls within the same tuple access. In this case, attach our context to the MessageContext
++    // else, use the current context
++    MemoryContext parent_context = MessageContext;
++    MemoryContext c;
++    bool found;
++    geometry_context_entry_t* geometry_context_entry;
++    child_context_entry_t* child_context_entry;
++    
++    c = CurrentMemoryContext;
++    while ( c != TopMemoryContext ) {
++	// If it's a child of a Portal[Heap]Memory
++	if ( !strncmp( c->name, "Portal", 6 ) ) {
++	    parent_context = CurrentMemoryContext;
++	    break;
++	}
++	c = c->parent;
++    }
++    
++    // If a child context already exists, use it
++
++    child_context_entry = (child_context_entry_t *)hash_search( sfcgal_geometry_pool.child_context_map,
++								&parent_context,
++								HASH_ENTER,
++								&found );
++
++    if ( !found ) {
++	// Else, create a new one.
++	// We won't allocate anything in the new context. It is only used for its destruction callbacks.
++	// It is thus allocated with the minimum required size
++	char context_name[] = "SFCGAL";
++	child_context_entry->child = MemoryContextCreate( T_AllocSetContext, sizeof(MemoryContextData) + strlen(context_name) + 1,
++							  &geometry_pool_context_methods,
++							  parent_context,
++							  context_name );
++	
++    }
++
++    // force next reset. When the parent will be reset, reset will be called on this child
++    child_context_entry->child->isReset = false;
++    /* store a reference back to the key */
++    child_context_entry->parent = parent_context;
++
++    // now reference the geometry
++    geometry_context_entry = (geometry_context_entry_t *) hash_search( sfcgal_geometry_pool.geometry_context_map,
++								       &geometry,
++								       HASH_ENTER,
++								       NULL );
++    geometry_context_entry->context = child_context_entry->child;
++    /* store a reference back to the key */
++    geometry_context_entry->geometry = geometry;
++}
++
++static void geometry_pool_delete_context( MemoryContext context )
++{
++    HASH_SEQ_STATUS h_status;
++    geometry_context_entry_t *geometry_context_entry;
++    child_context_entry_t *child_context_entry;
++
++    hash_seq_init( &h_status, sfcgal_geometry_pool.geometry_context_map );
++    while ( (geometry_context_entry = (geometry_context_entry_t *)hash_seq_search( &h_status ) ) != NULL ) {
++	if ( geometry_context_entry->context == context ) {
++	    /* delete the associated geometry */
++	    sfcgal_prepared_geometry_delete( geometry_context_entry->geometry );
++	    /* erase the element from the hashtable */
++	    hash_search( sfcgal_geometry_pool.geometry_context_map, &geometry_context_entry->geometry, HASH_REMOVE, NULL );
++	}
++    }
++
++    /* delete the child_context_map part */
++    hash_seq_init( &h_status, sfcgal_geometry_pool.child_context_map );
++    while ( (child_context_entry = (child_context_entry_t *)hash_seq_search( &h_status ) ) != NULL ) {
++	if ( child_context_entry->child == context ) {
++	    /* erase the element from the hashtable */
++	    hash_search( sfcgal_geometry_pool.child_context_map, &child_context_entry->parent, HASH_REMOVE, NULL );
++	    hash_seq_term( &h_status );
++	    break;
++	}
++    }
++}
++
++typedef void* sfcgal_ref_geometry_t;
++
++static sfcgal_ref_geometry_t* serialize_ref_geometry( sfcgal_prepared_geometry_t * pgeom );
++static sfcgal_prepared_geometry_t* unserialize_ref_geometry( sfcgal_ref_geometry_t * rgeom );
++
++Datum sfcgal_ref_from_text(PG_FUNCTION_ARGS);
++Datum sfcgal_ref_in(PG_FUNCTION_ARGS);
++Datum sfcgal_ref_out(PG_FUNCTION_ARGS);
++
++Datum sfcgal_ref_from_geom(PG_FUNCTION_ARGS);
++Datum sfcgal_geom_from_ref(PG_FUNCTION_ARGS);
++
++Datum sfcgal_ref_round(PG_FUNCTION_ARGS);
++Datum sfcgal_ref_extrude(PG_FUNCTION_ARGS);
++Datum sfcgal_ref_offset_polygon(PG_FUNCTION_ARGS);
++
++static sfcgal_ref_geometry_t* serialize_ref_geometry( sfcgal_prepared_geometry_t * pgeom )
++{
++    sfcgal_ref_geometry_t* ret;
++    geometry_pool_reference_geometry( pgeom );
++
++    ret = (sfcgal_ref_geometry_t*)lwalloc( sizeof(sfcgal_ref_geometry_t) );
++    *ret = pgeom;
++    return ret;
++}
++
++static sfcgal_prepared_geometry_t* unserialize_ref_geometry( sfcgal_ref_geometry_t * rgeom )
++{
++    sfcgal_prepared_geometry_t* pgeom;
++    pgeom = (sfcgal_prepared_geometry_t*)(*rgeom);
++    if ( ! geometry_pool_is_referenced( pgeom ) ) {
++	lwerror( "Unable to access delete geometry !" );
++	return 0;
++    }
++    return pgeom;
++}
++
++/**
++ * Convert a WKT to a referenced geometry
++ */
++PG_FUNCTION_INFO_V1(sfcgal_ref_in);
++Datum sfcgal_ref_in(PG_FUNCTION_ARGS)
++{
++    char* ewkt = PG_GETARG_CSTRING( 0 );
++    sfcgal_prepared_geometry_t *pgeom;
++    sfcgal_ref_geometry_t* sgeom;
++    
++    sfcgal_postgis_init();
++    geometry_pool_init();
++    
++    pgeom = sfcgal_io_read_ewkt( ewkt, strlen(ewkt) );
++    
++    sgeom = serialize_ref_geometry( pgeom );
++    
++    PG_RETURN_POINTER( sgeom );
++}
++
++/**
++ * Convert a WKT TEXT to a referenced geometry
++ */
++PG_FUNCTION_INFO_V1(sfcgal_ref_from_text);
++Datum sfcgal_ref_from_text(PG_FUNCTION_ARGS)
++{
++    text* wkttext = PG_GETARG_TEXT_P(0);
++    char* ewkt = text2cstring(wkttext);
++    sfcgal_prepared_geometry_t *pgeom;
++    sfcgal_ref_geometry_t* sgeom;
++    
++    sfcgal_postgis_init();
++    geometry_pool_init();
++    
++    pgeom = sfcgal_io_read_ewkt( ewkt, strlen(ewkt) );
++    
++    sgeom = serialize_ref_geometry( pgeom );
++    
++    PG_RETURN_POINTER( sgeom );
++}
++
++/**
++ * Display a referenced geometry
++ */
++PG_FUNCTION_INFO_V1(sfcgal_ref_out);
++Datum sfcgal_ref_out(PG_FUNCTION_ARGS)
++{
++    sfcgal_ref_geometry_t *input0;
++    sfcgal_prepared_geometry_t *pgeom0;
++    char *retstr;
++    size_t len;
++
++    sfcgal_postgis_init();
++    geometry_pool_init();
++    
++    input0 = (sfcgal_ref_geometry_t*)PG_GETARG_POINTER(0);
++
++    pgeom0 = (sfcgal_prepared_geometry_t*)(*input0);
++    if ( ! geometry_pool_is_referenced( pgeom0 ) ) {
++	char *retstr;
++	char deleted[] = "-deleted-";
++	retstr = (char*)lwalloc( strlen(deleted) + 1 );
++	strncpy( retstr, deleted, strlen(deleted) );
++
++	lwnotice( "Referenced geometries must not be stored" );
++	PG_RETURN_CSTRING( retstr );
++    }
++    //    pgeom0 = unserialize_ref_geometry( input0 );
++
++    sfcgal_prepared_geometry_as_ewkt( pgeom0, /* numDecimals */ -1, &retstr, &len );
++
++    PG_RETURN_CSTRING( retstr );
++}
++
++/**
++ * Convert a regular geometry to a ref geometry
++ */
++PG_FUNCTION_INFO_V1(sfcgal_geom_from_ref);
++Datum sfcgal_geom_from_ref(PG_FUNCTION_ARGS)
++{
++    sfcgal_ref_geometry_t *input0;
++    sfcgal_prepared_geometry_t *pgeom0;
++    GSERIALIZED* output;
++
++    sfcgal_postgis_init();
++    geometry_pool_init();
++    
++    input0 = (sfcgal_ref_geometry_t*)PG_GETARG_POINTER(0);
++
++    pgeom0 = (sfcgal_prepared_geometry_t*)(*input0);
++    pgeom0 = unserialize_ref_geometry( input0 );
++
++    output = SFCGALPreparedGeometry2POSTGIS( pgeom0, 0 );
++    PG_RETURN_POINTER( output );
++}
++
++/**
++ * Convert a ref geometry to a regular geometry
++ */
++PG_FUNCTION_INFO_V1(sfcgal_ref_from_geom);
++Datum sfcgal_ref_from_geom(PG_FUNCTION_ARGS)
++{
++    GSERIALIZED *input0;
++    sfcgal_prepared_geometry_t *pgeom0;
++    sfcgal_ref_geometry_t *result;
++
++    sfcgal_postgis_init();
++    geometry_pool_init();
++    
++    input0 = (GSERIALIZED*)PG_DETOAST_DATUM(PG_GETARG_DATUM(0));
++    pgeom0 = POSTGIS2SFCGALPreparedGeometry( input0 );
++    PG_FREE_IF_COPY( input0, 0 );
++
++    result = serialize_ref_geometry( pgeom0 );
++    PG_RETURN_POINTER( result );
++}
++
++#define _SFCGAL_REF_WRAPPER_UNARY_SCALAR( name, fname, ret_type, return_call ) \
++    Datum sfcgal_ref_##name(PG_FUNCTION_ARGS);			\
++    PG_FUNCTION_INFO_V1(sfcgal_ref_##name);				\
++    Datum sfcgal_ref_##name(PG_FUNCTION_ARGS)				\
++    {									\
++	sfcgal_ref_geometry_t *input0;				\
++	sfcgal_prepared_geometry_t *pgeom0;				\
++	const sfcgal_geometry_t *geom0;					\
++	ret_type result;						\
++									\
++	sfcgal_postgis_init();						\
++	geometry_pool_init();						\
++									\
++	input0 = (sfcgal_ref_geometry_t*)PG_GETARG_POINTER(0);		\
++	pgeom0 = unserialize_ref_geometry( input0 );			\
++	geom0 = sfcgal_prepared_geometry_geometry( pgeom0 );		\
++									\
++	result = fname( geom0 );					\
++									\
++	return_call( result );						\
++    }
++    
++#define _SFCGAL_REF_WRAPPER_UNARY_PREDICATE( name, fname ) \
++    _SFCGAL_REF_WRAPPER_UNARY_SCALAR( name, fname, int, PG_RETURN_BOOL )
++#define _SFCGAL_REF_WRAPPER_UNARY_MEASURE( name, fname ) \
++    _SFCGAL_REF_WRAPPER_UNARY_SCALAR( name, fname, double, PG_RETURN_FLOAT8 )
++
++#define _SFCGAL_REF_WRAPPER_BINARY_SCALAR( name, fname, ret_type, return_call ) \
++    Datum sfcgal_ref_##name(PG_FUNCTION_ARGS);				\
++    PG_FUNCTION_INFO_V1(sfcgal_ref_##name);				\
++    Datum sfcgal_ref_##name(PG_FUNCTION_ARGS)				\
++    {									\
++	sfcgal_ref_geometry_t *input0, *input1;				\
++	sfcgal_prepared_geometry_t *pgeom0, *pgeom1;			\
++	const sfcgal_geometry_t *geom0, *geom1;				\
++	ret_type result;						\
++									\
++	sfcgal_postgis_init();						\
++	geometry_pool_init();						\
++									\
++	input0 = (sfcgal_ref_geometry_t*)PG_GETARG_POINTER(0);		\
++	pgeom0 = unserialize_ref_geometry( input0 );			\
++	geom0 = sfcgal_prepared_geometry_geometry( pgeom0 );		\
++									\
++	input1 = (sfcgal_ref_geometry_t*)PG_GETARG_POINTER(1);		\
++	pgeom1 = unserialize_ref_geometry( input1 );			\
++	geom1 = sfcgal_prepared_geometry_geometry( pgeom1 );		\
++									\
++	result = fname( geom0, geom1 );					\
++									\
++	return_call( result );						\
++    }
++
++#define _SFCGAL_REF_WRAPPER_BINARY_PREDICATE( name, fname ) \
++    _SFCGAL_REF_WRAPPER_BINARY_SCALAR( name, fname, int, PG_RETURN_BOOL )
++#define _SFCGAL_REF_WRAPPER_BINARY_MEASURE( name, fname ) \
++    _SFCGAL_REF_WRAPPER_BINARY_SCALAR( name, fname, double, PG_RETURN_FLOAT8 )
++
++#define _SFCGAL_REF_WRAPPER_UNARY_CONSTRUCTION( name, fname )		\
++    Datum sfcgal_ref_##name(PG_FUNCTION_ARGS);				\
++    PG_FUNCTION_INFO_V1(sfcgal_ref_##name);				\
++    Datum sfcgal_ref_##name(PG_FUNCTION_ARGS)				\
++    {									\
++	sfcgal_ref_geometry_t *input0, *output;				\
++	sfcgal_prepared_geometry_t *pgeom0, *presult;			\
++	const sfcgal_geometry_t *geom0;					\
++	sfcgal_geometry_t *result;					\
++	srid_t srid;							\
++									\
++	sfcgal_postgis_init();						\
++	geometry_pool_init();						\
++									\
++	input0 = (sfcgal_ref_geometry_t*)PG_GETARG_POINTER(0);		\
++	pgeom0 = unserialize_ref_geometry( input0 );			\
++	geom0 = sfcgal_prepared_geometry_geometry( pgeom0 );		\
++	srid = sfcgal_prepared_geometry_srid( pgeom0 );			\
++									\
++	result = fname( geom0 );					\
++									\
++	presult = sfcgal_prepared_geometry_create_from_geometry( result, srid ); \
++	output = serialize_ref_geometry( presult );			\
++									\
++	PG_RETURN_POINTER( output );					\
++    }
++
++#define _SFCGAL_REF_WRAPPER_BINARY_CONSTRUCTION( name, fname )	\
++    Datum sfcgal_ref_##name(PG_FUNCTION_ARGS);			\
++    PG_FUNCTION_INFO_V1(sfcgal_ref_##name);				\
++    Datum sfcgal_ref_##name(PG_FUNCTION_ARGS)				\
++    {									\
++	sfcgal_ref_geometry_t *input0, *input1, *output;		\
++	sfcgal_prepared_geometry_t *pgeom0, *pgeom1, *presult;		\
++	const sfcgal_geometry_t *geom0, *geom1;				\
++	sfcgal_geometry_t *result;					\
++	srid_t srid;							\
++									\
++	sfcgal_postgis_init();						\
++	geometry_pool_init();						\
++									\
++	input0 = (sfcgal_ref_geometry_t*)PG_GETARG_POINTER(0);		\
++	pgeom0 = unserialize_ref_geometry( input0 );			\
++	geom0 = sfcgal_prepared_geometry_geometry( pgeom0 );		\
++	srid = sfcgal_prepared_geometry_srid( pgeom0 );			\
++									\
++	input1 = (sfcgal_ref_geometry_t*)PG_GETARG_POINTER(1);		\
++	pgeom1 = unserialize_ref_geometry( input1 );			\
++	geom1 = sfcgal_prepared_geometry_geometry( pgeom1 );		\
++									\
++	result = fname( geom0, geom1 );					\
++									\
++	presult = sfcgal_prepared_geometry_create_from_geometry( result, srid ); \
++	output = serialize_ref_geometry( presult );			\
++									\
++	PG_RETURN_POINTER( output );					\
++    }
++
++_SFCGAL_REF_WRAPPER_UNARY_MEASURE( area, sfcgal_geometry_area )
++_SFCGAL_REF_WRAPPER_UNARY_MEASURE( area3D, sfcgal_geometry_area_3d )
++
++_SFCGAL_REF_WRAPPER_UNARY_PREDICATE( has_plane, sfcgal_geometry_has_plane )
++_SFCGAL_REF_WRAPPER_UNARY_PREDICATE( pointing_up, sfcgal_geometry_pointing_up )
++
++_SFCGAL_REF_WRAPPER_BINARY_PREDICATE( intersects, sfcgal_geometry_intersects )
++_SFCGAL_REF_WRAPPER_BINARY_PREDICATE( intersects3D, sfcgal_geometry_intersects_3d )
++
++_SFCGAL_REF_WRAPPER_BINARY_MEASURE( distance, sfcgal_geometry_distance )
++_SFCGAL_REF_WRAPPER_BINARY_MEASURE( distance3D, sfcgal_geometry_distance_3d )
++
++_SFCGAL_REF_WRAPPER_UNARY_CONSTRUCTION( convexhull, sfcgal_geometry_convexhull )
++_SFCGAL_REF_WRAPPER_UNARY_CONSTRUCTION( convexhull3D, sfcgal_geometry_convexhull_3d )
++_SFCGAL_REF_WRAPPER_UNARY_CONSTRUCTION( triangulate, sfcgal_geometry_triangulate )
++_SFCGAL_REF_WRAPPER_UNARY_CONSTRUCTION( triangulate2D, sfcgal_geometry_triangulate_2d )
++_SFCGAL_REF_WRAPPER_UNARY_CONSTRUCTION( make_solid, sfcgal_geometry_make_solid )
++_SFCGAL_REF_WRAPPER_UNARY_CONSTRUCTION( force_z_up, sfcgal_geometry_force_z_up )
++_SFCGAL_REF_WRAPPER_UNARY_CONSTRUCTION( copy, sfcgal_geometry_copy )
++_SFCGAL_REF_WRAPPER_UNARY_CONSTRUCTION( straight_skeleton, sfcgal_geometry_straight_skeleton )
++
++_SFCGAL_REF_WRAPPER_BINARY_CONSTRUCTION( intersection, sfcgal_geometry_intersection )
++_SFCGAL_REF_WRAPPER_BINARY_CONSTRUCTION( intersection3D, sfcgal_geometry_intersection_3d )
++_SFCGAL_REF_WRAPPER_BINARY_CONSTRUCTION( minkowski_sum, sfcgal_geometry_minkowski_sum )
++
++PG_FUNCTION_INFO_V1(sfcgal_ref_extrude);
++Datum sfcgal_ref_extrude(PG_FUNCTION_ARGS)
++{
++    sfcgal_ref_geometry_t *input0, *output;
++    sfcgal_prepared_geometry_t *pgeom0, *presult;
++    const sfcgal_geometry_t *geom0;
++    sfcgal_geometry_t *result;
++    srid_t srid;
++
++    double dx, dy, dz;
++
++    sfcgal_postgis_init();
++    geometry_pool_init();
++    
++    input0 = (sfcgal_ref_geometry_t*)PG_GETARG_POINTER(0);
++    pgeom0 = unserialize_ref_geometry( input0 );
++    geom0 = sfcgal_prepared_geometry_geometry( pgeom0 );
++    srid = sfcgal_prepared_geometry_srid( pgeom0 );
++
++    dx = PG_GETARG_FLOAT8( 1 );
++    dy = PG_GETARG_FLOAT8( 2 );
++    dz = PG_GETARG_FLOAT8( 3 );
++    
++    result = sfcgal_geometry_extrude( geom0, dx, dy, dz );
++
++    presult = sfcgal_prepared_geometry_create_from_geometry( result, srid );
++    output = serialize_ref_geometry( presult );
++    
++    PG_RETURN_POINTER( output );
++}
++
++PG_FUNCTION_INFO_V1(sfcgal_ref_offset_polygon);
++Datum sfcgal_ref_offset_polygon(PG_FUNCTION_ARGS)
++{
++    sfcgal_ref_geometry_t *input0, *output;
++    sfcgal_prepared_geometry_t *pgeom0, *presult;
++    const sfcgal_geometry_t *geom0;
++    sfcgal_geometry_t *result;
++    srid_t srid;
++
++    double offset;
++
++    sfcgal_postgis_init();
++    geometry_pool_init();
++    
++    input0 = (sfcgal_ref_geometry_t*)PG_GETARG_POINTER(0);
++    pgeom0 = unserialize_ref_geometry( input0 );
++    geom0 = sfcgal_prepared_geometry_geometry( pgeom0 );
++    srid = sfcgal_prepared_geometry_srid( pgeom0 );
++
++    offset = PG_GETARG_FLOAT8( 1 );
++    
++    result = sfcgal_geometry_offset_polygon( geom0, offset );
++
++    presult = sfcgal_prepared_geometry_create_from_geometry( result, srid );
++    output = serialize_ref_geometry( presult );
++    
++    PG_RETURN_POINTER( output );
++}
++
++PG_FUNCTION_INFO_V1(sfcgal_ref_round);
++Datum sfcgal_ref_round(PG_FUNCTION_ARGS)
++{
++    sfcgal_ref_geometry_t *input0, *output;
++    sfcgal_prepared_geometry_t *pgeom0, *presult;
++    const sfcgal_geometry_t *geom0;
++    sfcgal_geometry_t *result;
++    srid_t srid;
++
++    int scale;
++
++    sfcgal_postgis_init();
++    geometry_pool_init();
++    
++    input0 = (sfcgal_ref_geometry_t*)PG_GETARG_POINTER(0);
++    pgeom0 = unserialize_ref_geometry( input0 );
++    geom0 = sfcgal_prepared_geometry_geometry( pgeom0 );
++    srid = sfcgal_prepared_geometry_srid( pgeom0 );
++
++    scale = PG_GETARG_INT32( 1 );
++    
++    result = sfcgal_geometry_round( geom0, scale );
++
++    presult = sfcgal_prepared_geometry_create_from_geometry( result, srid );
++    output = serialize_ref_geometry( presult );
++    
++    PG_RETURN_POINTER( output );
++}
+Index: postgis/lwgeom_sfcgal_exact.c
+===================================================================
+--- postgis/lwgeom_sfcgal_exact.c	(révision 0)
++++ postgis/lwgeom_sfcgal_exact.c	(révision 0)
+@@ -0,0 +1,415 @@
++/**********************************************************************
++ *
++ * PostGIS - Spatial Types for PostgreSQL
++ * http://postgis.refractions.net
++ *
++ * Wrapper around SFCGAL for 3D and exact geometries
++ *
++ * Copyright 2012-2013 Oslandia <contact@oslandia.com>
++ *
++ * This is free software; you can redistribute and/or modify it under
++ * the terms of the GNU General Public Licence. See the COPYING file.
++ *
++ **********************************************************************/
++
++#include "postgres.h"
++#include "fmgr.h"
++
++#include "lwgeom_sfcgal.h"
++
++GSERIALIZED *geometry_serialize(LWGEOM *lwgeom);
++char* text2cstring(const text *textptr);
++
++/**
++ * sfcgal_serialized_geometry varlen structure
++ *
++ * An exact geometry is a serialized representation of a SFCGAL::Geometry that
++ * keeps the arbitrary precision of numbers
++ */
++typedef struct
++{
++    uint32_t size;
++    char data[1];
++} sfcgal_serialized_geometry_t;
++
++sfcgal_prepared_geometry_t* unserialize_exact_geometry( const sfcgal_serialized_geometry_t * serialized_geometry );
++sfcgal_serialized_geometry_t* serialize_exact_geometry( const sfcgal_prepared_geometry_t * prepared_geometry );
++
++Datum sfcgal_exact_from_text(PG_FUNCTION_ARGS);
++Datum sfcgal_exact_from_geom(PG_FUNCTION_ARGS);
++Datum sfcgal_geom_from_exact(PG_FUNCTION_ARGS);
++Datum sfcgal_exact_in(PG_FUNCTION_ARGS);
++Datum sfcgal_exact_out(PG_FUNCTION_ARGS);
++
++Datum sfcgal_exact_round(PG_FUNCTION_ARGS);
++Datum sfcgal_exact_extrude(PG_FUNCTION_ARGS);
++Datum sfcgal_exact_offset_polygon(PG_FUNCTION_ARGS);
++
++sfcgal_prepared_geometry_t* unserialize_exact_geometry( const sfcgal_serialized_geometry_t * serialized_geometry )
++{
++    return sfcgal_io_read_binary_prepared( &serialized_geometry->data[0], VARSIZE( serialized_geometry ) );
++}
++
++sfcgal_serialized_geometry_t* serialize_exact_geometry( const sfcgal_prepared_geometry_t * prepared_geometry )
++{
++    char* buffer;
++    size_t len;
++    sfcgal_serialized_geometry_t* ret;
++
++    sfcgal_io_write_binary_prepared( prepared_geometry, &buffer, &len );
++    ret = (sfcgal_serialized_geometry_t*)lwrealloc( buffer, len + 4 );
++    memmove( &ret->data[0], ret, len );
++
++    SET_VARSIZE( ret, len );
++    return ret;
++}
++
++/**
++ * Convert a regular GSERIALIED geometry to a serialized exact geometry
++ */
++PG_FUNCTION_INFO_V1(sfcgal_exact_from_geom);
++Datum sfcgal_exact_from_geom(PG_FUNCTION_ARGS)
++{
++    GSERIALIZED *input0;
++    sfcgal_prepared_geometry_t* pgeom0;
++    sfcgal_serialized_geometry_t* ret;
++    
++    sfcgal_postgis_init();
++
++    input0 = (GSERIALIZED *)PG_DETOAST_DATUM(PG_GETARG_DATUM(0));
++    pgeom0 = POSTGIS2SFCGALPreparedGeometry( input0 );
++
++    ret = serialize_exact_geometry( pgeom0 );
++    sfcgal_prepared_geometry_delete( pgeom0 );
++    PG_RETURN_POINTER( ret );
++}
++
++/**
++ * Convert a serialized exact geometry to a regular GSERIALIED geometry
++ */
++PG_FUNCTION_INFO_V1(sfcgal_geom_from_exact);
++Datum sfcgal_geom_from_exact(PG_FUNCTION_ARGS)
++{
++	sfcgal_serialized_geometry_t *input0;
++	sfcgal_prepared_geometry_t *pgeom0;
++	GSERIALIZED *output;
++
++	sfcgal_postgis_init();
++
++	input0 = (sfcgal_serialized_geometry_t*)PG_DETOAST_DATUM(PG_GETARG_DATUM(0));
++	pgeom0 = unserialize_exact_geometry( input0 );
++	PG_FREE_IF_COPY( input0, 0 );
++
++	output = SFCGALPreparedGeometry2POSTGIS( pgeom0, 0 );
++	sfcgal_prepared_geometry_delete( pgeom0 );
++	PG_RETURN_POINTER( output );
++}
++
++/**
++ * Convert TEXT to exact geometry
++ */
++PG_FUNCTION_INFO_V1(sfcgal_exact_from_text);
++Datum sfcgal_exact_from_text(PG_FUNCTION_ARGS)
++{
++    text *wkttext = PG_GETARG_TEXT_P(0);
++    char *wkt = text2cstring(wkttext);
++    sfcgal_prepared_geometry_t* pgeom;
++    sfcgal_serialized_geometry_t* sgeom;
++    
++    sfcgal_postgis_init();
++    
++    pgeom = sfcgal_io_read_ewkt( wkt, strlen(wkt) );
++    
++    sgeom = serialize_exact_geometry( pgeom );
++    sfcgal_prepared_geometry_delete( pgeom );
++    
++    PG_RETURN_POINTER( sgeom );
++}
++
++/**
++ * Input an exact geometry
++ */
++PG_FUNCTION_INFO_V1(sfcgal_exact_in);
++Datum sfcgal_exact_in(PG_FUNCTION_ARGS)
++{
++    char *wkt = PG_GETARG_CSTRING( 0 );
++    sfcgal_prepared_geometry_t* pgeom;
++    sfcgal_serialized_geometry_t* sgeom;
++    
++    sfcgal_postgis_init();
++    
++    pgeom = sfcgal_io_read_ewkt( wkt, strlen(wkt) );
++    
++    sgeom = serialize_exact_geometry( pgeom );
++    sfcgal_prepared_geometry_delete( pgeom );
++    
++    PG_RETURN_POINTER( sgeom );
++}
++
++/**
++ * Display an exact geometry
++ */
++PG_FUNCTION_INFO_V1(sfcgal_exact_out);
++Datum sfcgal_exact_out(PG_FUNCTION_ARGS)
++{
++    sfcgal_serialized_geometry_t *input0;
++    sfcgal_prepared_geometry_t *pgeom0;
++    char *retstr;
++    size_t len;
++
++    sfcgal_postgis_init();
++    
++    input0 = (sfcgal_serialized_geometry_t*)PG_DETOAST_DATUM(PG_GETARG_DATUM(0));
++    pgeom0 = unserialize_exact_geometry( input0 );
++    PG_FREE_IF_COPY( input0, 0 );
++
++    sfcgal_prepared_geometry_as_ewkt( pgeom0, /* numDecimals */ -1, &retstr, &len );
++    sfcgal_prepared_geometry_delete( pgeom0 );
++
++    PG_RETURN_CSTRING( retstr );
++}
++
++#define _SFCGAL_EXACT_WRAPPER_UNARY_SCALAR( name, fname, ret_type, return_call ) \
++    Datum sfcgal_exact_##name(PG_FUNCTION_ARGS);			\
++    PG_FUNCTION_INFO_V1(sfcgal_exact_##name);				\
++    Datum sfcgal_exact_##name(PG_FUNCTION_ARGS)				\
++    {									\
++	sfcgal_serialized_geometry_t *input0;				\
++	sfcgal_prepared_geometry_t *pgeom0;				\
++	const sfcgal_geometry_t *geom0;					\
++	ret_type result;						\
++									\
++	sfcgal_postgis_init();						\
++									\
++	input0 = (sfcgal_serialized_geometry_t*)PG_DETOAST_DATUM(PG_GETARG_DATUM(0)); \
++	pgeom0 = unserialize_exact_geometry( input0 );			\
++	PG_FREE_IF_COPY( input0, 0 );					\
++	geom0 = sfcgal_prepared_geometry_geometry( pgeom0 );		\
++									\
++	result = fname( geom0 );					\
++	sfcgal_prepared_geometry_delete( pgeom0 );			\
++									\
++	return_call( result );						\
++    }
++    
++#define _SFCGAL_EXACT_WRAPPER_UNARY_PREDICATE( name, fname ) \
++    _SFCGAL_EXACT_WRAPPER_UNARY_SCALAR( name, fname, int, PG_RETURN_BOOL )
++#define _SFCGAL_EXACT_WRAPPER_UNARY_MEASURE( name, fname ) \
++    _SFCGAL_EXACT_WRAPPER_UNARY_SCALAR( name, fname, double, PG_RETURN_FLOAT8 )
++
++#define _SFCGAL_EXACT_WRAPPER_BINARY_SCALAR( name, fname, ret_type, return_call ) \
++    Datum sfcgal_exact_##name(PG_FUNCTION_ARGS);			\
++    PG_FUNCTION_INFO_V1(sfcgal_exact_##name);				\
++    Datum sfcgal_exact_##name(PG_FUNCTION_ARGS)				\
++    {									\
++	sfcgal_serialized_geometry_t *input0, *input1;			\
++	sfcgal_prepared_geometry_t *pgeom0, *pgeom1;			\
++	const sfcgal_geometry_t *geom0, *geom1;				\
++	ret_type result;						\
++									\
++	sfcgal_postgis_init();						\
++									\
++	input0 = (sfcgal_serialized_geometry_t*)PG_DETOAST_DATUM(PG_GETARG_DATUM(0)); \
++	pgeom0 = unserialize_exact_geometry( input0 );			\
++	PG_FREE_IF_COPY( input0, 0 );					\
++	geom0 = sfcgal_prepared_geometry_geometry( pgeom0 );		\
++									\
++	input1 = (sfcgal_serialized_geometry_t*)PG_DETOAST_DATUM(PG_GETARG_DATUM(1)); \
++	pgeom1 = unserialize_exact_geometry( input1 );			\
++	PG_FREE_IF_COPY( input1, 1 );					\
++	geom1 = sfcgal_prepared_geometry_geometry( pgeom1 );		\
++									\
++	result = fname( geom0, geom1 );					\
++	sfcgal_prepared_geometry_delete( pgeom0 );			\
++	sfcgal_prepared_geometry_delete( pgeom1 );			\
++									\
++	return_call( result );						\
++    }
++
++#define _SFCGAL_EXACT_WRAPPER_BINARY_PREDICATE( name, fname ) \
++    _SFCGAL_EXACT_WRAPPER_BINARY_SCALAR( name, fname, int, PG_RETURN_BOOL )
++#define _SFCGAL_EXACT_WRAPPER_BINARY_MEASURE( name, fname ) \
++    _SFCGAL_EXACT_WRAPPER_BINARY_SCALAR( name, fname, double, PG_RETURN_FLOAT8 )
++
++#define _SFCGAL_EXACT_WRAPPER_UNARY_CONSTRUCTION( name, fname )		\
++    Datum sfcgal_exact_##name(PG_FUNCTION_ARGS);			\
++    PG_FUNCTION_INFO_V1(sfcgal_exact_##name);				\
++    Datum sfcgal_exact_##name(PG_FUNCTION_ARGS)				\
++    {									\
++	sfcgal_serialized_geometry_t *input0, *output;			\
++	sfcgal_prepared_geometry_t *pgeom0, *presult;			\
++	const sfcgal_geometry_t *geom0;					\
++	sfcgal_geometry_t *result;					\
++	srid_t srid;							\
++									\
++	sfcgal_postgis_init();						\
++									\
++	input0 = (sfcgal_serialized_geometry_t*)PG_DETOAST_DATUM(PG_GETARG_DATUM(0)); \
++	pgeom0 = unserialize_exact_geometry( input0 );			\
++	PG_FREE_IF_COPY( input0, 0 );					\
++	geom0 = sfcgal_prepared_geometry_geometry( pgeom0 );		\
++	srid = sfcgal_prepared_geometry_srid( pgeom0 );			\
++									\
++	result = fname( geom0 );					\
++	sfcgal_prepared_geometry_delete( pgeom0 );			\
++									\
++	presult = sfcgal_prepared_geometry_create_from_geometry( result, srid ); \
++	output = serialize_exact_geometry( presult );			\
++	sfcgal_prepared_geometry_delete( presult );			\
++									\
++	PG_RETURN_POINTER( output );					\
++    }
++
++#define _SFCGAL_EXACT_WRAPPER_BINARY_CONSTRUCTION( name, fname )	\
++    Datum sfcgal_exact_##name(PG_FUNCTION_ARGS);			\
++    PG_FUNCTION_INFO_V1(sfcgal_exact_##name);				\
++    Datum sfcgal_exact_##name(PG_FUNCTION_ARGS)				\
++    {									\
++	sfcgal_serialized_geometry_t *input0, *input1, *output;		\
++	sfcgal_prepared_geometry_t *pgeom0, *pgeom1, *presult;		\
++	const sfcgal_geometry_t *geom0, *geom1;				\
++	sfcgal_geometry_t *result;					\
++	srid_t srid;							\
++									\
++	sfcgal_postgis_init();						\
++									\
++	input0 = (sfcgal_serialized_geometry_t*)PG_DETOAST_DATUM(PG_GETARG_DATUM(0)); \
++	pgeom0 = unserialize_exact_geometry( input0 );			\
++	PG_FREE_IF_COPY( input0, 0 );					\
++	geom0 = sfcgal_prepared_geometry_geometry( pgeom0 );		\
++	srid = sfcgal_prepared_geometry_srid( pgeom0 );			\
++									\
++	input1 = (sfcgal_serialized_geometry_t*)PG_DETOAST_DATUM(PG_GETARG_DATUM(1)); \
++	pgeom1 = unserialize_exact_geometry( input1 );			\
++	PG_FREE_IF_COPY( input1, 1 );					\
++	geom1 = sfcgal_prepared_geometry_geometry( pgeom1 );		\
++									\
++	result = fname( geom0, geom1 );					\
++	sfcgal_prepared_geometry_delete( pgeom0 );			\
++	sfcgal_prepared_geometry_delete( pgeom1 );			\
++									\
++	presult = sfcgal_prepared_geometry_create_from_geometry( result, srid ); \
++	output = serialize_exact_geometry( presult );			\
++	sfcgal_prepared_geometry_delete( presult );			\
++									\
++	PG_RETURN_POINTER( output );					\
++    }
++
++_SFCGAL_EXACT_WRAPPER_UNARY_MEASURE( area, sfcgal_geometry_area )
++_SFCGAL_EXACT_WRAPPER_UNARY_MEASURE( area3D, sfcgal_geometry_area_3d )
++
++_SFCGAL_EXACT_WRAPPER_UNARY_PREDICATE( has_plane, sfcgal_geometry_has_plane )
++_SFCGAL_EXACT_WRAPPER_UNARY_PREDICATE( pointing_up, sfcgal_geometry_pointing_up )
++
++_SFCGAL_EXACT_WRAPPER_BINARY_PREDICATE( intersects, sfcgal_geometry_intersects )
++_SFCGAL_EXACT_WRAPPER_BINARY_PREDICATE( intersects3D, sfcgal_geometry_intersects_3d )
++
++_SFCGAL_EXACT_WRAPPER_BINARY_MEASURE( distance, sfcgal_geometry_distance )
++_SFCGAL_EXACT_WRAPPER_BINARY_MEASURE( distance3D, sfcgal_geometry_distance_3d )
++
++_SFCGAL_EXACT_WRAPPER_UNARY_CONSTRUCTION( convexhull, sfcgal_geometry_convexhull )
++_SFCGAL_EXACT_WRAPPER_UNARY_CONSTRUCTION( convexhull3D, sfcgal_geometry_convexhull_3d )
++_SFCGAL_EXACT_WRAPPER_UNARY_CONSTRUCTION( triangulate, sfcgal_geometry_triangulate )
++_SFCGAL_EXACT_WRAPPER_UNARY_CONSTRUCTION( triangulate2D, sfcgal_geometry_triangulate_2d )
++_SFCGAL_EXACT_WRAPPER_UNARY_CONSTRUCTION( make_solid, sfcgal_geometry_make_solid )
++_SFCGAL_EXACT_WRAPPER_UNARY_CONSTRUCTION( force_z_up, sfcgal_geometry_force_z_up )
++_SFCGAL_EXACT_WRAPPER_UNARY_CONSTRUCTION( copy, sfcgal_geometry_copy )
++_SFCGAL_EXACT_WRAPPER_UNARY_CONSTRUCTION( straight_skeleton, sfcgal_geometry_straight_skeleton )
++
++_SFCGAL_EXACT_WRAPPER_BINARY_CONSTRUCTION( intersection, sfcgal_geometry_intersection )
++_SFCGAL_EXACT_WRAPPER_BINARY_CONSTRUCTION( intersection3D, sfcgal_geometry_intersection_3d )
++_SFCGAL_EXACT_WRAPPER_BINARY_CONSTRUCTION( minkowski_sum, sfcgal_geometry_minkowski_sum )
++
++PG_FUNCTION_INFO_V1(sfcgal_exact_extrude);
++Datum sfcgal_exact_extrude(PG_FUNCTION_ARGS)
++{
++    sfcgal_serialized_geometry_t *input0, *output;
++    sfcgal_prepared_geometry_t *pgeom0, *presult;
++    const sfcgal_geometry_t *geom0;
++    sfcgal_geometry_t *result;
++    srid_t srid;
++
++    double dx, dy, dz;
++
++    sfcgal_postgis_init();
++    
++    input0 = (sfcgal_serialized_geometry_t*)PG_DETOAST_DATUM(PG_GETARG_DATUM(0));
++    pgeom0 = unserialize_exact_geometry( input0 );
++    PG_FREE_IF_COPY( input0, 0 );
++    geom0 = sfcgal_prepared_geometry_geometry( pgeom0 );
++    srid = sfcgal_prepared_geometry_srid( pgeom0 );
++
++    dx = PG_GETARG_FLOAT8( 1 );
++    dy = PG_GETARG_FLOAT8( 2 );
++    dz = PG_GETARG_FLOAT8( 3 );
++    
++    result = sfcgal_geometry_extrude( geom0, dx, dy, dz );
++    sfcgal_prepared_geometry_delete( pgeom0 );
++
++    presult = sfcgal_prepared_geometry_create_from_geometry( result, srid );
++    output = serialize_exact_geometry( presult );
++    sfcgal_prepared_geometry_delete( presult );
++    
++    PG_RETURN_POINTER( output );
++}
++
++PG_FUNCTION_INFO_V1(sfcgal_exact_round);
++Datum sfcgal_exact_round(PG_FUNCTION_ARGS)
++{
++    sfcgal_serialized_geometry_t *input0, *output;
++    sfcgal_prepared_geometry_t *pgeom0, *presult;
++    const sfcgal_geometry_t *geom0;
++    sfcgal_geometry_t *result;
++    srid_t srid;
++    int scale;
++
++    sfcgal_postgis_init();
++    
++    input0 = (sfcgal_serialized_geometry_t*)PG_DETOAST_DATUM(PG_GETARG_DATUM(0));
++    pgeom0 = unserialize_exact_geometry( input0 );
++    PG_FREE_IF_COPY( input0, 0 );
++    geom0 = sfcgal_prepared_geometry_geometry( pgeom0 );
++    srid = sfcgal_prepared_geometry_srid( pgeom0 );
++
++    scale = PG_GETARG_INT32( 1 );
++    
++    result = sfcgal_geometry_round( geom0, scale );
++    sfcgal_prepared_geometry_delete( pgeom0 );
++
++    presult = sfcgal_prepared_geometry_create_from_geometry( result, srid );
++    output = serialize_exact_geometry( presult );
++    sfcgal_prepared_geometry_delete( presult );
++    
++    PG_RETURN_POINTER( output );
++}
++
++PG_FUNCTION_INFO_V1(sfcgal_exact_offset_polygon);
++Datum sfcgal_exact_offset_polygon(PG_FUNCTION_ARGS)
++{
++    sfcgal_serialized_geometry_t *input0, *output;
++    sfcgal_prepared_geometry_t *pgeom0, *presult;
++    const sfcgal_geometry_t *geom0;
++    sfcgal_geometry_t *result;
++    srid_t srid;
++    double offset;
++
++    sfcgal_postgis_init();
++    
++    input0 = (sfcgal_serialized_geometry_t*)PG_DETOAST_DATUM(PG_GETARG_DATUM(0));
++    pgeom0 = unserialize_exact_geometry( input0 );
++    PG_FREE_IF_COPY( input0, 0 );
++    geom0 = sfcgal_prepared_geometry_geometry( pgeom0 );
++    srid = sfcgal_prepared_geometry_srid( pgeom0 );
++
++    offset = PG_GETARG_FLOAT8( 1 );
++    
++    result = sfcgal_geometry_offset_polygon( geom0, offset );
++    sfcgal_prepared_geometry_delete( pgeom0 );
++
++    presult = sfcgal_prepared_geometry_create_from_geometry( result, srid );
++    output = serialize_exact_geometry( presult );
++    sfcgal_prepared_geometry_delete( presult );
++    
++    PG_RETURN_POINTER( output );
++}
++
+Index: postgis/sqldefines.h.in
+===================================================================
+--- postgis/sqldefines.h.in	(révision 11093)
++++ postgis/sqldefines.h.in	(copie de travail)
+@@ -28,6 +28,10 @@
+ 
+ #define SRID_USR_MAX @SRID_USR_MAX@
+ 
++#if @POSTGIS_SFCGAL@
++#define POSTGIS_SFCGAL
++#endif
++
+ #endif /* _LWPGIS_DEFINES */
+ 
+ 
+Index: postgis/lwgeom_sfcgal.c
+===================================================================
+--- postgis/lwgeom_sfcgal.c	(révision 0)
++++ postgis/lwgeom_sfcgal.c	(révision 0)
+@@ -0,0 +1,341 @@
++/**********************************************************************
++ *
++ * PostGIS - Spatial Types for PostgreSQL
++ * http://postgis.refractions.net
++ *
++ * Wrapper around SFCGAL for 3D and exact geometries
++ *
++ * Copyright 2012-2013 Oslandia <contact@oslandia.com>
++ *
++ * This is free software; you can redistribute and/or modify it under
++ * the terms of the GNU General Public Licence. See the COPYING file.
++ *
++ **********************************************************************/
++
++#include "postgres.h"
++#include "fmgr.h"
++#include "../liblwgeom/liblwgeom.h"
++
++#include "lwgeom_sfcgal.h"
++
++GSERIALIZED *geometry_serialize(LWGEOM *lwgeom);
++char* text2cstring(const text *textptr);
++
++static int __sfcgal_init = 0;
++
++void sfcgal_postgis_init(void)
++{
++    if ( ! __sfcgal_init ) {
++	sfcgal_init();
++	sfcgal_set_error_handlers( (sfcgal_error_handler_t)lwnotice, (sfcgal_error_handler_t)lwerror );
++	sfcgal_set_alloc_handlers( lwalloc, lwfree );
++	__sfcgal_init = 1;
++    }
++}
++
++/**
++ * Conversion from GSERIALIZED* to SFCGAL::Geometry
++ */
++sfcgal_geometry_t* POSTGIS2SFCGALGeometry(GSERIALIZED *pglwgeom)
++{
++	LWGEOM *lwgeom = lwgeom_from_gserialized(pglwgeom);
++	sfcgal_geometry_t* g;
++	if ( ! lwgeom )
++	{
++		lwerror("POSTGIS2SFCGALGeometry: unable to deserialize input");
++	}
++	g = LWGEOM2SFCGAL( lwgeom );
++	lwgeom_free(lwgeom);
++	return g;
++}
++
++/**
++ * Conversion from GSERIALIZED* to SFCGAL::PreparedGeometry
++ */
++sfcgal_prepared_geometry_t* POSTGIS2SFCGALPreparedGeometry(GSERIALIZED *pglwgeom)
++{
++	LWGEOM *lwgeom = lwgeom_from_gserialized(pglwgeom);
++	sfcgal_geometry_t* g;
++	if ( ! lwgeom )
++	{
++		lwerror("POSTGIS2SFCGALPreparedGeometry: unable to deserialize input");
++	}
++	g = LWGEOM2SFCGAL( lwgeom );
++
++	lwgeom_free(lwgeom);
++	return sfcgal_prepared_geometry_create_from_geometry( g, gserialized_get_srid(pglwgeom) );
++}
++
++/**
++ * Conversion from SFCGAL::Geometry to GSERIALIZED*
++ */
++GSERIALIZED* SFCGALGeometry2POSTGIS( const sfcgal_geometry_t* geom, int force3D, int SRID )
++{
++	LWGEOM* lwgeom = SFCGAL2LWGEOM( geom, force3D, SRID );
++	GSERIALIZED *result;
++	if ( lwgeom_needs_bbox(lwgeom) == LW_TRUE )
++	{
++		lwgeom_add_bbox(lwgeom);
++	}
++
++	result = geometry_serialize(lwgeom);
++	lwgeom_free(lwgeom);
++
++	return result;
++}
++
++/**
++ * Conversion from SFCGAL::PreparedGeometry to GSERIALIZED*
++ */
++GSERIALIZED* SFCGALPreparedGeometry2POSTGIS( const sfcgal_prepared_geometry_t* geom, int force3D )
++{
++    return SFCGALGeometry2POSTGIS( sfcgal_prepared_geometry_geometry( geom ), force3D, sfcgal_prepared_geometry_srid( geom ) );
++}
++
++/**
++ * Conversion from WKT to GSERIALIZED
++ */
++Datum sfcgal_from_text(PG_FUNCTION_ARGS);
++PG_FUNCTION_INFO_V1(sfcgal_from_text);
++Datum sfcgal_from_text(PG_FUNCTION_ARGS)
++{
++	GSERIALIZED* result;
++	sfcgal_prepared_geometry_t* g;
++	text *wkttext = PG_GETARG_TEXT_P(0);
++	char *cstring = text2cstring(wkttext);
++
++	sfcgal_postgis_init();
++
++	g = sfcgal_io_read_ewkt( cstring, strlen(cstring) );
++
++	result = SFCGALPreparedGeometry2POSTGIS( g, 0 );
++	sfcgal_prepared_geometry_delete( g );
++	PG_RETURN_POINTER(result);
++}
++
++
++#define _SFCGAL_WRAPPER_UNARY_SCALAR( name, fname, ret_type, return_call )	\
++    Datum sfcgal_##name(PG_FUNCTION_ARGS);				\
++    PG_FUNCTION_INFO_V1(sfcgal_##name);					\
++    Datum sfcgal_##name(PG_FUNCTION_ARGS)				\
++    {									\
++	GSERIALIZED *input0;						\
++	sfcgal_geometry_t *geom0;					\
++	ret_type result;						\
++									\
++	sfcgal_postgis_init();						\
++									\
++	input0 = (GSERIALIZED*)PG_DETOAST_DATUM(PG_GETARG_DATUM(0));	\
++	geom0 = POSTGIS2SFCGALGeometry( input0 );			\
++									\
++	result = fname( geom0 );					\
++	sfcgal_geometry_delete( geom0 );				\
++									\
++	PG_FREE_IF_COPY( input0, 0 );					\
++									\
++	return_call( result );						\
++    }
++
++#define _SFCGAL_WRAPPER_UNARY_MEASURE( name, fname )	\
++    _SFCGAL_WRAPPER_UNARY_SCALAR( name, fname, double, PG_RETURN_FLOAT8 )
++#define _SFCGAL_WRAPPER_UNARY_PREDICATE( name, fname )	\
++    _SFCGAL_WRAPPER_UNARY_SCALAR( name, fname, int, PG_RETURN_BOOL )
++
++#define _SFCGAL_WRAPPER_BINARY_SCALAR( name, fname, ret_type, return_call )	\
++    Datum sfcgal_##name(PG_FUNCTION_ARGS);				\
++    PG_FUNCTION_INFO_V1(sfcgal_##name);					\
++    Datum sfcgal_##name(PG_FUNCTION_ARGS)				\
++    {									\
++	GSERIALIZED *input0, *input1;					\
++	sfcgal_geometry_t *geom0, *geom1;					\
++	ret_type result;						\
++									\
++	sfcgal_postgis_init();						\
++									\
++	input0 = (GSERIALIZED*)PG_DETOAST_DATUM(PG_GETARG_DATUM(0));	\
++	input1 = (GSERIALIZED*)PG_DETOAST_DATUM(PG_GETARG_DATUM(1));	\
++	geom0 = POSTGIS2SFCGALGeometry( input0 );			\
++	PG_FREE_IF_COPY( input0, 0 );					\
++	geom1 = POSTGIS2SFCGALGeometry( input1 );			\
++	PG_FREE_IF_COPY( input1, 1 );					\
++									\
++	result = fname( geom0, geom1 );					\
++	sfcgal_geometry_delete( geom0 );				\
++	sfcgal_geometry_delete( geom1 );				\
++									\
++	return_call( result );						\
++    }
++
++#define _SFCGAL_WRAPPER_BINARY_MEASURE( name, fname ) \
++    _SFCGAL_WRAPPER_BINARY_SCALAR( name, fname, double, PG_RETURN_FLOAT8 )
++#define _SFCGAL_WRAPPER_BINARY_PREDICATE( name, fname ) \
++    _SFCGAL_WRAPPER_BINARY_SCALAR( name, fname, int, PG_RETURN_BOOL )
++
++#define _SFCGAL_WRAPPER_UNARY_CONSTRUCTION( name, fname )		\
++    Datum sfcgal_##name(PG_FUNCTION_ARGS);				\
++    PG_FUNCTION_INFO_V1(sfcgal_##name);					\
++    Datum sfcgal_##name(PG_FUNCTION_ARGS)				\
++    {									\
++	GSERIALIZED *input0, *output;					\
++	sfcgal_geometry_t *geom0;					\
++	sfcgal_geometry_t *result;					\
++	srid_t srid;							\
++									\
++	sfcgal_postgis_init();						\
++									\
++	input0 = (GSERIALIZED*)PG_DETOAST_DATUM(PG_GETARG_DATUM(0));	\
++	srid = gserialized_get_srid( input0 );				\
++	geom0 = POSTGIS2SFCGALGeometry( input0 );			\
++	PG_FREE_IF_COPY( input0, 0 );					\
++									\
++	result = fname( geom0 );					\
++	sfcgal_geometry_delete( geom0 );				\
++									\
++	output = SFCGALGeometry2POSTGIS( result, 0, srid );		\
++	sfcgal_geometry_delete( result );				\
++									\
++	PG_RETURN_POINTER( output );					\
++    }
++
++#define _SFCGAL_WRAPPER_BINARY_CONSTRUCTION( name, fname )		\
++    Datum sfcgal_##name(PG_FUNCTION_ARGS);				\
++    PG_FUNCTION_INFO_V1(sfcgal_##name);					\
++    Datum sfcgal_##name(PG_FUNCTION_ARGS)				\
++    {									\
++	GSERIALIZED *input0, *input1, *output;				\
++	sfcgal_geometry_t *geom0, *geom1;				\
++	sfcgal_geometry_t *result;					\
++	srid_t srid;							\
++									\
++	sfcgal_postgis_init();						\
++									\
++	input0 = (GSERIALIZED*)PG_DETOAST_DATUM(PG_GETARG_DATUM(0));	\
++	srid = gserialized_get_srid( input0 );				\
++	input1 = (GSERIALIZED*)PG_DETOAST_DATUM(PG_GETARG_DATUM(1));	\
++	geom0 = POSTGIS2SFCGALGeometry( input0 );			\
++	PG_FREE_IF_COPY( input0, 0 );					\
++	geom1 = POSTGIS2SFCGALGeometry( input1 );			\
++	PG_FREE_IF_COPY( input1, 1 );					\
++									\
++	result = fname( geom0, geom1 );					\
++	sfcgal_geometry_delete( geom0 );				\
++	sfcgal_geometry_delete( geom1 );				\
++									\
++	output = SFCGALGeometry2POSTGIS( result, 0, srid );		\
++	sfcgal_geometry_delete( result );				\
++									\
++	PG_RETURN_POINTER( output );					\
++    }
++
++_SFCGAL_WRAPPER_UNARY_MEASURE( area, sfcgal_geometry_area )
++_SFCGAL_WRAPPER_UNARY_MEASURE( area3D, sfcgal_geometry_area_3d )
++
++_SFCGAL_WRAPPER_UNARY_PREDICATE( has_plane, sfcgal_geometry_has_plane )
++_SFCGAL_WRAPPER_UNARY_PREDICATE( pointing_up, sfcgal_geometry_pointing_up )
++
++_SFCGAL_WRAPPER_BINARY_PREDICATE( intersects, sfcgal_geometry_intersects )
++_SFCGAL_WRAPPER_BINARY_PREDICATE( intersects3D, sfcgal_geometry_intersects_3d )
++
++_SFCGAL_WRAPPER_BINARY_MEASURE( distance, sfcgal_geometry_distance )
++_SFCGAL_WRAPPER_BINARY_MEASURE( distance3D, sfcgal_geometry_distance_3d )
++
++_SFCGAL_WRAPPER_UNARY_CONSTRUCTION( convexhull, sfcgal_geometry_convexhull )
++_SFCGAL_WRAPPER_UNARY_CONSTRUCTION( convexhull3D, sfcgal_geometry_convexhull_3d )
++_SFCGAL_WRAPPER_UNARY_CONSTRUCTION( triangulate, sfcgal_geometry_triangulate )
++_SFCGAL_WRAPPER_UNARY_CONSTRUCTION( triangulate2D, sfcgal_geometry_triangulate_2d )
++_SFCGAL_WRAPPER_UNARY_CONSTRUCTION( make_solid, sfcgal_geometry_make_solid )
++_SFCGAL_WRAPPER_UNARY_CONSTRUCTION( force_z_up, sfcgal_geometry_force_z_up )
++_SFCGAL_WRAPPER_UNARY_CONSTRUCTION( copy, sfcgal_geometry_copy )
++_SFCGAL_WRAPPER_UNARY_CONSTRUCTION( straight_skeleton, sfcgal_geometry_straight_skeleton )
++
++_SFCGAL_WRAPPER_BINARY_CONSTRUCTION( intersection, sfcgal_geometry_intersection )
++_SFCGAL_WRAPPER_BINARY_CONSTRUCTION( intersection3D, sfcgal_geometry_intersection_3d )
++_SFCGAL_WRAPPER_BINARY_CONSTRUCTION( minkowski_sum, sfcgal_geometry_minkowski_sum )
++
++Datum sfcgal_extrude(PG_FUNCTION_ARGS);
++PG_FUNCTION_INFO_V1(sfcgal_extrude);
++Datum sfcgal_extrude(PG_FUNCTION_ARGS)
++{
++    GSERIALIZED *input0, *output;
++    sfcgal_geometry_t *geom0;
++    sfcgal_geometry_t *result;
++    double dx, dy, dz;
++    srid_t srid;
++
++    sfcgal_postgis_init();
++    
++    input0 = (GSERIALIZED*)PG_DETOAST_DATUM(PG_GETARG_DATUM(0));
++    srid = gserialized_get_srid( input0 );
++
++    geom0 = POSTGIS2SFCGALGeometry( input0 );
++    PG_FREE_IF_COPY( input0, 0 );
++    
++    dx = PG_GETARG_FLOAT8( 1 );
++    dy = PG_GETARG_FLOAT8( 2 );
++    dz = PG_GETARG_FLOAT8( 3 );
++    
++    result = sfcgal_geometry_extrude( geom0, dx, dy, dz );
++    sfcgal_geometry_delete( geom0 );
++    
++    output = SFCGALGeometry2POSTGIS( result, 0, srid );
++    sfcgal_geometry_delete( result );
++    
++    PG_RETURN_POINTER( output );
++}
++
++Datum sfcgal_offset_polygon(PG_FUNCTION_ARGS);
++PG_FUNCTION_INFO_V1(sfcgal_offset_polygon);
++Datum sfcgal_offset_polygon(PG_FUNCTION_ARGS)
++{
++    GSERIALIZED *input0, *output;
++    sfcgal_geometry_t *geom0;
++    sfcgal_geometry_t *result;
++    double offset;
++    srid_t srid;
++
++    sfcgal_postgis_init();
++    
++    input0 = (GSERIALIZED*)PG_DETOAST_DATUM(PG_GETARG_DATUM(0));
++    srid = gserialized_get_srid( input0 );
++    geom0 = POSTGIS2SFCGALGeometry( input0 );
++    PG_FREE_IF_COPY( input0, 0 );
++    
++    offset = PG_GETARG_FLOAT8( 1 );
++    
++    result = sfcgal_geometry_offset_polygon( geom0, offset );
++    sfcgal_geometry_delete( geom0 );
++    
++    output = SFCGALGeometry2POSTGIS( result, 0, srid );
++    sfcgal_geometry_delete( result );
++    
++    PG_RETURN_POINTER( output );
++}
++
++Datum sfcgal_round(PG_FUNCTION_ARGS);
++PG_FUNCTION_INFO_V1(sfcgal_round);
++Datum sfcgal_round(PG_FUNCTION_ARGS)
++{
++    GSERIALIZED *input0, *output;
++    sfcgal_geometry_t *geom0;
++    sfcgal_geometry_t *result;
++    int scale;
++    srid_t srid;
++
++    sfcgal_postgis_init();
++    
++    input0 = (GSERIALIZED*)PG_DETOAST_DATUM(PG_GETARG_DATUM(0));
++    srid = gserialized_get_srid( input0 );
++    geom0 = POSTGIS2SFCGALGeometry( input0 );
++    PG_FREE_IF_COPY( input0, 0 );
++    
++    scale = PG_GETARG_INT32( 1 );
++    
++    result = sfcgal_geometry_round( geom0, scale );
++    sfcgal_geometry_delete( geom0 );
++    
++    output = SFCGALGeometry2POSTGIS( result, 0, srid );
++    sfcgal_geometry_delete( result );
++    
++    PG_RETURN_POINTER( output );
++}
++
+Index: postgis/lwgeom_sfcgal.h
+===================================================================
+--- postgis/lwgeom_sfcgal.h	(révision 0)
++++ postgis/lwgeom_sfcgal.h	(révision 0)
+@@ -0,0 +1,46 @@
++/**********************************************************************
++ *
++ * PostGIS - Spatial Types for PostgreSQL
++ * http://postgis.refractions.net
++ *
++ * Wrapper around SFCGAL for 3D and exact geometries
++ *
++ * Copyright 2012-2013 Oslandia <contact@oslandia.com>
++ *
++ * This is free software; you can redistribute and/or modify it under
++ * the terms of the GNU General Public Licence. See the COPYING file.
++ *
++ **********************************************************************/
++
++#ifndef _LWGEOM_SFCGAL_C_H_
++#define _LWGEOM_SFCGAL_C_H_
++
++#include "../liblwgeom/lwgeom_sfcgal.h"
++
++/**
++ * Conversion from GSERIALIZED* to SFCGAL::Geometry
++ */
++sfcgal_geometry_t* POSTGIS2SFCGALGeometry(GSERIALIZED *pglwgeom);
++
++/**
++ * Conversion from GSERIALIZED* to SFCGAL::PreparedGeometry
++ */
++sfcgal_prepared_geometry_t* POSTGIS2SFCGALPreparedGeometry(GSERIALIZED *pglwgeom);
++
++/**
++ * Conversion from SFCGAL::Geometry to GSERIALIZED*
++ */
++GSERIALIZED* SFCGALGeometry2POSTGIS( const sfcgal_geometry_t* geom, int force3D, int SRID );
++
++/**
++ * Conversion from SFCGAL::PreparedGeometry to GSERIALIZED*
++ */
++GSERIALIZED* SFCGALPreparedGeometry2POSTGIS( const sfcgal_prepared_geometry_t* geom, int force3D );
++
++
++/**
++ * Initialize sfcgal with PostGIS error handlers
++ */
++void sfcgal_postgis_init(void);
++
++#endif
+Index: postgis/postgis.sql.in.c
+===================================================================
+--- postgis/postgis.sql.in.c	(révision 11093)
++++ postgis/postgis.sql.in.c	(copie de travail)
+@@ -5132,4 +5132,9 @@
+ GRANT SELECT ON TABLE geography_columns TO public;
+ GRANT SELECT ON TABLE geometry_columns TO public;
+ GRANT SELECT ON TABLE spatial_ref_sys TO public;
++
++#ifdef POSTGIS_SFCGAL
++#include "postgis_sfcgal.sql.in.c"
++#endif
++
+ COMMIT;
+Index: configure.ac
+===================================================================
+--- configure.ac	(révision 11093)
++++ configure.ac	(copie de travail)
+@@ -605,6 +605,84 @@
+ 
+ 
+ dnl ===========================================================================
++dnl SFCGAL library support
++dnl ===========================================================================
++
++dnl ===========================================================================
++dnl
++dnl Selection of the geometric backend.
++dnl Geos is still needed for now.
++dnl
++dnl ===========================================================================
++
++AC_ARG_WITH([sfcgal], AC_HELP_STRING([--with-sfcgal], [add SFCGAL types]), 
++	[POSTGIS_SFCGAL=1], [POSTGIS_SFCGAL=0])
++
++AC_SUBST([POSTGIS_SFCGAL])
++
++dnl ===========================================================================
++dnl CGAL library
++dnl ===========================================================================
++
++AC_ARG_WITH([cgaldir], 
++	[AS_HELP_STRING([--with-cgaldir=PATH], [specify the CGAL installation directory])], 
++	[CGALDIR="$withval"], [CGALDIR="/usr/local"])
++
++if test -d "$CGALDIR"; then
++	AC_MSG_RESULT([Using CGAL directory: $CGALDIR])
++	dnl Add the include directory to SFCGAL_CPPFLAGS	
++	CGAL_CPPFLAGS="-I$CGALDIR/include"
++	# use RUNPATH
++	CGAL_LDFLAGS="-L$CGALDIR/lib -lCGAL -lCGAL_Core -Wl,-rpath=$CGALDIR/lib,--enable-new-dtags"
++else
++	AC_MSG_ERROR([the --with-cgaldir directory "$CGALDIR" cannot be found]) 
++fi
++
++dnl ===========================================================================
++dnl SFCGAL library
++dnl ===========================================================================
++
++AC_ARG_WITH([sfcgaldir], 
++	[AS_HELP_STRING([--with-sfcgaldir=PATH], [specify the SFCGAL installation directory])], 
++	[SFCGALDIR="$withval"], [SFCGALDIR="/usr/local"])
++
++if test -d "$SFCGALDIR"; then
++	AC_MSG_RESULT([Using SFCGAL directory: $SFCGALDIR])
++	dnl Add the include directory to SFCGAL_CPPFLAGS	
++	SFCGAL_CPPFLAGS="-I$SFCGALDIR/include"
++	# Use RUNPATH
++	SFCGAL_LDFLAGS="-L$SFCGALDIR/lib -Wl,-rpath=$SFCGALDIR/lib,--enable-new-dtags"
++else
++	AC_MSG_ERROR([the --with-sfcgaldir directory "$SFCGALDIR" cannot be found]) 
++fi
++
++AC_SUBST([SFCGAL_CPPFLAGS])
++AC_SUBST([SFCGAL_LDFLAGS])
++
++dnl ===========================================================================
++dnl SFCGAL compilation mode
++dnl ===========================================================================
++
++AC_ARG_ENABLE([debug-sfcgal], AC_HELP_STRING([--enable-debug-sfcgal], [Use SFCGAL in debug mode]), 
++	[SFCGAL_MODE=Debug], [SFCGAL_MODE=Release]) 
++
++if test "x$SFCGAL_MODE" = "xDebug"; then
++   SFCGAL_CPPFLAGS+=" -frounding-math"
++   POSTGIS_SFCGAL_OBJS="lwgeom_sfcgal.o"
++   SFCGAL_LDFLAGS+=" -lSFCGALd"
++else
++   SFCGAL_CPPFLAGS+=" -frounding-math"
++   POSTGIS_SFCGAL_OBJS="lwgeom_sfcgal.o"
++   SFCGAL_LDFLAGS+=" -lSFCGAL"
++fi
++SFCGAL_CPPFLAGS+=" $CGAL_CPPFLAGS"
++SFCGAL_LDFLAGS+=" $CGAL_LDFLAGS"
++
++AC_SUBST(POSTGIS_SFCGAL_OBJS, $POSTGIS_SFCGAL_OBJS)
++AC_SUBST(SFCGAL_CPPFLAGS, $SFCGAL_CPPFLAGS)
++AC_SUBST(SFCGAL_LDFLAGS, $SFCGAL_LDFLAGS)
++
++dnl ===========================================================================
+ dnl Detect gettext
+ dnl ===========================================================================
+ 
+@@ -1079,6 +1157,7 @@
+ 	RT_MAKEFILE_LIST="raster/Makefile"
+ fi
+ 
++
+ dnl ===========================================================================
+ dnl See if we have the requirements for building the extensions, namely
+ dnl PostgreSQL 9.1 or better and the xlstproc tool for generating the commends
+@@ -1172,6 +1251,14 @@
+ else
+     AC_MSG_RESULT([  PostGIS Topology:     disabled])
+ fi
++if test "x$POSTGIS_SFCGAL" = "x1"; then
++    AC_MSG_RESULT([  SFCGAL support:       yes])
++    AC_MSG_RESULT([  CGAL directory:       ${CGALDIR}])
++    AC_MSG_RESULT([  SFCGAL directory:     ${SFCGALDIR}])
++    AC_MSG_RESULT([  SFCGAL mode:          ${SFCGAL_MODE}])
++else
++    AC_MSG_RESULT([  SFCGAL support:       no])
++fi
+ AC_MSG_RESULT()
+ AC_MSG_RESULT([ -------- Documentation Generation -------- ])
+ AC_MSG_RESULT([  xsltproc:             ${XSLTPROC}])
