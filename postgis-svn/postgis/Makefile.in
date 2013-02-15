@@ -25,8 +25,7 @@ SQLPP = @SQLPP@
 SQL_OBJS=postgis.sql.in legacy.sql.in legacy_minimal.sql.in 
 
 GEOM_BACKEND_OBJ = lwgeom_geos.o
-#SFCGAL_BACKEND_OBJ = lwgeom_sfcgal.o lwgeom_sfcgal_wrapper.o lwgeom_sfcgal_refgeom.o lwgeom_sfcgal_exactgeom.o
-SFCGAL_BACKEND_OBJ = lwgeom_sfcgal_c.o lwgeom_sfcgal_exact.o
+SFCGAL_BACKEND_OBJ = lwgeom_sfcgal.o lwgeom_sfcgal_exact.o lwgeom_sfcgal_ref.o
 
 ifeq (@POSTGIS_SFCGAL@,1)
 BACKEND_OBJ=$(GEOM_BACKEND_OBJ) $(SFCGAL_BACKEND_OBJ)

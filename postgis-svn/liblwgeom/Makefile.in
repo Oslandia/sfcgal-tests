@@ -95,7 +95,7 @@ NM_OBJS = \
 ifeq (@POSTGIS_SFCGAL@,1)
 CFLAGS += @SFCGAL_CPPFLAGS@
 LDFLAGS += @SFCGAL_LDFLAGS@
-SA_OBJS += lwgeom_sfcgal_c.o
+SA_OBJS += lwgeom_sfcgal.o
 endif
 
 LT_SA_OBJS = $(SA_OBJS:.o=.lo)

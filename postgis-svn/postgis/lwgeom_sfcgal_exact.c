@@ -15,7 +15,7 @@
 #include "postgres.h"
 #include "fmgr.h"
 
-#include "lwgeom_sfcgal_c.h"
+#include "lwgeom_sfcgal.h"
 
 GSERIALIZED *geometry_serialize(LWGEOM *lwgeom);
 char* text2cstring(const text *textptr);

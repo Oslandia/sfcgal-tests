@@ -16,10 +16,22 @@
 #include "fmgr.h"
 #include "../liblwgeom/liblwgeom.h"
 
-#include "lwgeom_sfcgal_c.h"
+#include "lwgeom_sfcgal.h"
 
 GSERIALIZED *geometry_serialize(LWGEOM *lwgeom);
 char* text2cstring(const text *textptr);
+
+static int __sfcgal_init = 0;
+
+void sfcgal_postgis_init(void)
+{
+    if ( ! __sfcgal_init ) {
+	sfcgal_init();
+	sfcgal_set_error_handlers( (sfcgal_error_handler_t)lwnotice, (sfcgal_error_handler_t)lwerror );
+	sfcgal_set_alloc_handlers( lwalloc, lwfree );
+	__sfcgal_init = 1;
+    }
+}
 
 /**
  * Conversion from GSERIALIZED* to SFCGAL::Geometry
@@ -78,18 +90,6 @@ GSERIALIZED* SFCGALGeometry2POSTGIS( const sfcgal_geometry_t* geom, int force3D,
 GSERIALIZED* SFCGALPreparedGeometry2POSTGIS( const sfcgal_prepared_geometry_t* geom, int force3D )
 {
     return SFCGALGeometry2POSTGIS( sfcgal_prepared_geometry_geometry( geom ), force3D, sfcgal_prepared_geometry_srid( geom ) );
-}
-
-static int __sfcgal_init = 0;
-
-void sfcgal_postgis_init()
-{
-    if ( ! __sfcgal_init ) {
-	sfcgal_init();
-	sfcgal_set_error_handlers( (sfcgal_error_handler_t)lwnotice, (sfcgal_error_handler_t)lwerror );
-	sfcgal_set_alloc_handlers( lwalloc, lwfree );
-	__sfcgal_init = 1;
-    }
 }
 
 /**
@@ -155,14 +155,13 @@ Datum sfcgal_from_text(PG_FUNCTION_ARGS)
 	input0 = (GSERIALIZED*)PG_DETOAST_DATUM(PG_GETARG_DATUM(0));	\
 	input1 = (GSERIALIZED*)PG_DETOAST_DATUM(PG_GETARG_DATUM(1));	\
 	geom0 = POSTGIS2SFCGALGeometry( input0 );			\
+	PG_FREE_IF_COPY( input0, 0 );					\
 	geom1 = POSTGIS2SFCGALGeometry( input1 );			\
+	PG_FREE_IF_COPY( input1, 1 );					\
 									\
 	result = fname( geom0, geom1 );					\
 	sfcgal_geometry_delete( geom0 );				\
 	sfcgal_geometry_delete( geom1 );				\
-									\
-	PG_FREE_IF_COPY( input0, 0 );					\
-	PG_FREE_IF_COPY( input1, 0 );					\
 									\
 	return_call( result );						\
     }
@@ -180,18 +179,19 @@ Datum sfcgal_from_text(PG_FUNCTION_ARGS)
 	GSERIALIZED *input0, *output;					\
 	sfcgal_geometry_t *geom0;					\
 	sfcgal_geometry_t *result;					\
+	srid_t srid;							\
 									\
 	sfcgal_postgis_init();						\
 									\
 	input0 = (GSERIALIZED*)PG_DETOAST_DATUM(PG_GETARG_DATUM(0));	\
+	srid = gserialized_get_srid( input0 );				\
 	geom0 = POSTGIS2SFCGALGeometry( input0 );			\
+	PG_FREE_IF_COPY( input0, 0 );					\
 									\
 	result = fname( geom0 );					\
 	sfcgal_geometry_delete( geom0 );				\
 									\
-	PG_FREE_IF_COPY( input0, 0 );					\
-									\
-	output = SFCGALGeometry2POSTGIS( result, 0, gserialized_get_srid( input0 ) ); \
+	output = SFCGALGeometry2POSTGIS( result, 0, srid );		\
 	sfcgal_geometry_delete( result );				\
 									\
 	PG_RETURN_POINTER( output );					\
@@ -205,22 +205,23 @@ Datum sfcgal_from_text(PG_FUNCTION_ARGS)
 	GSERIALIZED *input0, *input1, *output;				\
 	sfcgal_geometry_t *geom0, *geom1;				\
 	sfcgal_geometry_t *result;					\
+	srid_t srid;							\
 									\
 	sfcgal_postgis_init();						\
 									\
 	input0 = (GSERIALIZED*)PG_DETOAST_DATUM(PG_GETARG_DATUM(0));	\
+	srid = gserialized_get_srid( input0 );				\
 	input1 = (GSERIALIZED*)PG_DETOAST_DATUM(PG_GETARG_DATUM(1));	\
 	geom0 = POSTGIS2SFCGALGeometry( input0 );			\
+	PG_FREE_IF_COPY( input0, 0 );					\
 	geom1 = POSTGIS2SFCGALGeometry( input1 );			\
+	PG_FREE_IF_COPY( input1, 1 );					\
 									\
 	result = fname( geom0, geom1 );					\
 	sfcgal_geometry_delete( geom0 );				\
 	sfcgal_geometry_delete( geom1 );				\
 									\
-	PG_FREE_IF_COPY( input0, 0 );					\
-	PG_FREE_IF_COPY( input1, 1 );					\
-									\
-	output = SFCGALGeometry2POSTGIS( result, 0, gserialized_get_srid( input0 ) ); \
+	output = SFCGALGeometry2POSTGIS( result, 0, srid );		\
 	sfcgal_geometry_delete( result );				\
 									\
 	PG_RETURN_POINTER( output );					\
@@ -259,11 +260,16 @@ Datum sfcgal_extrude(PG_FUNCTION_ARGS)
     sfcgal_geometry_t *geom0;
     sfcgal_geometry_t *result;
     double dx, dy, dz;
+    srid_t srid;
 
     sfcgal_postgis_init();
     
     input0 = (GSERIALIZED*)PG_DETOAST_DATUM(PG_GETARG_DATUM(0));
+    srid = gserialized_get_srid( input0 );
+
     geom0 = POSTGIS2SFCGALGeometry( input0 );
+    PG_FREE_IF_COPY( input0, 0 );
+    
     dx = PG_GETARG_FLOAT8( 1 );
     dy = PG_GETARG_FLOAT8( 2 );
     dz = PG_GETARG_FLOAT8( 3 );
@@ -271,9 +277,7 @@ Datum sfcgal_extrude(PG_FUNCTION_ARGS)
     result = sfcgal_geometry_extrude( geom0, dx, dy, dz );
     sfcgal_geometry_delete( geom0 );
     
-    PG_FREE_IF_COPY( input0, 0 );
-    
-    output = SFCGALGeometry2POSTGIS( result, 0, gserialized_get_srid( input0 ) );
+    output = SFCGALGeometry2POSTGIS( result, 0, srid );
     sfcgal_geometry_delete( result );
     
     PG_RETURN_POINTER( output );
@@ -287,19 +291,21 @@ Datum sfcgal_offset_polygon(PG_FUNCTION_ARGS)
     sfcgal_geometry_t *geom0;
     sfcgal_geometry_t *result;
     double offset;
+    srid_t srid;
 
     sfcgal_postgis_init();
     
     input0 = (GSERIALIZED*)PG_DETOAST_DATUM(PG_GETARG_DATUM(0));
+    srid = gserialized_get_srid( input0 );
     geom0 = POSTGIS2SFCGALGeometry( input0 );
+    PG_FREE_IF_COPY( input0, 0 );
+    
     offset = PG_GETARG_FLOAT8( 1 );
     
     result = sfcgal_geometry_offset_polygon( geom0, offset );
     sfcgal_geometry_delete( geom0 );
     
-    PG_FREE_IF_COPY( input0, 0 );
-    
-    output = SFCGALGeometry2POSTGIS( result, 0, gserialized_get_srid( input0 ) );
+    output = SFCGALGeometry2POSTGIS( result, 0, srid );
     sfcgal_geometry_delete( result );
     
     PG_RETURN_POINTER( output );
@@ -313,19 +319,21 @@ Datum sfcgal_round(PG_FUNCTION_ARGS)
     sfcgal_geometry_t *geom0;
     sfcgal_geometry_t *result;
     int scale;
+    srid_t srid;
 
     sfcgal_postgis_init();
     
     input0 = (GSERIALIZED*)PG_DETOAST_DATUM(PG_GETARG_DATUM(0));
+    srid = gserialized_get_srid( input0 );
     geom0 = POSTGIS2SFCGALGeometry( input0 );
+    PG_FREE_IF_COPY( input0, 0 );
+    
     scale = PG_GETARG_INT32( 1 );
     
     result = sfcgal_geometry_round( geom0, scale );
     sfcgal_geometry_delete( geom0 );
     
-    PG_FREE_IF_COPY( input0, 0 );
-    
-    output = SFCGALGeometry2POSTGIS( result, 0, gserialized_get_srid( input0 ) );
+    output = SFCGALGeometry2POSTGIS( result, 0, srid );
     sfcgal_geometry_delete( result );
     
     PG_RETURN_POINTER( output );

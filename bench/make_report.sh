@@ -25,16 +25,16 @@ for point in $points; do
     npoints="$npoints -p $point"
 done
 
-#cmd="python ./sfcgal_bench.py -r ${reportfile}_part1.pdf $npoints $nalgos_1000 -n 1000"
-#echo $cmd
-#$cmd
+cmd="python ./sfcgal_bench.py -r ${reportfile}_part1.pdf $npoints $nalgos_1000 -n 1000"
+echo $cmd
+$cmd
 cmd="python ./sfcgal_bench.py -r ${reportfile}_part2.pdf $npoints $nalgos_10000 -n 10000"
 echo $cmd
 $cmd
-#cmd="python ./sfcgal_bench.py -r ${reportfile}_part3.pdf $npoints $nalgos_3d -n 10000"
-#echo $cmd
-#$cmd
+cmd="python ./sfcgal_bench.py -r ${reportfile}_part3.pdf $npoints $nalgos_3d -n 10000"
+echo $cmd
+$cmd
 
 # serialization report
-#python ./sfcgal_bench.py -r ${reportfile}_serialization.pdf $npoints -n 1000 -x serialization
+python ./sfcgal_bench.py -r ${reportfile}_serialization.pdf $npoints -n 1000 -x serialization
 

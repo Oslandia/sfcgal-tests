@@ -105,10 +105,10 @@ CREATE OR REPLACE FUNCTION sfcgal.ST_PointingUp(geometry)
 	AS 'MODULE_PATHNAME','sfcgal_pointing_up'
 	LANGUAGE 'c' IMMUTABLE STRICT;
 
-CREATE OR REPLACE FUNCTION sfcgal.ST_CollectionExtract(geometry, int4)
-	RETURNS geometry
-	AS 'MODULE_PATHNAME','sfcgal_collection_extract'
-	LANGUAGE 'c' IMMUTABLE STRICT;
+-- CREATE OR REPLACE FUNCTION sfcgal.ST_CollectionExtract(geometry, int4)
+-- 	RETURNS geometry
+-- 	AS 'MODULE_PATHNAME','sfcgal_collection_extract'
+-- 	LANGUAGE 'c' IMMUTABLE STRICT;
 
 CREATE OR REPLACE FUNCTION sfcgal.ST_Copy(geometry)
 	RETURNS geometry
@@ -123,6 +123,11 @@ CREATE OR REPLACE FUNCTION sfcgal.ST_Minkowski(geometry, geometry)
 CREATE OR REPLACE FUNCTION sfcgal.ST_Offset(geometry, float8, int4)
         RETURNS geometry
         AS 'MODULE_PATHNAME','sfcgal_offset_polygon'
+        LANGUAGE 'c' IMMUTABLE STRICT;
+
+CREATE OR REPLACE FUNCTION sfcgal.ST_StraightSkeleton(geometry, float8, int4)
+        RETURNS geometry
+        AS 'MODULE_PATHNAME','sfcgal_straight_skeleton'
         LANGUAGE 'c' IMMUTABLE STRICT;
 
 CREATE OR REPLACE FUNCTION sfcgal.ST_Round(geometry, int4)
@@ -262,9 +267,24 @@ CREATE OR REPLACE FUNCTION sfcgal.ST_Copy(ref_geometry)
 	AS 'MODULE_PATHNAME','sfcgal_ref_copy'
 	LANGUAGE 'c' IMMUTABLE STRICT;
 
-CREATE OR REPLACE FUNCTION sfcgal.ST_Buffer(ref_geometry, float8, int4)
+CREATE OR REPLACE FUNCTION sfcgal.ST_Minkowski(ref_geometry, ref_geometry)
         RETURNS ref_geometry
-        AS 'MODULE_PATHNAME','sfcgal_ref_buffer'
+        AS 'MODULE_PATHNAME','sfcgal_ref_minkowski_sum'
+        LANGUAGE 'c' IMMUTABLE STRICT;
+
+CREATE OR REPLACE FUNCTION sfcgal.ST_Offset(ref_geometry, float8, int4)
+        RETURNS ref_geometry
+        AS 'MODULE_PATHNAME','sfcgal_ref_offset_polygon'
+        LANGUAGE 'c' IMMUTABLE STRICT;
+
+CREATE OR REPLACE FUNCTION sfcgal.ST_StraightSkeleton(ref_geometry, float8, int4)
+        RETURNS ref_geometry
+        AS 'MODULE_PATHNAME','sfcgal_ref_straight_skeleton'
+        LANGUAGE 'c' IMMUTABLE STRICT;
+
+CREATE OR REPLACE FUNCTION sfcgal.ST_Round(ref_geometry, int4)
+        RETURNS ref_geometry
+        AS 'MODULE_PATHNAME','sfcgal_ref_round'
         LANGUAGE 'c' IMMUTABLE STRICT;
 
 -----------------------------------------------------------------------
@@ -398,7 +418,22 @@ CREATE OR REPLACE FUNCTION sfcgal.ST_Copy(exact_geometry)
 	AS 'MODULE_PATHNAME','sfcgal_exact_copy'
 	LANGUAGE 'c' IMMUTABLE STRICT;
 
-CREATE OR REPLACE FUNCTION sfcgal.ST_Buffer(exact_geometry, float8, int4)
+CREATE OR REPLACE FUNCTION sfcgal.ST_Minkowski(exact_geometry, exact_geometry)
         RETURNS exact_geometry
-        AS 'MODULE_PATHNAME','sfcgal_exact_buffer'
+        AS 'MODULE_PATHNAME','sfcgal_exact_minkowski_sum'
+        LANGUAGE 'c' IMMUTABLE STRICT;
+
+CREATE OR REPLACE FUNCTION sfcgal.ST_Offset(exact_geometry, float8, int4)
+        RETURNS exact_geometry
+        AS 'MODULE_PATHNAME','sfcgal_exact_offset_polygon'
+        LANGUAGE 'c' IMMUTABLE STRICT;
+
+CREATE OR REPLACE FUNCTION sfcgal.ST_StraightSkeleton(exact_geometry, float8, int4)
+        RETURNS exact_geometry
+        AS 'MODULE_PATHNAME','sfcgal_exact_straight_skeleton'
+        LANGUAGE 'c' IMMUTABLE STRICT;
+
+CREATE OR REPLACE FUNCTION sfcgal.ST_Round(exact_geometry, int4)
+        RETURNS exact_geometry
+        AS 'MODULE_PATHNAME','sfcgal_exact_round'
         LANGUAGE 'c' IMMUTABLE STRICT;

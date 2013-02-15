@@ -1,20 +1,12 @@
-#ifndef LWGEOM_SFCGAL_H
-#define LWGEOM_SFCGAL_H
-
-#include <SFCGAL/Geometry.h>
-// auto_ptr
-#include <memory>
-
-extern "C"
-{
+#ifndef LWGEOM_SFCGAL_C_H
+#define LWGEOM_SFCGAL_C_H
 
 #include "liblwgeom.h"
+#include <SFCGAL/sfcgal_c.h>
 
 LWGEOM* lwgeom_sfcgal_noop( const LWGEOM* geom_in );
 
-};
-
-extern "C++" LWGEOM*                         SFCGAL2LWGEOM( const SFCGAL::Geometry* geom, bool force3D = false, int SRID = SRID_UNKNOWN );
-extern "C++" std::auto_ptr<SFCGAL::Geometry> LWGEOM2SFCGAL( const LWGEOM* geom );
+LWGEOM*            SFCGAL2LWGEOM( const sfcgal_geometry_t* geom, int force3D, int SRID );
+sfcgal_geometry_t* LWGEOM2SFCGAL( const LWGEOM* geom );
 
 #endif

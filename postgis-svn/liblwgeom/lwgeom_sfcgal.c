@@ -1,4 +1,4 @@
-#include "lwgeom_sfcgal_c.h"
+#include "lwgeom_sfcgal.h"
 
 int SFCGAL_type_to_lwgeom_type( sfcgal_geometry_type_t type );
 
@@ -83,7 +83,7 @@ POINTARRAY* ptarray_from_SFCGAL( const sfcgal_geometry_t* geom, int force3D )
 	    
 	    for ( i = 0; i < num_points; i++ )
 	    {
-		sfcgal_geometry_t* pt = sfcgal_linestring_point_n( geom, i );
+		const sfcgal_geometry_t* pt = sfcgal_linestring_point_n( geom, i );
 		point.x = sfcgal_point_x( pt );
 		point.y = sfcgal_point_y( pt );
 		if ( sfcgal_geometry_is_3d( geom ) ) {
@@ -104,7 +104,7 @@ POINTARRAY* ptarray_from_SFCGAL( const sfcgal_geometry_t* geom, int force3D )
 	    
 	    for ( i = 0; i < 3; i++ )
 	    {
-		sfcgal_geometry_t* pt = sfcgal_triangle_vertex( geom, i );
+		const sfcgal_geometry_t* pt = sfcgal_triangle_vertex( geom, i );
 		point.x = sfcgal_point_x( pt );
 		point.y = sfcgal_point_y( pt );
 		if ( sfcgal_geometry_is_3d( geom ) ) {
@@ -219,7 +219,9 @@ sfcgal_geometry_t* ptarray_to_SFCGAL( const POINTARRAY* pa, int type )
 
 LWGEOM* SFCGAL2LWGEOM( const sfcgal_geometry_t* geom, int force3D, int SRID )
 {
-    int want3d = force3D || sfcgal_geometry_is_3d( geom );
+    int want3d;
+
+    want3d = force3D || sfcgal_geometry_is_3d( geom );
 
     switch ( sfcgal_geometry_type_id( geom ) )
     {
@@ -277,11 +279,11 @@ LWGEOM* SFCGAL2LWGEOM( const sfcgal_geometry_t* geom, int force3D, int SRID )
 		size_t j = 0;
 		for ( i = 0; i < n_geoms; i++ )
 		{
-		    sfcgal_geometry_t* g = sfcgal_geometry_collection_geometry_n( geom, i );
+		    const sfcgal_geometry_t* g = sfcgal_geometry_collection_geometry_n( geom, i );
 		    if ( ! sfcgal_geometry_is_empty( g ) )
 		    {
-			    // recurse call
-			geoms[j++] = SFCGAL2LWGEOM( &g, 0, SRID_UNKNOWN );
+			// recurse call
+			geoms[j++] = SFCGAL2LWGEOM( g, 0, SRID_UNKNOWN );
 		    }
 		}
 		n_geoms = j;
@@ -310,9 +312,9 @@ LWGEOM* SFCGAL2LWGEOM( const sfcgal_geometry_t* geom, int force3D, int SRID )
 		geoms = (LWGEOM**)lwalloc( sizeof(LWGEOM*) * n_geoms );
 		for ( i = 0; i < n_geoms; i++ )
 		{
-		    sfcgal_geometry_t* g = sfcgal_polyhedral_surface_polygon_n( geom, i );
+		    const sfcgal_geometry_t* g = sfcgal_polyhedral_surface_polygon_n( geom, i );
 		    // recurse call
-		    geoms[i] = SFCGAL2LWGEOM( &g, 0, SRID_UNKNOWN );
+		    geoms[i] = SFCGAL2LWGEOM( g, 0, SRID_UNKNOWN );
 		}
 	    }
 	    return (LWGEOM*)lwcollection_construct( POLYHEDRALSURFACETYPE,
@@ -339,12 +341,12 @@ LWGEOM* SFCGAL2LWGEOM( const sfcgal_geometry_t* geom, int force3D, int SRID )
 		for ( i = 0; i < num_shells; i++ )
 		{
 		    size_t j;
-		    sfcgal_geometry_t* shell_i = sfcgal_solid_shell_n( geom, i );
+		    const sfcgal_geometry_t* shell_i = sfcgal_solid_shell_n( geom, i );
 		    size_t num_polygons = sfcgal_polyhedral_surface_num_polygons( shell_i );
 		    for ( j = 0; j < num_polygons; ++j ) {
-			sfcgal_geometry_t* g = sfcgal_polyhedral_surface_polygon_n( shell_i, j );
+			const sfcgal_geometry_t* g = sfcgal_polyhedral_surface_polygon_n( shell_i, j );
 			// recurse call
-			geoms[k] = SFCGAL2LWGEOM( &g, /* force3D = */ 1, SRID_UNKNOWN );
+			geoms[k] = SFCGAL2LWGEOM( g, /* force3D = */ 1, SRID_UNKNOWN );
 			++k;
 		    }
 		}
@@ -370,9 +372,9 @@ LWGEOM* SFCGAL2LWGEOM( const sfcgal_geometry_t* geom, int force3D, int SRID )
 		geoms = (LWGEOM**)lwalloc( sizeof(LWGEOM*) * n_geoms );
 		for ( i = 0; i < n_geoms; i++ )
 		{
-		    sfcgal_geometry_t* g = sfcgal_triangulated_surface_triangle_n( geom, i );
+		    const sfcgal_geometry_t* g = sfcgal_triangulated_surface_triangle_n( geom, i );
 		    // recurse call
-		    geoms[i] = SFCGAL2LWGEOM( &g, 0, SRID_UNKNOWN );
+		    geoms[i] = SFCGAL2LWGEOM( g, 0, SRID_UNKNOWN );
 		}
 	    }
 	    return (LWGEOM*)lwcollection_construct( TINTYPE,
@@ -443,7 +445,7 @@ sfcgal_geometry_t* LWGEOM2SFCGAL( const LWGEOM* geom )
 	    {
 		sfcgal_geometry_t* ring = ptarray_to_SFCGAL( poly->rings[ i + 1 ], LINETYPE );
 		// takes ownership
-		sfcgal_polygon_add_ring( ret_geom, ring );
+		sfcgal_polygon_add_interior_ring( ret_geom, ring );
 	    }
 	    return ret_geom;
 	}
