@@ -12,7 +12,6 @@
 
 CC = @CC@
 CFLAGS = @CFLAGS@ @PICFLAGS@ @WARNFLAGS@ @GEOS_CPPFLAGS@ @PROJ_CPPFLAGS@
-CXXFLAGS = @CFLAGS@ @PICFLAGS@ @GEOS_CPPFLAGS@ @PROJ_CPPFLAGS@
 LDFLAGS = @LDFLAGS@ @GEOS_LDFLAGS@ -lgeos_c @PROJ_LDFLAGS@ -lproj
 NUMERICFLAGS = @NUMERICFLAGS@
 top_builddir = @top_builddir@
@@ -159,9 +158,6 @@ $(LT_SA_OBJS): %.lo: %.c
 
 $(LT_NM_OBJS): %.lo: %.c
 	$(LIBTOOL) --mode=compile $(CC) $(CFLAGS) $(NUMERICFLAGS) -c -o $@ $<
-
-#$(LT_CPP_OBJS): %.lo: %.cpp
-#	$(LIBTOOL) --mode=compile $(CXX) $(CXXFLAGS) $(NUMERICFLAGS) -c -o $@ $<
 
 # Manually generate WKT parser from Flex/Bison inputs
 # Bison 2.5, Flex 2.5.35

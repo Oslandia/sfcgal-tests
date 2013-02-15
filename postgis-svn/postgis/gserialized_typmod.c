@@ -329,7 +329,6 @@ Datum geography_enforce_typmod(PG_FUNCTION_ARGS)
 PG_FUNCTION_INFO_V1(geometry_enforce_typmod);
 Datum geometry_enforce_typmod(PG_FUNCTION_ARGS)
 {
-	lwnotice("geometry_enforce_typmod, %p", PG_GETARG_POINTER(0) );
 	GSERIALIZED *arg = (GSERIALIZED*)PG_DETOAST_DATUM(PG_GETARG_DATUM(0));
 	int32 typmod = PG_GETARG_INT32(1);
 	/* We don't need to have different behavior based on explicitness. */
