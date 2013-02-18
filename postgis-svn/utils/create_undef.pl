@@ -132,7 +132,7 @@ while( my $line = <INPUT>)
 		push (@types, $1);
 		while( not $line =~ /;\s*$/ ) {
 			$line = <INPUT>;
-			if ( $line =~ /(input|output|send|receive|typmod_in|typmod_out|analyze)\s*=\s*(\w+)/ ) {
+			if ( $line =~ /(input|output|send|receive|typmod_in|typmod_out|analyze)\s*=\s*([a-zA-Z0-9\._]+)/ ) {
         my $role = ${1};
         my $fname = ${2};
 				$type_funcs{$fname} = $role;

@@ -141,8 +141,6 @@ CREATE OR REPLACE FUNCTION sfcgal.ST_Round(geometry, int4)
 --
 -----------------------------------------------------------------------
 
-CREATE TYPE ref_geometry;
-
 -- convert a wkt to a ref_geometry
 CREATE FUNCTION sfcgal.ref_in(cstring)
     RETURNS ref_geometry
@@ -292,8 +290,6 @@ CREATE OR REPLACE FUNCTION sfcgal.ST_Round(ref_geometry, int4)
 -- SFCGAL Serialized exact geometries
 --
 -----------------------------------------------------------------------
-
-CREATE TYPE exact_geometry;
 
 -- convert a wkt to an exact geometry
 CREATE FUNCTION sfcgal.exact_in(cstring)
