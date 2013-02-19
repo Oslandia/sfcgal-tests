@@ -156,7 +156,8 @@ CREATE FUNCTION sfcgal.ref_out(ref_geometry)
 CREATE TYPE ref_geometry (
     internallength = 8,
     input = sfcgal.ref_in,
-    output = sfcgal.ref_out
+    output = sfcgal.ref_out,
+    category = 'G'
 );
 
 -- geometry to ref_geometry
@@ -306,7 +307,8 @@ CREATE FUNCTION sfcgal.exact_out(exact_geometry)
 CREATE TYPE exact_geometry (
     internallength = VARIABLE,
     input = sfcgal.exact_in,
-    output = sfcgal.exact_out
+    output = sfcgal.exact_out,
+    category = 'G'
 );
 
 -- geometry to exact_geometry

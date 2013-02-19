@@ -98,7 +98,9 @@ CREATE TYPE geometry (
 	delimiter = ':',
 	alignment = double,
 	analyze = geometry_analyze,
-	storage = main
+	storage = main,
+	category = 'G',
+	preferred = true
 );
 
 
