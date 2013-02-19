@@ -15,7 +15,7 @@ INSERT INTO "spatial_ref_sys" ("srid","auth_name","auth_srid","srtext","proj4tex
 SELECT 'Starting up MapServer/Geoserver tests...';
 -- Set up the data table
 SELECT 'Setting up the data table...';
-CREATE TABLE wmstest ( id INTEGER );
+CREATE TABLE public.wmstest ( id INTEGER );
 SELECT AddGeometryColumn( 'wmstest', 'pt', 4326, 'POLYGON', 2 );
 INSERT INTO wmstest SELECT lon * 100 + lat AS id, st_setsrid(st_buffer(st_makepoint(lon, lat),1.0),4326) AS pt
 FROM (select lon, generate_series(-80,80, 5) AS lat FROM (SELECT generate_series(-175, 175, 5) AS lon) AS sq1) AS sq2;
