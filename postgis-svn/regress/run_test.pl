@@ -305,7 +305,6 @@ foreach $TEST (@ARGV)
 }
 
 
-
 ################################################################### 
 # Uninstall postgis (serves as an uninstall test)
 ##################################################################
@@ -582,7 +581,7 @@ sub run_simple_test
 	}
 	else
 	{
-		my $diff = diff($expected, $outfile);
+		my $diff = diff($outfile, $expected);
 		if ( $diff )
 		{
 			open(FILE, ">$diffile");
