@@ -100,11 +100,12 @@ POINTARRAY* ptarray_from_SFCGAL( const sfcgal_geometry_t* geom, int force3D )
     case SFCGAL_TYPE_TRIANGLE:
 	{
 	    size_t i;
-	    pa = ptarray_construct( want3d, 0, 3 );
+
+	    pa = ptarray_construct( want3d, 0, 4 );
 	    
-	    for ( i = 0; i < 3; i++ )
+	    for ( i = 0; i < 4; i++ )
 	    {
-		const sfcgal_geometry_t* pt = sfcgal_triangle_vertex( geom, i );
+		const sfcgal_geometry_t* pt = sfcgal_triangle_vertex( geom, (i%3) );
 		point.x = sfcgal_point_x( pt );
 		point.y = sfcgal_point_y( pt );
 		if ( sfcgal_geometry_is_3d( geom ) ) {
