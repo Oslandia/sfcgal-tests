@@ -125,7 +125,7 @@ CREATE OR REPLACE FUNCTION sfcgal.ST_Offset(geometry, float8, int4)
         AS 'MODULE_PATHNAME','sfcgal_offset_polygon'
         LANGUAGE 'c' IMMUTABLE STRICT;
 
-CREATE OR REPLACE FUNCTION sfcgal.ST_StraightSkeleton(geometry, float8, int4)
+CREATE OR REPLACE FUNCTION sfcgal.ST_StraightSkeleton(geometry)
         RETURNS geometry
         AS 'MODULE_PATHNAME','sfcgal_straight_skeleton'
         LANGUAGE 'c' IMMUTABLE STRICT;
@@ -276,7 +276,7 @@ CREATE OR REPLACE FUNCTION sfcgal.ST_Offset(ref_geometry, float8, int4)
         AS 'MODULE_PATHNAME','sfcgal_ref_offset_polygon'
         LANGUAGE 'c' IMMUTABLE STRICT;
 
-CREATE OR REPLACE FUNCTION sfcgal.ST_StraightSkeleton(ref_geometry, float8, int4)
+CREATE OR REPLACE FUNCTION sfcgal.ST_StraightSkeleton(ref_geometry)
         RETURNS ref_geometry
         AS 'MODULE_PATHNAME','sfcgal_ref_straight_skeleton'
         LANGUAGE 'c' IMMUTABLE STRICT;
@@ -426,7 +426,7 @@ CREATE OR REPLACE FUNCTION sfcgal.ST_Offset(exact_geometry, float8, int4)
         AS 'MODULE_PATHNAME','sfcgal_exact_offset_polygon'
         LANGUAGE 'c' IMMUTABLE STRICT;
 
-CREATE OR REPLACE FUNCTION sfcgal.ST_StraightSkeleton(exact_geometry, float8, int4)
+CREATE OR REPLACE FUNCTION sfcgal.ST_StraightSkeleton(exact_geometry)
         RETURNS exact_geometry
         AS 'MODULE_PATHNAME','sfcgal_exact_straight_skeleton'
         LANGUAGE 'c' IMMUTABLE STRICT;
