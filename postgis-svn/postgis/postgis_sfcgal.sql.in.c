@@ -135,6 +135,16 @@ CREATE OR REPLACE FUNCTION sfcgal.ST_Round(geometry, int4)
         AS 'MODULE_PATHNAME','sfcgal_round'
         LANGUAGE 'c' IMMUTABLE STRICT;
 
+CREATE OR REPLACE FUNCTION sfcgal.ST_Distance(geometry, geometry)
+	RETURNS FLOAT8
+	AS 'MODULE_PATHNAME','sfcgal_distance'
+	LANGUAGE 'c' IMMUTABLE STRICT;
+
+CREATE OR REPLACE FUNCTION sfcgal.ST_3DDistance(geometry, geometry)
+	RETURNS FLOAT8
+	AS 'MODULE_PATHNAME','sfcgal_distance3D'
+	LANGUAGE 'c' IMMUTABLE STRICT;
+
 -----------------------------------------------------------------------
 --
 -- SFCGAL Referenced exact geometries
@@ -286,6 +296,16 @@ CREATE OR REPLACE FUNCTION sfcgal.ST_Round(ref_geometry, int4)
         AS 'MODULE_PATHNAME','sfcgal_ref_round'
         LANGUAGE 'c' IMMUTABLE STRICT;
 
+CREATE OR REPLACE FUNCTION sfcgal.ST_Distance(ref_geometry, ref_geometry)
+	RETURNS FLOAT8
+	AS 'MODULE_PATHNAME','sfcgal_ref_distance'
+	LANGUAGE 'c' IMMUTABLE STRICT;
+
+CREATE OR REPLACE FUNCTION sfcgal.ST_3DDistance(ref_geometry, ref_geometry)
+	RETURNS FLOAT8
+	AS 'MODULE_PATHNAME','sfcgal_ref_distance3D'
+	LANGUAGE 'c' IMMUTABLE STRICT;
+
 -----------------------------------------------------------------------
 --
 -- SFCGAL Serialized exact geometries
@@ -435,3 +455,13 @@ CREATE OR REPLACE FUNCTION sfcgal.ST_Round(exact_geometry, int4)
         RETURNS exact_geometry
         AS 'MODULE_PATHNAME','sfcgal_exact_round'
         LANGUAGE 'c' IMMUTABLE STRICT;
+
+CREATE OR REPLACE FUNCTION sfcgal.ST_Distance(exact_geometry, exact_geometry)
+	RETURNS FLOAT8
+	AS 'MODULE_PATHNAME','sfcgal_exact_distance'
+	LANGUAGE 'c' IMMUTABLE STRICT;
+
+CREATE OR REPLACE FUNCTION sfcgal.ST_3DDistance(exact_geometry, exact_geometry)
+	RETURNS FLOAT8
+	AS 'MODULE_PATHNAME','sfcgal_exact_distance3D'
+	LANGUAGE 'c' IMMUTABLE STRICT;
