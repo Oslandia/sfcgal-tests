@@ -236,7 +236,7 @@ SELECT '3dDistancetest4',
 
 SELECT '3dDistancetest6',
 	ST_3DDistance(a,b) FROM (
-	SELECT 'LINESTRING(1 1 1 , 2 2 2)'::geometry as a, 'POLYGON((0 0 0, 2 2 2, 3 3 3, 0 0 0))'::geometry as b) as foo;	
+	SELECT 'LINESTRING(1 1 1 , 2 2 2)'::geometry as a, 'POLYGON((0 0 0, 2 2 2, 3 3 0, 0 0 0))'::geometry as b) as foo;	
 
 -- Area of an empty polygon
 select 'emptyPolyArea', st_area('POLYGON EMPTY');
