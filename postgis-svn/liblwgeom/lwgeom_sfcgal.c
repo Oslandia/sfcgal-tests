@@ -281,11 +281,8 @@ LWGEOM* SFCGAL2LWGEOM( const sfcgal_geometry_t* geom, int force3D, int SRID )
 		for ( i = 0; i < n_geoms; i++ )
 		{
 		    const sfcgal_geometry_t* g = sfcgal_geometry_collection_geometry_n( geom, i );
-		    if ( ! sfcgal_geometry_is_empty( g ) )
-		    {
-			// recurse call
-			geoms[j++] = SFCGAL2LWGEOM( g, 0, SRID_UNKNOWN );
-		    }
+		    // recurse call
+		    geoms[j++] = SFCGAL2LWGEOM( g, 0, SRID_UNKNOWN );
 		}
 		n_geoms = j;
 		geoms = (LWGEOM**)lwrealloc( geoms, sizeof(LWGEOM*) * n_geoms );
