@@ -1,0 +1,105 @@
+Test 'regress'
+--------------
+
+170.OBT: 162|010200000003000000F671D98DE33826C00000000000004440F671D98DE33826C000000000008051400000000000805140F671D98DE33826C0
+170.EXP: 162|010200000003000000F771D98DE33826C00000000000004440F771D98DE33826C000000000008051400000000000805140F771D98DE33826C0
+
+=> Differences are due to internal representation of numbers.
+CGAL is compiled with the -frounding-math flag which disables round-to-nearest for conversions. Results differ starting at ~ 2^-50 here.
+
+Test 'empty'
+------------
+33.OBT: ST_Distance(geometry, empty) == NULL|inf
+33.EXP: ST_Distance(geometry, empty) == NULL|
+
+=> SFCGAL returns an infinite distance to an empty geometry instaed of null, which .. is not terribly wrong
+
+Test 'measures'
+---------------
+
+select 'st_longestline_dist', st_astext(st_longestline(a,b)), st_astext(st_longestline(b,a)) from (
+	select 'POLYGON((0 0, 0 10, 10 10, 10 0, 0 0))'::geometry as a,
+		'POLYGON((11 0, 11 10, 20 10, 20 0, 11 0),
+			(15 5, 15 8, 17 8, 17 5, 15 5))'::geometry as b
+	) as foo;
+23.OBT: st_longestline_dist|LINESTRING(0 0,20 10)|LINESTRING(20 0,0 10)
+23.EXP: st_longestline_dist|LINESTRING(0 0,20 10)|LINESTRING(20 10,0 0)
+
+=> 20 10,0 0 is another good answer
+
+Test 'sql-mm-compoundcurve' and 'sql-mm-curvepoly'
+--------------------------------------------------
+
+=> No support at all for curves
+
+Test 'regress_ogc'
+------------------
+
+3.OBT: convexhull|POLYGON((0 0,0 10,10 10,10 0,0 0))
+3.EXP: convexhull|POLYGON((0 0,10 0,10 10,0 10,0 0))
+
+=> point order
+
+65.OBT: intersection|POINT(0 0)
+65.EXP: intersection|POINT(-0 -0)
+
+Test 'regress_management'
+-------------------------
+
+2.OBT: The result: public.test_pt dropped.
+2.EXP: The result: sfcgal.test_pt dropped.
+3.OBT: Unexistant: public.unexistent dropped.
+3.EXP: Unexistant: sfcgal.unexistent dropped.
+
+Test 'wkt'
+----------
+
+No support for M coordinate
+No support for curves
+
+Test 'tickets'
+--------------
+
+SELECT '#11', ST_Distance (a.g, ST_Intersection(b.g, a.g)) AS distance 
+FROM (SELECT '01020000000200000050E8303FC2E85141B017CFC05A825541000000E0C0E85141000000205C825541'::geometry AS g) a, 
+	 (SELECT 'LINESTRING(4694792.35840419 5638508.89950758,4694793.20840419 5638506.34950758)'::geometry AS g) b;
+2.OBT: #11|1.31708901596544e-9
+2.EXP: #11|0
+
+=> Geometries are converted to double precision numbers before computing the distance. It is then an approximation here. The answer is 0 when using exact geometry types (exact_geometry or ref_geometry)
+
+64.OBT: #277|<gml:Point><gml:coordinates>1,inf</gml:coordinates></gml:Point>
+64.EXP: #277|<gml:Point><gml:coordinates>1,1e+308</gml:coordinates></gml:Point>
+
+=> For SFCGAL, infinity is starting at 1e308, for GEOS, it is starting at 1e309 ... might be due to rounding behaviour of CGAL.
+
+117.OBT: 010200000003000000F671D98DE33826C00000000000004440F671D98DE33826C000000000008051400000000000805140F671D98DE33826C0
+117.EXP: 010200000003000000F771D98DE33826C00000000000004440F771D98DE33826C000000000008051400000000000805140F771D98DE33826C0
+
+=> rounding issue again
+
+127.OBT: #723|0104000020E610000000000000
+127.EXP: #723|0107000020E610000000000000
+
+=> SFCGAL returns a MULTIPOINT EMPTY, instead of a GEOMETRYCOLLECTION EMPTY, which is a bit more accurate here.
+
+132.EXP: #834|GEOMETRYCOLLECTION(POINT(0 0 5),LINESTRING(10 10 5,10 0 5))
+132.OBT: #834|GEOMETRYCOLLECTION(POINT(0 0),LINESTRING(10 0,10 10))
+
+=> !! PostGIS tries to do something with the third dimension (averaging with NaN). SFCGAL considers we want 2D intersection and set z=0
+
+Test 'concave_hull'
+-------------------
+
+Use of sfcgal.st_convexhull gives bugs in st_concavehull. The function is too complex for me, I give up. I am planning to use the native Alpha shapes of CGAL.
+
+Test 'delaunaytriangles'
+------------------------
+
+1.OBT: 1|TIN(((5 5,6 0,7 9,5 5)))
+1.EXP: 1|GEOMETRYCOLLECTION(POLYGON((5 5,6 0,7 9,5 5)))
+2.OBT: 2|TIN(((5 5,6 0,8 9,5 5)),((5 5,8 9,7 9,5 5)))
+2.EXP: 2|GEOMETRYCOLLECTION(POLYGON((5 5,6 0,8 9,5 5)),POLYGON((5 5,8 9,7 9,5 5)))
+
+=> SFCGAL returns TIN instead of a collection of polygon, which makes sense for a triangulation
+
