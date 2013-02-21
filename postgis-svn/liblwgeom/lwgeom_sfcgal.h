@@ -2,7 +2,7 @@
 #define LWGEOM_SFCGAL_C_H
 
 #include "liblwgeom.h"
-#include <SFCGAL/sfcgal_c.h>
+#include <SFCGAL/capi/sfcgal_c.h>
 
 LWGEOM* lwgeom_sfcgal_noop( const LWGEOM* geom_in );
 
