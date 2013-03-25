@@ -615,28 +615,10 @@ dnl Geos is still needed for now.
 dnl
 dnl ===========================================================================
 
-AC_ARG_WITH([sfcgal], AC_HELP_STRING([--with-sfcgal], [add SFCGAL types]), 
+AC_ARG_WITH([sfcgal], AC_HELP_STRING([--with-sfcgal], [add SFCGAL functions]), 
 	[POSTGIS_SFCGAL=1], [POSTGIS_SFCGAL=0])
 
 AC_SUBST([POSTGIS_SFCGAL])
-
-dnl ===========================================================================
-dnl CGAL library
-dnl ===========================================================================
-
-AC_ARG_WITH([cgaldir], 
-	[AS_HELP_STRING([--with-cgaldir=PATH], [specify the CGAL installation directory])], 
-	[CGALDIR="$withval"], [CGALDIR="/usr/local"])
-
-if test -d "$CGALDIR"; then
-	AC_MSG_RESULT([Using CGAL directory: $CGALDIR])
-	dnl Add the include directory to SFCGAL_CPPFLAGS	
-	CGAL_CPPFLAGS="-I$CGALDIR/include"
-	# use RUNPATH
-	CGAL_LDFLAGS="-L$CGALDIR/lib -lCGAL -lCGAL_Core -Wl,-rpath=$CGALDIR/lib,--enable-new-dtags"
-else
-	AC_MSG_ERROR([the --with-cgaldir directory "$CGALDIR" cannot be found]) 
-fi
 
 dnl ===========================================================================
 dnl SFCGAL library
@@ -675,8 +657,6 @@ else
    POSTGIS_SFCGAL_OBJS="lwgeom_sfcgal.o"
    SFCGAL_LDFLAGS+=" -lSFCGAL"
 fi
-SFCGAL_CPPFLAGS+=" $CGAL_CPPFLAGS"
-SFCGAL_LDFLAGS+=" $CGAL_LDFLAGS"
 
 AC_SUBST(POSTGIS_SFCGAL_OBJS, $POSTGIS_SFCGAL_OBJS)
 AC_SUBST(SFCGAL_CPPFLAGS, $SFCGAL_CPPFLAGS)
@@ -1253,7 +1233,6 @@ else
 fi
 if test "x$POSTGIS_SFCGAL" = "x1"; then
     AC_MSG_RESULT([  SFCGAL support:       yes])
-    AC_MSG_RESULT([  CGAL directory:       ${CGALDIR}])
     AC_MSG_RESULT([  SFCGAL directory:     ${SFCGALDIR}])
     AC_MSG_RESULT([  SFCGAL mode:          ${SFCGAL_MODE}])
 else
