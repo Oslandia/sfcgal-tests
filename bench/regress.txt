@@ -1,6 +1,7 @@
 Test 'regress'
 --------------
 
+select '162', ST_MakeLine(ST_GeomFromText('POINT(-11.1111111 40)'),ST_GeomFromText('LINESTRING(-11.1111111 70,70 -11.1111111)')) As result;
 170.OBT: 162|010200000003000000F671D98DE33826C00000000000004440F671D98DE33826C000000000008051400000000000805140F671D98DE33826C0
 170.EXP: 162|010200000003000000F771D98DE33826C00000000000004440F771D98DE33826C000000000008051400000000000805140F771D98DE33826C0
 
@@ -9,6 +10,10 @@ CGAL is compiled with the -frounding-math flag which disables round-to-nearest f
 
 Test 'empty'
 ------------
+WITH inp AS (SELECT
+ 'POLYGON EMPTY'::geometry as empty,
+ 'POLYGON((0 0, 10 0, 5 5, 0 0))'::geometry as geometry
+ ) SELECT 'ST_Distance(geometry, empty) == NULL', ST_Distance(geometry, empty) FROM inp;
 33.OBT: ST_Distance(geometry, empty) == NULL|inf
 33.EXP: ST_Distance(geometry, empty) == NULL|
 
@@ -35,11 +40,13 @@ Test 'sql-mm-compoundcurve' and 'sql-mm-curvepoly'
 Test 'regress_ogc'
 ------------------
 
+SELECT 'convexhull', ST_asewkt(ST_convexhull('POLYGON((0 0, 10 0, 10 10, 0 10, 0 0),(2 2, 2 4, 4 4, 4 2, 2 2))'));
 3.OBT: convexhull|POLYGON((0 0,0 10,10 10,10 0,0 0))
 3.EXP: convexhull|POLYGON((0 0,10 0,10 10,0 10,0 0))
 
 => point order
 
+SELECT 'intersection', ST_astext(ST_intersection('LINESTRING(0 10, 0 -10)', 'LINESTRING(0 0, 1 1)'));
 65.OBT: intersection|POINT(0 0)
 65.EXP: intersection|POINT(-0 -0)
 
@@ -68,21 +75,27 @@ FROM (SELECT '01020000000200000050E8303FC2E85141B017CFC05A825541000000E0C0E85141
 
 => Geometries are converted to double precision numbers before computing the distance. It is then an approximation here. The answer is 0 when using exact geometry types (exact_geometry or ref_geometry)
 
+SELECT '#277', ST_AsGML(2, ST_GeomFromText('POINT(1 1e308)'));
 64.OBT: #277|<gml:Point><gml:coordinates>1,inf</gml:coordinates></gml:Point>
 64.EXP: #277|<gml:Point><gml:coordinates>1,1e+308</gml:coordinates></gml:Point>
 
 => For SFCGAL, infinity is starting at 1e308, for GEOS, it is starting at 1e309 ... might be due to rounding behaviour of CGAL.
 
+SELECT ST_MakeLine(ST_GeomFromText('POINT(-11.1111111 40)'), ST_GeomFromText('LINESTRING(-11.1111111 70,70 -11.1111111)')) As result;
 117.OBT: 010200000003000000F671D98DE33826C00000000000004440F671D98DE33826C000000000008051400000000000805140F671D98DE33826C0
 117.EXP: 010200000003000000F771D98DE33826C00000000000004440F771D98DE33826C000000000008051400000000000805140F771D98DE33826C0
 
 => rounding issue again
 
+SELECT '#723',
+ ST_SnapToGrid( ST_Intersection(a.geog, b.geog)::geometry, 0.00001)
+FROM (VALUES (ST_GeogFromText('SRID=4326;POINT(-11.1111111 40)') ), (ST_GeogFromText('SRID=4326;POINT(-11.1111111 55)') ) ) As  a(geog) CROSS JOIN ( VALUES (ST_GeogFromText('SRID=4326;POINT(-11.1111111 40)') ), (ST_GeogFromText('SRID=4326;POINT(-11.1111111 55)') )) As b(geog);
 127.OBT: #723|0104000020E610000000000000
 127.EXP: #723|0107000020E610000000000000
 
 => SFCGAL returns a MULTIPOINT EMPTY, instead of a GEOMETRYCOLLECTION EMPTY, which is a bit more accurate here.
 
+SELECT '#834', ST_AsEWKT(ST_Intersection('LINESTRING(0 0,0 10,10 10,10 0)', 'LINESTRING(10 10 4,10 0 5,0 0 5)'));
 132.EXP: #834|GEOMETRYCOLLECTION(POINT(0 0 5),LINESTRING(10 10 5,10 0 5))
 132.OBT: #834|GEOMETRYCOLLECTION(POINT(0 0),LINESTRING(10 0,10 10))
 
@@ -91,13 +104,15 @@ FROM (SELECT '01020000000200000050E8303FC2E85141B017CFC05A825541000000E0C0E85141
 Test 'concave_hull'
 -------------------
 
-Use of sfcgal.st_convexhull gives bugs in st_concavehull. The function is too complex for me, I give up. I am planning to use the native Alpha shapes of CGAL.
+Use of sfcgal.st_convexhull produces bugs in st_concavehull. The function is too complex for me, I give up. I am planning to use the native Alpha shapes of CGAL.
 
 Test 'delaunaytriangles'
 ------------------------
 
+SELECT 1,  ST_AsText(ST_DelaunayTriangles('MULTIPOINT(5 5, 6 0, 7 9)'::geometry));
 1.OBT: 1|TIN(((5 5,6 0,7 9,5 5)))
 1.EXP: 1|GEOMETRYCOLLECTION(POLYGON((5 5,6 0,7 9,5 5)))
+SELECT 2,  ST_AsText(ST_DelaunayTriangles('MULTIPOINT(5 5, 6 0, 7 9, 8 9)'::geometry));
 2.OBT: 2|TIN(((5 5,6 0,8 9,5 5)),((5 5,8 9,7 9,5 5)))
 2.EXP: 2|GEOMETRYCOLLECTION(POLYGON((5 5,6 0,8 9,5 5)),POLYGON((5 5,8 9,7 9,5 5)))
 
