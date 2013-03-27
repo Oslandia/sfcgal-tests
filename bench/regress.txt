@@ -10,6 +10,14 @@ CGAL is compiled with the -frounding-math flag which disables round-to-nearest f
 
 Test 'empty'
 ------------
+
+29.OBT: ST_Intersection(geometry, empty) == geometry|010700000000000000
+29.EXP: ST_Intersection(geometry, empty) == geometry|010300000000000000
+30.OBT: ST_Intersection(empty, empty) == empty|010700000000000000
+30.EXP: ST_Intersection(empty, empty) == empty|010300000000000000
+
+=> SFCGAL drops the type of empty geometries on intersection, so a GEOMETRYCOLLECTION( EMPTY ) is returned
+
 WITH inp AS (SELECT
  'POLYGON EMPTY'::geometry as empty,
  'POLYGON((0 0, 10 0, 5 5, 0 0))'::geometry as geometry
@@ -87,19 +95,17 @@ SELECT ST_MakeLine(ST_GeomFromText('POINT(-11.1111111 40)'), ST_GeomFromText('LI
 
 => rounding issue again
 
-SELECT '#723',
- ST_SnapToGrid( ST_Intersection(a.geog, b.geog)::geometry, 0.00001)
-FROM (VALUES (ST_GeogFromText('SRID=4326;POINT(-11.1111111 40)') ), (ST_GeogFromText('SRID=4326;POINT(-11.1111111 55)') ) ) As  a(geog) CROSS JOIN ( VALUES (ST_GeogFromText('SRID=4326;POINT(-11.1111111 40)') ), (ST_GeogFromText('SRID=4326;POINT(-11.1111111 55)') )) As b(geog);
-127.OBT: #723|0104000020E610000000000000
-127.EXP: #723|0107000020E610000000000000
-
-=> SFCGAL returns a MULTIPOINT EMPTY, instead of a GEOMETRYCOLLECTION EMPTY, which is a bit more accurate here.
-
 SELECT '#834', ST_AsEWKT(ST_Intersection('LINESTRING(0 0,0 10,10 10,10 0)', 'LINESTRING(10 10 4,10 0 5,0 0 5)'));
 132.EXP: #834|GEOMETRYCOLLECTION(POINT(0 0 5),LINESTRING(10 10 5,10 0 5))
 132.OBT: #834|GEOMETRYCOLLECTION(POINT(0 0),LINESTRING(10 0,10 10))
 
 => !! PostGIS tries to do something with the third dimension (averaging with NaN). SFCGAL considers we want 2D intersection and set z=0
+
+SELECT '#1957', ST_Distance(ST_Makeline(ARRAY['POINT(1 0)'::geometry]), 'POINT(0 0)'::geometry);
+225.OBT: #1957|NaN
+225.EXP: #1957|1
+
+=> A single point linestring is not valid. SFCGAL returns here NaN, this is as true as anything else ...
 
 Test 'concave_hull'
 -------------------
