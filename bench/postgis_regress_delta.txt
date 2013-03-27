@@ -107,11 +107,6 @@ SELECT '#1957', ST_Distance(ST_Makeline(ARRAY['POINT(1 0)'::geometry]), 'POINT(0
 
 => A single point linestring is not valid. SFCGAL returns here NaN, this is as true as anything else ...
 
-Test 'concave_hull'
--------------------
-
-Use of sfcgal.st_convexhull produces bugs in st_concavehull. The function is too complex for me, I give up. I am planning to use the native Alpha shapes of CGAL.
-
 Test 'delaunaytriangles'
 ------------------------
 
