@@ -1,5 +1,8 @@
-postgis-sfcgal
-==============
+sfcgal-tests
+============
+
+This repository contains tests related to SFCGAL and the SFCGAL-enabled version of PostGIS
+
 Benchmarking scripts
 --------------------
 
